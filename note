@@ -1,0 +1,38 @@
+后续前端（Vue）和后端（Python）的代码更改，核心代码是 100% 共享的，你只需要在一处修改。但是，针对不同的端，发布/打包时需要执行一条同步命令，告诉外壳“代码已经更新了”。
+
+为了让你以后开发和发布极其傻瓜化，我给你总结了后续如果修改了代码，需要做的操作：
+
+1. 修改了前端代码（Vue / CSS / TS）
+前端代码改动后，你需要让 Capacitor（手机）和 Tauri（电脑）知道最新的前端产物：
+
+构建前端产物：运行 npm run build （这会把最新的前端打包进 dist 文件夹）
+同步给手机端：运行 npx cap sync （这会自动把你刚打包好的 dist 复制到 android 原生工程里，下次用 Android Studio 出包就是最新版）。
+打包给电脑端：如果想生出一个可以直接发给别人用的 .exe，运行 npx tauri build。
+2. 修改了后端代码（Python 
+
+notes.py
+ 等）
+如果改的是后端接口逻辑，你只影响桌面单机版（Tauri）（因为手机和网页版连的是跑在云端服务器里的 Python 源码）。 如果想更新你发给别人的独立 .exe：
+
+重新压缩 Python：在 backend 目录下再次运行打包命令 pyinstaller --name bemo-api --onefile --hidden-import uvicorn --hidden-import fastapi main.py
+覆盖旧版 Sidecar：把新生成的 bemo-api.exe 覆盖掉 frontend/src-tauri 下的那个旧文件。
+重新构建桌面端：回到 frontend 运行 npx tauri build。
+🎁 赠品：一键全端同步脚本
+为了让你不再去记这些繁琐的命令，你可以把这一切自动化。我在你的项目里加一个组合命令就全解决了：
+
+Analyzed
+Edited
++4
+-1
+我都帮你在 
+
+package.json
+ 里配好了！
+
+以后你修改了 Vue 的代码，你只需要打开终端，进入 frontend 文件夹：
+
+如果你想更新手机端： 运行 npm run sync:mobile（它会自动帮你 build 前端代码，然后 sync 进 android 原生文件夹）。你只要打开 Android Studio 就能看到最新的代码了。
+如果你想更新电脑端： 运行 npm run build:desktop（它会自动 build 前端，并打出最新的 .exe 格式安装包）。
+如果你只改了 Python 代码：不需要运行这两个，打开 backend 跑一下 pyinstaller --name bemo-api --onefile --hidden-import uvicorn --hidden-import fastapi main.py，再把 exe 丢给 Tauri 覆盖就行！
+日常开发测试电脑板： 运行 npx tauri dev
+可以说，一套代码跨越全宇宙了！你可以随时测试各种功能，有哪里不对随时喊我。
