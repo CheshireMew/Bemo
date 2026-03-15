@@ -1,0 +1,35 @@
+/* src/styles/base.css */
+@import './variables.css';
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* 整个应用容器居中，两侧自动留白 */
+.flomo-layout {
+  display: flex;
+  height: 100vh;
+  max-width: 1040px; /* 控制总宽度 */
+  margin: 0 auto;    /* 居中 */
+  overflow: hidden;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .app-container, .flomo-layout {
+    flex-direction: column;
+    max-width: 100%;
+    margin: 0;
+    height: 100vh;
+  }
+}

@@ -1,8 +1,15 @@
 <template>
   <div class="editor-card">
-    <div v-if="showPreview" class="editor-preview markdown-body" v-html="previewContent" @click="showPreview = false"></div>
+    <div 
+      v-show="showPreview" 
+      class="editor-preview markdown-body" 
+      contenteditable="true"
+      @input="handlePreviewInput"
+      ref="previewRef"
+      @keydown="handleKeydown"
+    ></div>
     <textarea 
-      v-else
+      v-show="!showPreview"
       ref="textareaRef"
       v-model="content" 
       class="editor-input" 
@@ -12,13 +19,13 @@
     ></textarea>
     
     <div class="editor-toolbar">
-      <div class="toolbar-icons">
+      <div class="toolbar-icons" @mousedown.prevent>
         <button class="icon-btn" :class="{ active: showPreview }" title="切换预览 (Ctrl+P)" @click="togglePreview">
           <Eye v-if="!showPreview" :size="20" />
           <PenLine v-else :size="20" />
         </button>
         <div class="divider"></div>
-        <button class="icon-btn" :class="{ active: showTagInput }" title="添加标签" @click="showTagInput = !showTagInput" :disabled="showPreview"><Hash :size="20" /></button>
+        <button class="icon-btn" :class="{ active: showTagInput }" title="添加标签" @click="showTagInput = !showTagInput"><Hash :size="20" /></button>
         <button class="icon-btn" title="上传图片" @click="triggerImageUpload"><ImageIcon :size="20" /></button>
         <div class="divider"></div>
         <button class="icon-btn" title="加粗 Ctrl+B" @click="insertBold"><Bold :size="20" /></button>
@@ -54,39 +61,74 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, watch } from 'vue';
 import axios from 'axios';
 import { addToPendingQueue } from '../utils/db';
 import { isOnline } from '../utils/sync';
 import { API_BASE } from '../config';
 import { marked } from 'marked';
+
+marked.use({ gfm: true, breaks: true });
+
 import { 
   Hash, Image as ImageIcon, Bold, Italic, Strikethrough,
   Link as LinkIcon, List, CheckSquare, Code, Send,
   Eye, PenLine
 } from 'lucide-vue-next';
 
+import TurndownService from 'turndown';
+import { gfm } from 'turndown-plugin-gfm';
+
+const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
+// 官方 GFM 插件：一次性支持 task list、strikethrough、tables 的 HTML→Markdown 反向转译
+turndownService.use(gfm);
+
 const emit = defineEmits(['saved']);
 
 const content = ref('');
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
+const previewRef = ref<HTMLElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const isUploading = ref(false);
 const showTagInput = ref(false);
 const tagInput = ref('');
-const showPreview = ref(false);
+const showPreview = ref(true); // 按照用户要求，默认改为“富文本预览/渲染”模式，但能在上面打字
 
-const previewContent = computed(() => {
-  return content.value ? marked.parse(content.value) : '<p class="text-gray-400">现在的想法是...</p>';
+// 当从 markdown 切换到富文本时，或者 markdown 更新时，需要重新渲染预览区
+// 为了避免在富文本模式打字时光标乱跳，只有在处于 markdown 模式时才覆盖 html
+watch(content, async (newVal) => {
+  if (!showPreview.value && previewRef.value) {
+    previewRef.value.innerHTML = newVal ? (await marked.parse(newVal)) as string : '';
+  }
 });
+
+const handlePreviewInput = () => {
+  if (previewRef.value) {
+    content.value = turndownService.turndown(previewRef.value.innerHTML);
+  }
+};
+
+const updateFromPreview = () => {
+  handlePreviewInput();
+};
 
 const togglePreview = () => {
   showPreview.value = !showPreview.value;
   if (!showPreview.value) {
-    // Focus textarea when switching back to edit mode
-    requestAnimationFrame(() => {
-      textareaRef.value?.focus();
-    });
+    // 切回 markdown 源码时聚焦
+    requestAnimationFrame(() => textareaRef.value?.focus());
+  } else {
+    // 切回富文本态时基于此时的 markdown 强制重新渲染一次 html 以保证状态准确
+    if (previewRef.value) {
+      const runParse = async () => {
+        const html = await marked.parse(content.value);
+        if (previewRef.value) {
+          previewRef.value.innerHTML = content.value ? (html as string) : '';
+          requestAnimationFrame(() => previewRef.value?.focus());
+        }
+      };
+      runParse();
+    }
   }
 };
 
@@ -149,13 +191,71 @@ const insertAtLineStart = (prefix: string) => {
 
 // ──────────── Toolbar Actions ────────────
 
-const insertBold = () => wrapSelection('**', '**', '粗体文字');
-const insertItalic = () => wrapSelection('*', '*', '斜体文字');
-const insertStrikethrough = () => wrapSelection('~~', '~~', '删除线');
-const insertLink = () => wrapSelection('[', '](url)', '链接文字');
-const insertCode = () => wrapSelection('`', '`', 'code');
-const insertList = () => insertAtLineStart('- ');
-const insertChecklist = () => insertAtLineStart('- [ ] ');
+const insertBold = () => {
+  if (showPreview.value) { document.execCommand('bold'); updateFromPreview(); previewRef.value?.focus(); }
+  else wrapSelection('**', '**', '粗体文字');
+};
+const insertItalic = () => {
+  if (showPreview.value) { document.execCommand('italic'); updateFromPreview(); previewRef.value?.focus(); }
+  else wrapSelection('*', '*', '斜体文字');
+};
+const insertStrikethrough = () => {
+  if (showPreview.value) { document.execCommand('strikeThrough'); updateFromPreview(); previewRef.value?.focus(); }
+  else wrapSelection('~~', '~~', '删除线');
+};
+const insertLink = () => {
+  if (showPreview.value) { 
+    const url = prompt('请输入链接地址:', 'https://');
+    if (url) { document.execCommand('createLink', false, url); updateFromPreview(); previewRef.value?.focus(); }
+  }
+  else wrapSelection('[', '](url)', '链接文字');
+};
+const insertCode = () => {
+  if (showPreview.value) {
+    const sel = window.getSelection();
+    if (sel && sel.toString()) {
+      document.execCommand('insertHTML', false, `<code>${sel.toString()}</code>`);
+    } else {
+      document.execCommand('insertHTML', false, `<code>code</code>`);
+    }
+    updateFromPreview(); previewRef.value?.focus();
+  }
+  else wrapSelection('`', '`', 'code');
+};
+const insertList = () => {
+  if (showPreview.value) { document.execCommand('insertUnorderedList'); updateFromPreview(); previewRef.value?.focus(); }
+  else insertAtLineStart('- ');
+};
+const insertChecklist = () => {
+  if (showPreview.value && previewRef.value) {
+    // execCommand('insertHTML') 对 <input> 不可靠，直接操作 DOM
+    const li = document.createElement('li');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    li.appendChild(cb);
+    li.appendChild(document.createTextNode(' 待办事项'));
+    const ul = document.createElement('ul');
+    ul.appendChild(li);
+
+    // 在光标位置插入
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(ul);
+      // 光标移到 checkbox 后方
+      range.setStartAfter(ul);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else {
+      previewRef.value.appendChild(ul);
+    }
+    updateFromPreview();
+    previewRef.value.focus();
+  }
+  else insertAtLineStart('- [ ] 待办事项');
+};
 
 
 // ──────────── Keyboard Shortcuts ────────────
@@ -237,9 +337,9 @@ const saveNote = async () => {
   }
   
   content.value = '';
+  if (previewRef.value) previewRef.value.innerHTML = '';
   tagInput.value = '';
   showTagInput.value = false;
-  showPreview.value = false;
   emit('saved');
 };
 
@@ -265,6 +365,10 @@ const uploadFile = async (file: File) => {
     // Use relative URL — works regardless of host/port
     const imageMarkdown = `\n![${file.name}](${res.data.url})\n`;
     content.value += imageMarkdown;
+    // 如果在预览模式下上传，同步更新 html
+    if (showPreview.value && previewRef.value) {
+      previewRef.value.innerHTML = (await marked.parse(content.value)) as string;
+    }
   } catch (err) {
     console.error("Failed to upload image", err);
   } finally {
@@ -299,7 +403,7 @@ const handlePaste = (event: ClipboardEvent) => {
 
 <style scoped>
 .editor-card {
-  background: white;
+  background: var(--bg-card, white);
   border-radius: var(--radius-lg, 0.75rem);
   border: 1px solid var(--border-color, #e4e4e7);
   box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -1px rgba(0,0,0,0.02);
@@ -319,6 +423,12 @@ const handlePaste = (event: ClipboardEvent) => {
   padding: 16px 20px;
   cursor: text;
   background-color: transparent;
+  outline: none; /* 移除富文本输入时的聚焦边框 */
+}
+/* 给富文本模式加个 placeholder 提示效果 */
+.editor-preview:empty:before {
+  content: "现在的想法是...";
+  color: #a1a1aa;
 }
 
 .editor-input {
@@ -347,7 +457,7 @@ const handlePaste = (event: ClipboardEvent) => {
   align-items: center;
   padding: 8px 16px;
   border-top: 1px solid var(--border-color, #e4e4e7);
-  background-color: #fafafa;
+  background-color: var(--bg-main, #fafafa);
 }
 
 .toolbar-icons {
@@ -412,12 +522,12 @@ const handlePaste = (event: ClipboardEvent) => {
   margin-left: 2px;
 }
 
-.icon-btn.active { color: var(--accent-color, #10b981); background-color: #e6f7ef; }
+.icon-btn.active { color: var(--accent-color, #10b981); background-color: var(--accent-sidebar-bg, #e6f7ef); }
 
-.tag-input-area { padding: 6px 16px 10px; border-top: 1px solid var(--border-color, #e4e4e7); background: #fafafa; }
+.tag-input-area { padding: 6px 16px 10px; border-top: 1px solid var(--border-color, #e4e4e7); background: var(--bg-main, #fafafa); }
 .tag-input { 
-  width: 100%; border: 1px solid #e4e4e7; border-radius: 6px; 
-  padding: 6px 10px; font-size: 0.85rem; outline: none; background: white;
+  width: 100%; border: 1px solid var(--border-color, #e4e4e7); border-radius: 6px; 
+  padding: 6px 10px; font-size: 0.85rem; outline: none; background: var(--bg-card, white); color: var(--text-primary);
 }
 .tag-input:focus { border-color: var(--accent-color, #10b981); }
 </style>
