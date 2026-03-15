@@ -5,6 +5,7 @@
       class="editor-preview markdown-body" 
       contenteditable="true"
       @input="handlePreviewInput"
+      @paste="handlePaste"
       ref="previewRef"
       @keydown="handleKeydown"
     ></div>
@@ -20,7 +21,7 @@
     
     <div class="editor-toolbar">
       <div class="toolbar-icons" @mousedown.prevent>
-        <button class="icon-btn" :class="{ active: showPreview }" title="切换预览 (Ctrl+P)" @click="togglePreview">
+        <button class="icon-btn" :class="{ active: showPreview }" title="切换预览 (Ctrl+Shift+P)" @click="togglePreview">
           <Eye v-if="!showPreview" :size="20" />
           <PenLine v-else :size="20" />
         </button>
@@ -39,7 +40,7 @@
       </div>
       
       <div class="toolbar-action">
-        <button class="btn-send" :disabled="!content.trim() && !isUploading" @click="saveNote">
+        <button class="btn-send" :disabled="!hasContent && !isUploading" @click="saveNote">
           <span v-if="isUploading">...</span>
           <Send v-else :size="18" class="send-icon" />
         </button>
@@ -61,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import axios from 'axios';
 import { addToPendingQueue } from '../utils/db';
 import { isOnline } from '../utils/sync';
@@ -92,7 +93,15 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const isUploading = ref(false);
 const showTagInput = ref(false);
 const tagInput = ref('');
-const showPreview = ref(true); // 按照用户要求，默认改为“富文本预览/渲染”模式，但能在上面打字
+const showPreview = ref(true); // 默认“富文本预览/渲染”模式
+
+// 双模式下的 content 是否有内容判定（富文本模式下结合 DOM 文本）
+const hasContent = computed(() => {
+  if (showPreview.value) {
+    return !!(previewRef.value?.textContent?.trim()) || !!content.value.trim();
+  }
+  return !!content.value.trim();
+});
 
 // 当从 markdown 切换到富文本时，或者 markdown 更新时，需要重新渲染预览区
 // 为了避免在富文本模式打字时光标乱跳，只有在处于 markdown 模式时才覆盖 html
@@ -108,9 +117,7 @@ const handlePreviewInput = () => {
   }
 };
 
-const updateFromPreview = () => {
-  handlePreviewInput();
-};
+
 
 const togglePreview = () => {
   showPreview.value = !showPreview.value;
@@ -192,21 +199,21 @@ const insertAtLineStart = (prefix: string) => {
 // ──────────── Toolbar Actions ────────────
 
 const insertBold = () => {
-  if (showPreview.value) { document.execCommand('bold'); updateFromPreview(); previewRef.value?.focus(); }
+  if (showPreview.value) { document.execCommand('bold'); handlePreviewInput(); previewRef.value?.focus(); }
   else wrapSelection('**', '**', '粗体文字');
 };
 const insertItalic = () => {
-  if (showPreview.value) { document.execCommand('italic'); updateFromPreview(); previewRef.value?.focus(); }
+  if (showPreview.value) { document.execCommand('italic'); handlePreviewInput(); previewRef.value?.focus(); }
   else wrapSelection('*', '*', '斜体文字');
 };
 const insertStrikethrough = () => {
-  if (showPreview.value) { document.execCommand('strikeThrough'); updateFromPreview(); previewRef.value?.focus(); }
+  if (showPreview.value) { document.execCommand('strikeThrough'); handlePreviewInput(); previewRef.value?.focus(); }
   else wrapSelection('~~', '~~', '删除线');
 };
 const insertLink = () => {
   if (showPreview.value) { 
     const url = prompt('请输入链接地址:', 'https://');
-    if (url) { document.execCommand('createLink', false, url); updateFromPreview(); previewRef.value?.focus(); }
+    if (url) { document.execCommand('createLink', false, url); handlePreviewInput(); previewRef.value?.focus(); }
   }
   else wrapSelection('[', '](url)', '链接文字');
 };
@@ -218,12 +225,12 @@ const insertCode = () => {
     } else {
       document.execCommand('insertHTML', false, `<code>code</code>`);
     }
-    updateFromPreview(); previewRef.value?.focus();
+    handlePreviewInput(); previewRef.value?.focus();
   }
   else wrapSelection('`', '`', 'code');
 };
 const insertList = () => {
-  if (showPreview.value) { document.execCommand('insertUnorderedList'); updateFromPreview(); previewRef.value?.focus(); }
+  if (showPreview.value) { document.execCommand('insertUnorderedList'); handlePreviewInput(); previewRef.value?.focus(); }
   else insertAtLineStart('- ');
 };
 const insertChecklist = () => {
@@ -251,7 +258,7 @@ const insertChecklist = () => {
     } else {
       previewRef.value.appendChild(ul);
     }
-    updateFromPreview();
+    handlePreviewInput();
     previewRef.value.focus();
   }
   else insertAtLineStart('- [ ] 待办事项');
@@ -305,7 +312,7 @@ const handleKeydown = (e: KeyboardEvent) => {
     }
   }
   
-  if (isCtrl && e.key.toLowerCase() === 'p') {
+  if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'p') {
     e.preventDefault();
     togglePreview();
   }
@@ -315,6 +322,8 @@ const handleKeydown = (e: KeyboardEvent) => {
 // ──────────── Note Saving ────────────
 
 const saveNote = async () => {
+  // 富文本模式下先强制同步一次，避免 content 滚后于 DOM
+  if (showPreview.value) handlePreviewInput();
   if (!content.value.trim()) return;
   
   const tags = tagInput.value
@@ -365,9 +374,22 @@ const uploadFile = async (file: File) => {
     // Use relative URL — works regardless of host/port
     const imageMarkdown = `\n![${file.name}](${res.data.url})\n`;
     content.value += imageMarkdown;
-    // 如果在预览模式下上传，同步更新 html
+    // 如果在富文本模式下上传，在光标位置插入 img 而非全量重渲染
     if (showPreview.value && previewRef.value) {
-      previewRef.value.innerHTML = (await marked.parse(content.value)) as string;
+      const img = document.createElement('img');
+      img.src = res.data.url;
+      img.alt = file.name;
+      img.style.maxWidth = '100%';
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        range.insertNode(img);
+        range.setStartAfter(img);
+        range.collapse(true);
+      } else {
+        previewRef.value.appendChild(img);
+      }
+      handlePreviewInput(); // 同步回 markdown
     }
   } catch (err) {
     console.error("Failed to upload image", err);
@@ -423,7 +445,10 @@ const handlePaste = (event: ClipboardEvent) => {
   padding: 16px 20px;
   cursor: text;
   background-color: transparent;
-  outline: none; /* 移除富文本输入时的聚焦边框 */
+  outline: none;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-primary, #3f3f46);
 }
 /* 给富文本模式加个 placeholder 提示效果 */
 .editor-preview:empty:before {
@@ -481,19 +506,19 @@ const handlePaste = (event: ClipboardEvent) => {
 }
 .icon-btn:hover:not(:disabled) {
   color: var(--text-primary, #3f3f46);
-  background-color: #f4f4f5;
+  background-color: var(--bg-main, #f4f4f5);
 }
 .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .divider {
   width: 1px;
   height: 16px;
-  background-color: #e4e4e7;
+  background-color: var(--border-color, #e4e4e7);
   margin: 0 4px;
 }
 
 .btn-send {
-  background-color: #e4e4e7;
+  background-color: var(--border-color, #e4e4e7);
   color: #a1a1aa;
   border: none;
   border-radius: var(--radius-md, 0.5rem);
