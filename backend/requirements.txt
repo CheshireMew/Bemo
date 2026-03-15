@@ -4,3 +4,4 @@ python-multipart
 pydantic
 aiofiles
 pyyaml
+beautifulsoup4

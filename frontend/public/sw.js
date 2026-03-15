@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bemo-v1';
+const CACHE_NAME = 'bemo-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -35,15 +35,29 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Bypassing Vite dev server internal files and HMR paths
+  if (
+    url.pathname.startsWith('/@') || 
+    url.pathname.includes('/node_modules/') || 
+    url.searchParams.has('import') ||
+    url.pathname.includes('ws') ||
+    url.pathname.includes('hot') ||
+    event.request.headers.get('accept')?.includes('text/event-stream')
+  ) {
+    return;
+  }
+
   // Static assets: cache-first, fallback to network
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
       return fetch(event.request).then((response) => {
-        // Cache successful GET responses
+        // Cache successful GET responses, but only for http/https schemes
         if (response.ok && event.request.method === 'GET') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          if (url.protocol.startsWith('http')) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
         }
         return response;
       });

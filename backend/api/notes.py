@@ -9,6 +9,7 @@ router = APIRouter()
 
 DATA_DIR = os.getenv("BEMO_DATA_DIR", "./data")
 NOTES_DIR = os.path.join(DATA_DIR, "notes")
+IMAGES_DIR = os.path.join(DATA_DIR, "images")
 TRASH_DIR = os.path.join(DATA_DIR, "trash")
 
 # Beijing timezone offset
