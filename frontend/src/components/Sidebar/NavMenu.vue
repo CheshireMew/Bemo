@@ -10,16 +10,9 @@
       <!-- 预留其他导航菜单 -->
     </nav>
 
-    <!-- 此处用于渲染父组件传递的 TagList -->
     <slot name="taglist"></slot>
 
     <nav class="nav-menu bottom-menu">
-      <div class="theme-toggle" @click="toggleTheme" title="切换深色/浅色模式">
-        <Moon v-if="!isDarkMode" :size="18" class="icon" />
-        <Sun v-else :size="18" class="icon" />
-        <span style="font-size: 0.85rem; margin-left: 8px; font-weight: 500;">{{ isDarkMode ? '浅色模式' : '深色模式' }}</span>
-      </div>
-      
       <div class="nav-item-dropdown">
         <a href="#" class="nav-item" @click.prevent="showExportMenu = !showExportMenu">
           <ArrowLeftRight class="icon" :size="18" />
@@ -51,9 +44,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { 
-  LayoutGrid, Dices, Trash2, ArrowLeftRight, ChevronDown, Sun, Moon 
+  LayoutGrid, Dices, Trash2, ArrowLeftRight, ChevronDown 
 } from 'lucide-vue-next';
-import { currentView, setView, isDarkMode, toggleTheme } from '../../store/ui';
+import { currentView, setView } from '../../store/ui';
 import { trashNotes, fetchTrash, fetchNotes } from '../../store/notes';
 import { useImportExport } from '../../composables/useImportExport';
 
@@ -91,16 +84,7 @@ const openTrash = async () => {
 .nav-item.active .icon { color: white; }
 .icon { color: var(--text-secondary); }
 
-/* Theme Toggle */
-.theme-toggle {
-  display: flex; align-items: center; padding: 10px 12px;
-  color: var(--text-secondary); cursor: pointer;
-  border-radius: var(--radius-md); transition: all 0.15s ease;
-  margin-bottom: 4px; border-top: 1px dashed var(--border-color); padding-top: 14px; margin-top: 8px;
-}
-.theme-toggle:hover { background-color: var(--border-color); color: var(--text-primary); }
-.theme-toggle .icon { color: var(--text-secondary); }
-.theme-toggle:hover .icon { color: var(--text-primary); }
+
 
 /* Dropdown Inline Submenu */
 .nav-item-dropdown { position: relative; }
