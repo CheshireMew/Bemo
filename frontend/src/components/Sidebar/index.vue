@@ -9,9 +9,11 @@
       </template>
     </NavMenu>
   </aside>
+  <AiChatModal />
 </template>
 
 <script setup lang="ts">
+import AiChatModal from '../AiChatModal.vue';
 import UserProfile from './UserProfile.vue';
 import MiniCalendar from './MiniCalendar.vue';
 import Heatmap from './Heatmap.vue';

@@ -5,7 +5,7 @@
 
     <!-- Main Feed -->
     <main class="main-content">
-      <Topbar />
+      <Topbar @openSettings="isSettingsOpen = true" />
 
       <div class="feed-container">
         <!-- Trash View -->
@@ -21,11 +21,17 @@
         </template>
       </div>
     </main>
+
+    <SettingsPanel
+      :open="isSettingsOpen"
+      @close="isSettingsOpen = false"
+      @notesImported="onNoteSaved"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 
 // 导入全局样式
 import './styles/base.css';
@@ -38,11 +44,16 @@ import Topbar from './components/MainFeed/Topbar.vue';
 import TrashView from './components/MainFeed/TrashView.vue';
 import RandomWalk from './components/MainFeed/RandomWalk.vue';
 import NotesFeed from './components/MainFeed/NotesFeed.vue';
+import SettingsPanel from './components/SettingsPanel.vue';
 
 // 导入独立 Store
 import { fetchNotes } from './store/notes';
 import { currentView, initTheme } from './store/ui';
 import { initSync } from './store/sync';
+import { initSettings, loadAiSettings } from './store/settings';
+
+const isSettingsOpen = ref(false);
+initSettings();
 
 // 生命周期处理
 onMounted(() => {
@@ -53,6 +64,9 @@ onMounted(() => {
   });
   // 初次加载笔记
   fetchNotes();
+  loadAiSettings().catch((error) => {
+    console.error('Failed to load AI settings from backend.', error);
+  });
 });
 
 const onNoteSaved = () => {

@@ -4,6 +4,7 @@ import { API_BASE } from '../config';
 
 export function useImportExport(onSuccess?: () => void) {
   const isImporting = ref(false);
+  const isCleaningOrphans = ref(false);
   const flomoFileInput = ref<HTMLInputElement | null>(null);
   const zipFileInput = ref<HTMLInputElement | null>(null);
 
@@ -99,8 +100,24 @@ export function useImportExport(onSuccess?: () => void) {
     }
   };
 
+  const cleanupOrphanImages = async () => {
+    if (isCleaningOrphans.value) return;
+    isCleaningOrphans.value = true;
+    try {
+      const res = await axios.post(`${API_BASE}/notes/maintenance/cleanup-orphan-images`);
+      alert(`清理完成！删除了 ${res.data.deleted_count} 个孤儿图片文件。`);
+      if (onSuccess) onSuccess();
+    } catch (e: any) {
+      console.error(e);
+      alert('清理失败: ' + (e.response?.data?.detail || e.message));
+    } finally {
+      isCleaningOrphans.value = false;
+    }
+  };
+
   return {
     isImporting,
+    isCleaningOrphans,
     flomoFileInput,
     zipFileInput,
     exportZip,
@@ -108,6 +125,7 @@ export function useImportExport(onSuccess?: () => void) {
     triggerZipImport,
     handleZipImport,
     triggerFlomoImport,
-    handleFlomoImport
+    handleFlomoImport,
+    cleanupOrphanImages,
   };
 }

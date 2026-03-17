@@ -19,10 +19,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, watch } from 'vue';
 import { notes } from '../../store/notes';
 import type { NoteMeta } from '../../store/notes';
-import { setView } from '../../store/ui';
+import { setView, randomWalkNonce } from '../../store/ui';
 import NoteCard from './NoteCard.vue';
 
 const randomNote = ref<NoteMeta | null>(null);
@@ -40,9 +40,9 @@ const closeView = () => {
   setView('all');
 };
 
-onMounted(() => {
+watch([randomWalkNonce, notes], () => {
   pickRandomNote();
-});
+}, { immediate: true });
 </script>
 
 <style scoped>

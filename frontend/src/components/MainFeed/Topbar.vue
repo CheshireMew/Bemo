@@ -15,6 +15,14 @@
 
     <!-- 右侧：主题切换 + 设置 -->
     <div class="topbar-actions">
+      <button
+        class="icon-btn"
+        :class="{ active: sortOrder === 'asc' }"
+        :title="sortOrder === 'desc' ? '当前从新到旧，点击切换为从旧到新' : '当前从旧到新，点击切换为从新到旧'"
+        @click="toggleSortOrder"
+      >
+        <ArrowUpDown :size="18" />
+      </button>
       <button class="icon-btn" :title="isDarkMode ? '切换浅色模式' : '切换深色模式'" @click="toggleTheme">
         <Sun v-if="isDarkMode" :size="20" />
         <Moon v-else :size="20" />
@@ -28,9 +36,9 @@
 
 <script setup lang="ts">
 import { watch } from 'vue';
-import { Search, Sun, Moon, Settings } from 'lucide-vue-next';
+import { Search, Sun, Moon, Settings, ArrowUpDown } from 'lucide-vue-next';
 import { syncStatus, pendingCount } from '../../store/sync';
-import { searchQuery, performSearch } from '../../store/notes';
+import { searchQuery, performSearch, sortOrder, toggleSortOrder } from '../../store/notes';
 import { isDarkMode, toggleTheme } from '../../store/ui';
 
 defineEmits(['openSettings']);
@@ -108,6 +116,11 @@ watch(searchQuery, (q) => {
 .icon-btn:hover {
   color: var(--text-primary);
   background-color: var(--bg-main, #f4f4f5);
+}
+
+.icon-btn.active {
+  color: var(--accent-color);
+  background-color: var(--border-color, #e8eaed);
 }
 
 .sync-status {

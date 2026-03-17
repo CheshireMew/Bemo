@@ -24,6 +24,7 @@ export const searchResults = ref<NoteMeta[] | null>(null);
 export const selectedDate = ref<Date | null>(null);
 export const selectedTag = ref<string | null>(null);
 export const searchQuery = ref('');
+export const sortOrder = ref<'desc' | 'asc'>('desc');
 
 // ==========================
 // 计算派生状态 (Getters)
@@ -62,7 +63,15 @@ export const filteredNotes = computed(() => {
 
 // 呈现到界面上的笔记（如果处于搜索状态优先显示搜索结果）
 export const displayedNotes = computed(() => {
-  return searchResults.value !== null ? searchResults.value : filteredNotes.value;
+  const source = searchResults.value !== null ? searchResults.value : filteredNotes.value;
+  const direction = sortOrder.value === 'desc' ? -1 : 1;
+
+  return [...source].sort((a, b) => {
+    if (a.pinned !== b.pinned) {
+      return a.pinned ? -1 : 1;
+    }
+    return (a.created_at - b.created_at) * direction;
+  });
 });
 
 // ==========================
@@ -149,6 +158,10 @@ export async function emptyTrash() {
 // 标签功能
 export function toggleTag(tag: string) {
   selectedTag.value = selectedTag.value === tag ? null : tag;
+}
+
+export function toggleSortOrder() {
+  sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc';
 }
 
 // 日期过滤

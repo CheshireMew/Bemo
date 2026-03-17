@@ -26,8 +26,8 @@ import NoteCard from './NoteCard.vue';
 .notes-feed { 
   display: flex; 
   flex-direction: column; 
-  gap: 16px; 
-  margin-top: 24px; 
+  gap: 10px; 
+  margin-top: 18px; 
 }
 .filter-bar { 
   display: flex; 

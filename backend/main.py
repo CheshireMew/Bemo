@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 
-from api import notes, uploads
+from api import notes, uploads, settings, ai
 
 app = FastAPI(title="Bemo Notes API")
 
@@ -32,6 +32,8 @@ app.mount("/images", StaticFiles(directory=IMAGES_DIR), name="images")
 # Setup routers
 app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
 app.include_router(uploads.router, prefix="/api/uploads", tags=["uploads"])
+app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
+app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
 
 @app.get("/")
 def read_root():

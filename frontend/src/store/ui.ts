@@ -26,9 +26,24 @@ export function toggleTheme() {
 // 视图模式
 export type ViewMode = 'all' | 'trash' | 'random';
 export const currentView = ref<ViewMode>('all');
+export const randomWalkNonce = ref(0);
+export const isAiChatOpen = ref(false);
 
 export function setView(mode: ViewMode) {
   currentView.value = mode;
+}
+
+export function openRandomWalk() {
+  currentView.value = 'random';
+  randomWalkNonce.value += 1;
+}
+
+export function openAiChat() {
+  isAiChatOpen.value = true;
+}
+
+export function closeAiChat() {
+  isAiChatOpen.value = false;
 }
 
 // 侧边栏状态 (例如：移动端侧边栏是否展开等，如果后续需要)
