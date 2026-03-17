@@ -35,7 +35,7 @@ export function useImportExport(onSuccess?: () => void) {
       a.href = url;
       const disposition = res.headers['content-disposition'] || '';
       const match = disposition.match(/filename="(.+?)"/);
-      a.download = match ? match[1] : 'bemo_flomo.zip';
+      a.download = match ? match[1] : 'bemo_flomo.csv';
       document.body.appendChild(a);
       a.click();
       a.remove();

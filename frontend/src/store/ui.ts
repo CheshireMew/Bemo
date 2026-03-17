@@ -24,10 +24,12 @@ export function toggleTheme() {
 }
 
 // 视图模式
-export type ViewMode = 'all' | 'trash' | 'random';
+export type ViewMode = 'all' | 'trash' | 'random' | 'conflicts';
 export const currentView = ref<ViewMode>('all');
 export const randomWalkNonce = ref(0);
 export const isAiChatOpen = ref(false);
+export const aiChatNoteId = ref<string | null>(null);
+export const aiChatNoteLabel = ref('');
 
 export function setView(mode: ViewMode) {
   currentView.value = mode;
@@ -38,12 +40,16 @@ export function openRandomWalk() {
   randomWalkNonce.value += 1;
 }
 
-export function openAiChat() {
+export function openAiChat(options?: { noteId?: string | null; noteLabel?: string }) {
+  aiChatNoteId.value = options?.noteId || null;
+  aiChatNoteLabel.value = options?.noteLabel?.trim() || '';
   isAiChatOpen.value = true;
 }
 
 export function closeAiChat() {
   isAiChatOpen.value = false;
+  aiChatNoteId.value = null;
+  aiChatNoteLabel.value = '';
 }
 
 // 侧边栏状态 (例如：移动端侧边栏是否展开等，如果后续需要)

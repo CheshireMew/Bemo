@@ -1,24 +1,30 @@
 <template>
   <div id="app" class="flomo-layout">
-    <!-- Sidebar -->
-    <Sidebar />
+    <Sidebar v-if="!isMobile" />
+    <Sidebar
+      v-else
+      :drawer="true"
+      :open="isSidebarOpen"
+      @close="isSidebarOpen = false"
+    />
 
-    <!-- Main Feed -->
     <main class="main-content">
-      <Topbar @openSettings="isSettingsOpen = true" />
+      <div class="sticky-stack">
+        <Topbar
+          :show-sidebar-toggle="isMobile"
+          @openSidebar="isSidebarOpen = true"
+          @openSettings="isSettingsOpen = true"
+        />
+        <div v-if="currentView !== 'trash' && currentView !== 'random' && currentView !== 'conflicts'" class="editor-sticky-shell">
+          <Editor @saved="onNoteSaved" />
+        </div>
+      </div>
 
       <div class="feed-container">
-        <!-- Trash View -->
         <TrashView v-if="currentView === 'trash'" />
-
-        <!-- Random Walk View -->
         <RandomWalk v-else-if="currentView === 'random'" />
-
-        <!-- Normal View -->
-        <template v-else>
-          <Editor @saved="onNoteSaved" />
-          <NotesFeed />
-        </template>
+        <ConflictView v-else-if="currentView === 'conflicts'" />
+        <NotesFeed v-else />
       </div>
     </main>
 
@@ -44,15 +50,20 @@ import Topbar from './components/MainFeed/Topbar.vue';
 import TrashView from './components/MainFeed/TrashView.vue';
 import RandomWalk from './components/MainFeed/RandomWalk.vue';
 import NotesFeed from './components/MainFeed/NotesFeed.vue';
+import ConflictView from './components/MainFeed/ConflictView.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
 
 // 导入独立 Store
 import { fetchNotes } from './store/notes';
 import { currentView, initTheme } from './store/ui';
 import { initSync } from './store/sync';
-import { initSettings, loadAiSettings } from './store/settings';
+import { loadAiSettings } from './services/aiSettings';
+import { initSettings } from './services/localSettings';
+import { useViewport } from './composables/useViewport';
 
 const isSettingsOpen = ref(false);
+const isSidebarOpen = ref(false);
+const { isMobile } = useViewport();
 initSettings();
 
 // 生命周期处理
@@ -81,24 +92,69 @@ const onNoteSaved = () => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  min-width: 0;
+  min-height: 100dvh;
+  overflow: visible;
   position: relative;
-  /* 给主内容区左侧加一点间距，使其脱离侧边栏 */
-  padding-left: 20px;
-  /* 隐藏主界面的垂直滚动条 */
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  padding: 0 0 0 4px;
 }
-.main-content::-webkit-scrollbar { display: none; }
 
 .feed-container {
-  width: 100%; padding: 0 0 64px;
+  width: 100%;
+  max-width: 760px;
+  padding: 0 0 calc(64px + var(--safe-bottom));
+  margin: 0;
 }
 
-@media (max-width: 768px) {
+.sticky-stack {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  width: 100%;
+  max-width: 760px;
+  background: var(--bg-main);
+}
+
+.editor-sticky-shell {
+  position: relative;
+  z-index: 9;
+  padding-bottom: 12px;
+  background: var(--bg-main);
+}
+
+@media (max-width: 1023px) {
   .main-content {
     padding-left: 0;
-    padding: 16px;
+  }
+
+  .feed-container {
+    max-width: 720px;
+  }
+
+  .sticky-stack {
+    max-width: 720px;
+  }
+}
+
+@media (max-width: 767px) {
+  .main-content {
+    min-height: auto;
+    padding: 0;
+  }
+
+  .feed-container {
+    max-width: none;
+    padding-bottom: calc(40px + var(--safe-bottom));
+  }
+
+  .sticky-stack {
+    position: static;
+    max-width: none;
+  }
+
+  .editor-sticky-shell {
+    position: static;
+    padding-bottom: 0;
   }
 }
 </style>

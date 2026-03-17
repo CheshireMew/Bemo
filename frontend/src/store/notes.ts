@@ -1,9 +1,13 @@
 import { ref, computed } from 'vue';
 import axios from 'axios';
 import { API_BASE } from '../config';
-import { setCachedNotes, getCachedNotes } from '../utils/db';
+import { enqueueChange, getCachedNotes, setCachedNotes } from '../utils/db';
+import { requestSyncNow } from '../utils/sync';
+import { settings } from './settings';
 
 export interface NoteMeta {
+  note_id: string;
+  revision: number;
   filename: string;
   title: string;
   created_at: number;
@@ -99,7 +103,18 @@ export async function fetchNotes() {
 
 export async function deleteNote(filename: string) {
   try {
+    const note = notes.value.find((item) => item.filename === filename);
+    if (!note) return;
+    const baseRevision = note.revision;
     await axios.delete(`${API_BASE}/notes/${filename}`);
+    await queueRemoteChange({
+      entityId: note.note_id,
+      type: 'note.delete',
+      baseRevision,
+      payload: {
+        filename: note.filename,
+      },
+    });
     await fetchNotes();
   } catch (e) {
     console.error('Error deleting note:', e);
@@ -108,11 +123,80 @@ export async function deleteNote(filename: string) {
 
 export async function togglePin(note: NoteMeta) {
   try {
-    await axios.patch(`${API_BASE}/notes/${note.filename}`, { pinned: !note.pinned });
+    const nextPinned = !note.pinned;
+    const baseRevision = note.revision;
+    await axios.patch(`${API_BASE}/notes/${note.filename}`, { pinned: nextPinned });
+    await queueRemoteChange({
+      entityId: note.note_id,
+      type: 'note.patch',
+      baseRevision,
+      payload: {
+        filename: note.filename,
+        pinned: nextPinned,
+      },
+    });
     await fetchNotes();
   } catch (e) {
     console.error('Error pinning note:', e);
   }
+}
+
+export async function updateNoteContent(note: NoteMeta, payload: { content: string; tags: string[] }) {
+  const baseRevision = note.revision;
+  await axios.put(`${API_BASE}/notes/${note.filename}`, {
+    content: payload.content,
+    tags: payload.tags,
+  });
+  await queueRemoteChange({
+    entityId: note.note_id,
+    type: 'note.update',
+    baseRevision,
+    payload: {
+      filename: note.filename,
+      content: payload.content,
+      tags: payload.tags,
+    },
+  });
+  await fetchNotes();
+}
+
+export async function createNoteContent(payload: { content: string; tags: string[] }) {
+  const response = await axios.post(`${API_BASE}/notes/`, {
+    content: payload.content,
+    tags: payload.tags.length ? payload.tags : undefined,
+  });
+  const created = response.data as { note_id: string; revision: number; filename: string };
+  await queueRemoteChange({
+    entityId: created.note_id,
+    type: 'note.create',
+    baseRevision: 0,
+    payload: {
+      filename: created.filename,
+      content: payload.content,
+      tags: payload.tags,
+      pinned: false,
+      created_at: new Date().toISOString(),
+      revision: 1,
+    },
+  });
+  await fetchNotes();
+  return created;
+}
+
+async function queueRemoteChange(input: {
+  entityId: string;
+  type: 'note.create' | 'note.update' | 'note.patch' | 'note.delete';
+  baseRevision: number;
+  payload: Record<string, unknown>;
+}) {
+  if (settings.sync.mode === 'local') return;
+  await enqueueChange({
+    entityId: input.entityId,
+    type: input.type,
+    baseRevision: input.baseRevision,
+    payload: input.payload,
+  });
+  requestSyncNow();
 }
 
 // 回收站相关

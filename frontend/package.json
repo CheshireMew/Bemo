@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "test:unit": "tsc -p tsconfig.tests.json && node .test-dist/tests/editorAttachments.spec.js",
     "preview": "vite preview",
     "tauri": "tauri",
     "sync:mobile": "npm run build && cap sync",

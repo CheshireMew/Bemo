@@ -1,7 +1,10 @@
 <template>
   <div class="note-card" :class="{ pinned: note.pinned }">
     <div class="note-header">
-      <span class="note-date">{{ note.pinned ? '📌 ' : '' }}{{ formatDate(note.created_at) }}</span>
+      <span class="note-date">
+        <Pin v-if="note.pinned" class="note-date-pin" :size="13" />
+        {{ formatDate(note.created_at) }}
+      </span>
       <div class="note-actions">
         <!-- Trash state only has Restore/Permanent Delete -->
         <template v-if="isTrash">
@@ -9,8 +12,9 @@
           <button class="btn-action" title="永久删除" @click="$emit('permanentDelete')"><Trash2 :size="14" /></button>
         </template>
         <!-- Normal state -->
-        <template v-else-if="!isRandom">
+        <template v-else>
           <button class="btn-action" title="编辑" @click="startEdit"><Pencil :size="14" /></button>
+          <button class="btn-action" title="与 AI 对话" @click="openNoteAiChat"><Bot :size="14" /></button>
           <button class="btn-action" :title="copyButtonTitle" @click="copyNoteContent"><Copy :size="14" /></button>
           <button class="btn-action" :title="note.pinned ? '取消置顶' : '置顶'" @click="togglePin(note)"><Pin :size="14" :class="{ 'pin-active': note.pinned }" /></button>
           <button class="btn-action" title="删除" @click="deleteNote(note.filename)"><Trash2 :size="14" /></button>
@@ -20,9 +24,9 @@
     
     <!-- Tags -->
     <div v-if="note.tags && note.tags.length" class="note-tags">
-      <span v-for="t in note.tags" :key="t" class="note-tag" @click="isTrash || isRandom ? null : toggleTag(t)">#{{ t }}</span>
+      <span v-for="t in note.tags" :key="t" class="note-tag" @click="isTrash ? null : toggleTag(t)">#{{ t }}</span>
     </div>
-    
+
     <!-- Edit Mode -->
     <div v-if="isEditing" class="edit-area">
       <Editor
@@ -46,19 +50,18 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import axios from 'axios';
-import { marked } from 'marked';
-import { API_BASE, resolveBackendUrl } from '../../config';
-import { Pencil, Pin, Trash2, RotateCcw, Copy } from 'lucide-vue-next';
+import { Pencil, Pin, Trash2, RotateCcw, Copy, Bot } from 'lucide-vue-next';
 import Editor, { type EditorSubmitPayload } from '../Editor.vue';
 import type { NoteMeta } from '../../store/notes';
-import { togglePin, deleteNote, toggleTag, fetchNotes } from '../../store/notes';
+import { togglePin, deleteNote, toggleTag, updateNoteContent } from '../../store/notes';
 import { settings } from '../../store/settings';
+import { openAiChat } from '../../store/ui';
+import { renderMarkdownToHtml } from '../../utils/markdownRenderer';
+import { useViewport } from '../../composables/useViewport';
 
 const props = defineProps<{
   note: NoteMeta;
   isTrash?: boolean;
-  isRandom?: boolean;
 }>();
 
 defineEmits(['restore', 'permanentDelete']);
@@ -72,32 +75,12 @@ const formatDate = (timestamp: number) => {
          String(d.getMinutes()).padStart(2, '0');
 };
 
-const buildMarkedOptions = () => {
-  const renderer = new marked.Renderer();
-  renderer.image = ({ href, title, text }) => {
-    const src = resolveBackendUrl(href || '');
-    const titleAttr = title ? ` title="${title}"` : '';
-    const altAttr = text || '';
-    return `<img src="${src}" alt="${altAttr}"${titleAttr}>`;
-  };
-  renderer.link = ({ href, title, text }) => {
-    const resolved = href?.startsWith('/images/') ? resolveBackendUrl(href) : (href || '');
-    const titleAttr = title ? ` title="${title}"` : '';
-    return `<a href="${resolved}"${titleAttr} target="_blank" rel="noreferrer">${text}</a>`;
-  };
-
-  return {
-    gfm: settings.editor.markdownGfm,
-    breaks: settings.editor.markdownBreaks,
-    renderer,
-  };
-};
-
 const renderMarkdown = (content: string) => {
-  return marked.parse(content || '', buildMarkedOptions());
+  return renderMarkdownToHtml(content);
 };
 
 const isEditing = ref(false);
+const { isMobile, isTouch } = useViewport();
 const copyFeedback = ref(false);
 const copyButtonTitle = computed(() => {
   if (copyFeedback.value) {
@@ -105,6 +88,14 @@ const copyButtonTitle = computed(() => {
   }
   return settings.editor.copyFormat === 'rich-text' ? '复制富文本内容' : '复制 Markdown 内容';
 });
+
+const openNoteAiChat = () => {
+  const firstLine = (props.note.content || '').trim().split('\n')[0]?.replace(/^#+\s*/, '').trim() || '';
+  openAiChat({
+    noteId: props.note.note_id,
+    noteLabel: firstLine || props.note.title || '当前笔记',
+  });
+};
 
 const startEdit = () => {
   isEditing.value = true;
@@ -116,10 +107,7 @@ const cancelEdit = () => {
 
 const saveEdit = async (payload: EditorSubmitPayload) => {
   try {
-    await axios.put(`${API_BASE}/notes/${props.note.filename}`, {
-      content: payload.content,
-      tags: payload.tags,
-    });
+    await updateNoteContent(props.note, payload);
   } catch (e) {
     console.error(e);
     alert('保存失败');
@@ -129,7 +117,6 @@ const saveEdit = async (payload: EditorSubmitPayload) => {
 
 const handleEditSaved = async () => {
   isEditing.value = false;
-  await fetchNotes();
 };
 
 const copyNoteContent = async () => {
@@ -142,7 +129,7 @@ const copyNoteContent = async () => {
       return;
     }
 
-    const html = String(await marked.parse(markdown, buildMarkedOptions()));
+    const html = String(await renderMarkdownToHtml(markdown));
     const temp = document.createElement('div');
     temp.innerHTML = html;
     const plainText = temp.innerText || temp.textContent || markdown;
@@ -174,6 +161,9 @@ const flashCopyFeedback = () => {
     copyFeedback.value = false;
   }, 1200);
 };
+
+const alwaysShowActions = computed(() => isMobile.value || isTouch.value);
+const actionsOpacity = computed(() => (alwaysShowActions.value ? 1 : 0));
 </script>
 
 <style scoped>
@@ -190,9 +180,18 @@ const flashCopyFeedback = () => {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 10px; font-size: 0.8rem; color: var(--text-secondary);
 }
-.note-date { font-family: var(--font-sans); }
+.note-date {
+  font-family: var(--font-sans);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.note-date-pin {
+  color: var(--accent-color);
+  flex-shrink: 0;
+}
 
-.note-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; }
+.note-actions { display: flex; gap: 4px; opacity: v-bind(actionsOpacity); transition: opacity 0.2s; flex-wrap: wrap; justify-content: flex-end; }
 .note-card:hover .note-actions { opacity: 1; }
 .btn-action { 
   background: none; border: none; color: #a1a1aa; cursor: pointer; 
@@ -208,7 +207,6 @@ const flashCopyFeedback = () => {
   transition: opacity 0.15s;
 }
 .note-tag:hover { opacity: 0.7; }
-
 /* Edit Area */
 .edit-area {
   margin-top: 4px;
@@ -218,4 +216,32 @@ const flashCopyFeedback = () => {
 
 /* 强行针对 trash 状态始终显示操作可以补充 */
 .note-actions .btn-restore { color: var(--accent-color) !important; }
+
+@media (max-width: 767px) {
+  .note-card {
+    padding: 14px 16px;
+  }
+
+  .note-header {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .note-date {
+    font-size: 0.76rem;
+  }
+
+  .note-actions {
+    max-width: 50%;
+  }
+
+  .note-tags {
+    gap: 5px;
+    margin-bottom: 8px;
+  }
+
+  .note-tag {
+    font-size: 0.72rem;
+  }
+}
 </style>

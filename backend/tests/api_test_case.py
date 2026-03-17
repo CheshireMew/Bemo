@@ -1,0 +1,77 @@
+import importlib
+import os
+import shutil
+import uuid
+import unittest
+
+from fastapi.testclient import TestClient
+
+
+class ApiTestCase(unittest.TestCase):
+    def setUp(self):
+        self.test_root = os.path.join(os.path.dirname(__file__), ".tmp")
+        os.makedirs(self.test_root, exist_ok=True)
+        self.data_dir = os.path.join(self.test_root, f"api-{uuid.uuid4().hex}")
+        os.makedirs(self.data_dir, exist_ok=True)
+
+        self.original_data_dir = os.environ.get("BEMO_DATA_DIR")
+        self.original_sync_token = os.environ.get("BEMO_SYNC_TOKEN")
+        os.environ["BEMO_DATA_DIR"] = self.data_dir
+        os.environ["BEMO_SYNC_TOKEN"] = "test-sync-token"
+
+        import core.paths as paths_module
+        import api.notes as notes_module
+        import api.settings as settings_module
+        import services.note_repository as note_repository_module
+        import services.image_reference_service as image_reference_service_module
+        import services.trash_service as trash_service_module
+        import services.note_query_service as note_query_service_module
+        import services.flomo_codec as flomo_codec_module
+        import services.image_service as image_service_module
+        import services.export_service as export_service_module
+        import services.import_service as import_service_module
+        import services.ai_provider as ai_provider_module
+        import services.ai_prompt_builder as ai_prompt_builder_module
+        import services.ai_conversation_store as ai_conversation_store_module
+        import services.ai_runtime as ai_runtime_module
+        import services.sync_service as sync_service_module
+        import api.uploads as uploads_module
+        import api.ai as ai_module
+        import api.sync as sync_module
+        import main as main_module
+
+        importlib.reload(paths_module)
+        self.notes_module = importlib.reload(notes_module)
+        self.settings_module = importlib.reload(settings_module)
+        importlib.reload(note_repository_module)
+        importlib.reload(image_reference_service_module)
+        importlib.reload(trash_service_module)
+        importlib.reload(note_query_service_module)
+        importlib.reload(flomo_codec_module)
+        importlib.reload(image_service_module)
+        importlib.reload(export_service_module)
+        importlib.reload(import_service_module)
+        importlib.reload(ai_provider_module)
+        importlib.reload(ai_prompt_builder_module)
+        importlib.reload(ai_conversation_store_module)
+        importlib.reload(ai_runtime_module)
+        importlib.reload(sync_service_module)
+        self.uploads_module = importlib.reload(uploads_module)
+        self.ai_module = importlib.reload(ai_module)
+        self.sync_module = importlib.reload(sync_module)
+        self.main_module = importlib.reload(main_module)
+
+        self.client = TestClient(self.main_module.app)
+
+    def tearDown(self):
+        self.client.close()
+        if self.original_data_dir is None:
+            os.environ.pop("BEMO_DATA_DIR", None)
+        else:
+            os.environ["BEMO_DATA_DIR"] = self.original_data_dir
+        if self.original_sync_token is None:
+            os.environ.pop("BEMO_SYNC_TOKEN", None)
+        else:
+            os.environ["BEMO_SYNC_TOKEN"] = self.original_sync_token
+        shutil.rmtree(self.data_dir, ignore_errors=True)
+        shutil.rmtree(self.test_root, ignore_errors=True)

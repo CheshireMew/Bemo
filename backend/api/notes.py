@@ -1,24 +1,38 @@
-import os
-import re
-import yaml
-from datetime import datetime, timezone, timedelta
+from typing import List, Optional
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
+
+from core.paths import DATA_DIR, IMAGES_DIR, NOTES_DIR, TRASH_DIR, TZ, TZ_OFFSET
+from services.image_reference_service import (
+    cleanup_orphan_images as cleanup_orphan_image_files,
+    collect_referenced_images,
+    delete_unreferenced_images,
+    extract_referenced_images_from_body,
+)
+from services.note_query_service import list_notes_sorted, search_notes as search_notes_by_query
+from services.note_repository import (
+    build_frontmatter,
+    cleanup_empty_dirs,
+    collect_notes_recursive,
+    create_note as create_note_record,
+    get_note as get_note_record,
+    parse_frontmatter,
+    patch_note as patch_note_record,
+    sanitize_title,
+    update_note as update_note_record,
+)
+from services.service_errors import NotFoundError
+from services.trash_service import (
+    empty_trash as empty_trash_notes,
+    list_trash_notes,
+    move_note_to_trash,
+    permanent_delete as permanently_delete_from_trash,
+    restore_note as restore_note_from_trash,
+)
 
 router = APIRouter()
 
-DATA_DIR = os.getenv("BEMO_DATA_DIR", "./data")
-NOTES_DIR = os.path.join(DATA_DIR, "notes")
-IMAGES_DIR = os.path.join(DATA_DIR, "images")
-TRASH_DIR = os.path.join(DATA_DIR, "trash")
-
-# Beijing timezone offset
-TZ_OFFSET = timedelta(hours=8)
-TZ = timezone(TZ_OFFSET)
-
-
-# ──────────────── Pydantic Models ────────────────
 
 class NoteContent(BaseModel):
     content: str
@@ -31,395 +45,123 @@ class NotePatch(BaseModel):
 
 
 class NoteMeta(BaseModel):
-    filename: str        # Relative path: "2026/03/14/1710384000_hello.md"
+    note_id: str = ""
+    revision: int = 1
+    filename: str
     title: str
-    created_at: float    # Unix timestamp from frontmatter
-    updated_at: float    # File system mtime
+    created_at: float
+    updated_at: float
     content: Optional[str] = None
     tags: List[str] = []
     pinned: bool = False
 
 
-# ──────────────── Helper Functions ────────────────
-
 def _parse_frontmatter(filepath: str) -> tuple[dict, str]:
-    """Parse YAML frontmatter and body from a markdown file."""
-    with open(filepath, "r", encoding="utf-8") as f:
-        raw = f.read()
-
-    if not raw.startswith("---"):
-        return {}, raw
-
-    parts = raw.split("---", 2)
-    if len(parts) < 3:
-        return {}, raw
-
-    try:
-        meta = yaml.safe_load(parts[1]) or {}
-    except yaml.YAMLError:
-        meta = {}
-
-    body = parts[2].lstrip("\n")
-    return meta, body
+    return parse_frontmatter(filepath)
 
 
 def _build_frontmatter(created_at: str, tags: list, pinned: bool) -> str:
-    """Build YAML frontmatter string."""
-    meta = {
-        "created_at": created_at,
-        "tags": tags,
-        "pinned": pinned,
-    }
-    return "---\n" + yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip() + "\n---\n"
+    return build_frontmatter(created_at, tags, pinned)
 
 
 def _sanitize_title(title: str) -> str:
-    """Remove characters that are invalid in Windows filenames."""
-    invalid = '<>:"/\\|?*'
-    result = title
-    for ch in invalid:
-        result = result.replace(ch, "_")
-    return result.strip() or "untitled"
+    return sanitize_title(title)
 
 
 def _collect_notes_recursive(base_dir: str) -> List[dict]:
-    """Recursively walk the notes directory and collect all .md files."""
-    notes = []
-    if not os.path.exists(base_dir):
-        return notes
-
-    for root, _dirs, files in os.walk(base_dir):
-        for filename in files:
-            if not filename.endswith(".md"):
-                continue
-
-            filepath = os.path.join(root, filename)
-            rel_path = os.path.relpath(filepath, base_dir).replace("\\", "/")
-            stat = os.stat(filepath)
-            meta, body = _parse_frontmatter(filepath)
-
-            # Extract created_at: prefer frontmatter, fallback to mtime
-            created_at_val = stat.st_mtime
-            if "created_at" in meta:
-                try:
-                    dt = datetime.fromisoformat(str(meta["created_at"]))
-                    created_at_val = dt.timestamp()
-                except (ValueError, TypeError):
-                    pass
-
-            # Extract title from filename: strip timestamp prefix and .md suffix
-            basename = filename[:-3]
-            if "_" in basename and basename.split("_")[0].isdigit():
-                title = "_".join(basename.split("_")[1:])
-            else:
-                title = basename
-
-            notes.append({
-                "filename": rel_path,
-                "title": title,
-                "created_at": created_at_val,
-                "updated_at": stat.st_mtime,
-                "content": body,
-                "tags": meta.get("tags", []) or [],
-                "pinned": meta.get("pinned", False),
-            })
-
-    return notes
-
-
-_IMAGE_REF_PATTERN = re.compile(r'!\[.*?\]\(/images/([^)]+)\)|\[.*?\]\(/images/([^)]+)\)')
+    return collect_notes_recursive(base_dir)
 
 
 def _extract_referenced_images_from_body(body: str) -> set[str]:
-    referenced: set[str] = set()
-    for match in _IMAGE_REF_PATTERN.finditer(body or ""):
-        filename = match.group(1) or match.group(2)
-        if filename:
-            referenced.add(filename)
-    return referenced
+    return extract_referenced_images_from_body(body)
 
 
 def _collect_referenced_images(base_dir: str) -> set[str]:
-    referenced: set[str] = set()
-    if not os.path.exists(base_dir):
-        return referenced
-
-    for root, _dirs, files in os.walk(base_dir):
-        for filename in files:
-            if not filename.endswith(".md"):
-                continue
-            filepath = os.path.join(root, filename)
-            try:
-                _meta, body = _parse_frontmatter(filepath)
-            except OSError:
-                continue
-            referenced.update(_extract_referenced_images_from_body(body))
-
-    return referenced
+    return collect_referenced_images(base_dir)
 
 
 def _delete_unreferenced_images(candidates: set[str]):
-    if not candidates:
-        return
+    return delete_unreferenced_images(candidates, notes_dir=NOTES_DIR, trash_dir=TRASH_DIR, images_dir=IMAGES_DIR)
 
-    still_referenced = _collect_referenced_images(NOTES_DIR) | _collect_referenced_images(TRASH_DIR)
-    removable = candidates - still_referenced
-
-    for filename in removable:
-        image_path = os.path.join(IMAGES_DIR, filename)
-        try:
-            if os.path.exists(image_path) and os.path.isfile(image_path):
-                os.remove(image_path)
-        except OSError:
-            pass
-
-
-# ──────────────── Routes ────────────────
-# IMPORTANT: specific paths (/search) MUST be before {filepath:path}
 
 @router.get("/", response_model=List[NoteMeta])
 def list_notes():
-    """List all notes, pinned first, then by created_at desc."""
-    notes = _collect_notes_recursive(NOTES_DIR)
-    notes.sort(key=lambda x: (not x["pinned"], -x["created_at"]))
-    return notes
+    return list_notes_sorted(NOTES_DIR)
 
 
 @router.get("/search", response_model=List[NoteMeta])
 def search_notes(q: str = ""):
-    """Full-text search notes by keyword in content, title, and tags."""
-    if not q.strip():
-        return list_notes()
-
-    keyword = q.strip().lower()
-    all_notes = _collect_notes_recursive(NOTES_DIR)
-    results = [
-        n for n in all_notes
-        if keyword in (n.get("content", "") or "").lower()
-        or keyword in (n.get("title", "") or "").lower()
-        or any(keyword in t.lower() for t in (n.get("tags") or []))
-    ]
-    results.sort(key=lambda x: (not x["pinned"], -x["created_at"]))
-    return results
+    return search_notes_by_query(NOTES_DIR, q)
 
 
 @router.post("/maintenance/cleanup-orphan-images")
 def cleanup_orphan_images():
-    """Delete image files that are no longer referenced by any note or trash item."""
-    if not os.path.exists(IMAGES_DIR):
-        return {"message": "No images directory", "deleted_count": 0, "deleted_files": []}
-
-    still_referenced = _collect_referenced_images(NOTES_DIR) | _collect_referenced_images(TRASH_DIR)
-    deleted_files: list[str] = []
-
-    for filename in os.listdir(IMAGES_DIR):
-        image_path = os.path.join(IMAGES_DIR, filename)
-        if not os.path.isfile(image_path):
-            continue
-        if filename in still_referenced:
-            continue
-        try:
-            os.remove(image_path)
-            deleted_files.append(filename)
-        except OSError:
-            pass
-
-    return {
-        "message": "Cleanup complete",
-        "deleted_count": len(deleted_files),
-        "deleted_files": deleted_files,
-    }
+    return cleanup_orphan_image_files(notes_dir=NOTES_DIR, trash_dir=TRASH_DIR, images_dir=IMAGES_DIR)
 
 
 @router.post("/")
 def create_note(note: NoteContent):
-    """Create a new note with auto-generated filename in date directory."""
-    now = datetime.now(TZ)
-    timestamp = int(now.timestamp())
+    return create_note_record(NOTES_DIR, TZ, note.content, note.tags)
 
-    date_dir = now.strftime("%Y/%m/%d")
-    target_dir = os.path.join(NOTES_DIR, date_dir)
-    os.makedirs(target_dir, exist_ok=True)
-
-    first_line = note.content.strip().split("\n")[0][:20].strip()
-    if first_line.startswith("#"):
-        first_line = first_line.lstrip("#").strip()
-    title = _sanitize_title(first_line) if first_line else "untitled"
-
-    filename = f"{timestamp}_{title}.md"
-    filepath = os.path.join(target_dir, filename)
-
-    frontmatter = _build_frontmatter(now.isoformat(), note.tags or [], False)
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(frontmatter + note.content)
-
-    return {"message": "Note created", "filename": f"{date_dir}/{filename}"}
-
-
-def _cleanup_empty_dirs(start_dir: str, stop_dir: str):
-    """Remove empty directories up to stop_dir."""
-    parent = start_dir
-    while parent != stop_dir and os.path.isdir(parent):
-        if not os.listdir(parent):
-            os.rmdir(parent)
-            parent = os.path.dirname(parent)
-        else:
-            break
-
-
-TRASH_RETENTION_DAYS = 90  # 回收站保留天数
-
-
-def _auto_cleanup_trash():
-    """Permanently delete trash notes older than TRASH_RETENTION_DAYS."""
-    if not os.path.exists(TRASH_DIR):
-        return
-    import time
-    cutoff = time.time() - TRASH_RETENTION_DAYS * 86400
-    for root, _dirs, files in os.walk(TRASH_DIR, topdown=False):
-        for f in files:
-            fp = os.path.join(root, f)
-            try:
-                if os.stat(fp).st_mtime < cutoff:
-                    os.remove(fp)
-            except OSError:
-                pass
-        # Clean empty dirs
-        if root != TRASH_DIR and not os.listdir(root):
-            try:
-                os.rmdir(root)
-            except OSError:
-                pass
-
-
-# ──────────────── Trash Endpoints ────────────────
 
 @router.get("/trash/list", response_model=List[NoteMeta])
 def list_trash():
-    """List all notes in the trash. Auto-cleans notes older than 90 days."""
-    _auto_cleanup_trash()
-    notes = _collect_notes_recursive(TRASH_DIR)
-    notes.sort(key=lambda x: -x["updated_at"])
-    return notes
+    return list_trash_notes(TRASH_DIR)
 
 
 @router.post("/trash/restore/{filepath:path}")
 def restore_note(filepath: str):
-    """Restore a note from trash back to notes directory."""
-    if not filepath.endswith(".md"):
-        filepath += ".md"
-    trash_path = os.path.join(TRASH_DIR, filepath)
-    if not os.path.exists(trash_path):
-        raise HTTPException(status_code=404, detail="Note not found in trash")
-
-    notes_path = os.path.join(NOTES_DIR, filepath)
-    os.makedirs(os.path.dirname(notes_path), exist_ok=True)
-    import shutil
-    shutil.move(trash_path, notes_path)
-
-    _cleanup_empty_dirs(os.path.dirname(trash_path), TRASH_DIR)
-    return {"message": "Note restored", "filename": filepath}
+    try:
+        return restore_note_from_trash(filepath, notes_dir=NOTES_DIR, trash_dir=TRASH_DIR)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.delete("/trash/permanent/{filepath:path}")
 def permanent_delete(filepath: str):
-    """Permanently delete a note from trash."""
-    if not filepath.endswith(".md"):
-        filepath += ".md"
-    trash_path = os.path.join(TRASH_DIR, filepath)
-    if not os.path.exists(trash_path):
-        raise HTTPException(status_code=404, detail="Note not found in trash")
-
-    _meta, body = _parse_frontmatter(trash_path)
-    referenced_images = _extract_referenced_images_from_body(body)
-    os.remove(trash_path)
-    _cleanup_empty_dirs(os.path.dirname(trash_path), TRASH_DIR)
-    _delete_unreferenced_images(referenced_images)
-    return {"message": "Note permanently deleted"}
+    try:
+        return permanently_delete_from_trash(
+            filepath,
+            trash_dir=TRASH_DIR,
+            notes_dir=NOTES_DIR,
+            images_dir=IMAGES_DIR,
+        )
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.delete("/trash/empty")
 def empty_trash():
-    """Permanently delete all notes in trash."""
-    import shutil
-    referenced_images = _collect_referenced_images(TRASH_DIR)
-    if os.path.exists(TRASH_DIR):
-        shutil.rmtree(TRASH_DIR)
-        os.makedirs(TRASH_DIR, exist_ok=True)
-    _delete_unreferenced_images(referenced_images)
-    return {"message": "Trash emptied"}
+    return empty_trash_notes(trash_dir=TRASH_DIR, notes_dir=NOTES_DIR, images_dir=IMAGES_DIR)
 
-
-# ── Routes with {filepath:path} must stay below all specific paths ──
 
 @router.get("/{filepath:path}")
 def get_note(filepath: str):
-    """Get content of a specific note by its relative path."""
-    if not filepath.endswith(".md"):
-        filepath += ".md"
-    full_path = os.path.join(NOTES_DIR, filepath)
-    if not os.path.exists(full_path):
-        raise HTTPException(status_code=404, detail="Note not found")
-    meta, body = _parse_frontmatter(full_path)
-    return {"filename": filepath, "content": body, "meta": meta}
+    try:
+        return get_note_record(NOTES_DIR, filepath)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.put("/{filepath:path}")
 def update_note(filepath: str, note: NoteContent):
-    """Update a note's content, preserving frontmatter metadata."""
-    if not filepath.endswith(".md"):
-        filepath += ".md"
-    full_path = os.path.join(NOTES_DIR, filepath)
-    if not os.path.exists(full_path):
-        raise HTTPException(status_code=404, detail="Note not found")
-
-    meta, _ = _parse_frontmatter(full_path)
-    created_at_str = str(meta.get("created_at", datetime.now(TZ).isoformat()))
-    tags = note.tags if note.tags is not None else (meta.get("tags") or [])
-    pinned = meta.get("pinned", False)
-
-    frontmatter = _build_frontmatter(created_at_str, tags, pinned)
-    with open(full_path, "w", encoding="utf-8") as f:
-        f.write(frontmatter + note.content)
-
-    return {"message": "Note updated", "filename": filepath}
+    try:
+        return update_note_record(NOTES_DIR, filepath, content=note.content, tags=note.tags, tz=TZ)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.patch("/{filepath:path}")
 def patch_note(filepath: str, patch: NotePatch):
-    """Partially update a note's metadata (pinned, tags) without changing content."""
-    if not filepath.endswith(".md"):
-        filepath += ".md"
-    full_path = os.path.join(NOTES_DIR, filepath)
-    if not os.path.exists(full_path):
-        raise HTTPException(status_code=404, detail="Note not found")
-
-    meta, body = _parse_frontmatter(full_path)
-    created_at_str = str(meta.get("created_at", datetime.now(TZ).isoformat()))
-    tags = patch.tags if patch.tags is not None else (meta.get("tags") or [])
-    pinned = patch.pinned if patch.pinned is not None else meta.get("pinned", False)
-
-    frontmatter = _build_frontmatter(created_at_str, tags, pinned)
-    with open(full_path, "w", encoding="utf-8") as f:
-        f.write(frontmatter + body)
-
-    return {"message": "Note patched", "pinned": pinned, "tags": tags}
+    try:
+        return patch_note_record(NOTES_DIR, filepath, pinned=patch.pinned, tags=patch.tags, tz=TZ)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.delete("/{filepath:path}")
 def delete_note(filepath: str):
-    """Soft-delete: move note to trash directory, preserving path structure."""
-    if not filepath.endswith(".md"):
-        filepath += ".md"
-    full_path = os.path.join(NOTES_DIR, filepath)
-    if not os.path.exists(full_path):
-        raise HTTPException(status_code=404, detail="Note not found")
-
-    trash_path = os.path.join(TRASH_DIR, filepath)
-    os.makedirs(os.path.dirname(trash_path), exist_ok=True)
-    import shutil
-    shutil.move(full_path, trash_path)
-
-    _cleanup_empty_dirs(os.path.dirname(full_path), NOTES_DIR)
-
-    return {"message": "Note moved to trash"}
+    try:
+        return move_note_to_trash(filepath, notes_dir=NOTES_DIR, trash_dir=TRASH_DIR)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))

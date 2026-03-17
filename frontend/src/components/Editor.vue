@@ -1,5 +1,5 @@
 <template>
-  <div class="editor-card">
+  <div ref="editorCardRef" class="editor-card">
     <div class="editor-body">
       <div 
         v-show="showPreview" 
@@ -25,9 +25,9 @@
         @keydown="handleKeydown"
       ></textarea>
 
-      <div v-if="attachedImages.length" class="image-strip">
+      <div v-if="imageAttachments.length" class="image-strip">
         <button
-          v-for="image in attachedImages"
+          v-for="image in imageAttachments"
           :key="image.url"
           type="button"
           class="image-chip"
@@ -63,6 +63,7 @@
         <button class="icon-btn" title="序号列表 Ctrl+Shift+O" @click="insertOrderedList"><ListOrdered :size="20" /></button>
         <button class="icon-btn" title="清单 Ctrl+Shift+T" @click="insertChecklist"><CheckSquare :size="20" /></button>
         <button class="icon-btn" title="代码 Ctrl+`" @click="insertCode"><Code :size="20" /></button>
+        <button class="icon-btn" title="清除格式 Ctrl+\\" @click="clearFormatting"><Eraser :size="20" /></button>
       </div>
       
       <div class="toolbar-action">
@@ -89,31 +90,34 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue';
-import axios from 'axios';
-import { addToPendingQueue } from '../utils/db';
-import { isOnline } from '../utils/sync';
-import { API_BASE, resolveBackendUrl } from '../config';
+import { ref, watch, computed, onMounted, nextTick } from 'vue';
 import { marked } from 'marked';
-import { saveSettings, settings } from '../store/settings';
+import { resolveBackendUrl } from '../config';
+import { settings } from '../store/settings';
+import { createNoteContent } from '../store/notes';
+import { useEditorDraft } from '../composables/useEditorDraft';
+import { useEditorFormatting } from '../composables/useEditorFormatting';
+import { useEditorImages } from '../composables/useEditorImages';
+import { useEditorRichText } from '../composables/useEditorRichText';
+import { extractEditorAttachments, mergeEditorMarkdown, splitEditorMarkdown } from '../utils/editorAttachments';
 
 import { 
   Hash, Image as ImageIcon, Bold, Italic, Strikethrough,
   Link as LinkIcon, List, ListOrdered, CheckSquare, Code, SendHorizontal,
-  Eye, PenLine
+  Eye, PenLine, Eraser
 } from 'lucide-vue-next';
-
-import TurndownService from 'turndown';
-import { gfm } from 'turndown-plugin-gfm';
-
-const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
-// 官方 GFM 插件：一次性支持 task list、strikethrough、tables 的 HTML→Markdown 反向转译
-turndownService.use(gfm);
 
 export interface EditorSubmitPayload {
   content: string;
   tags: string[];
 }
+
+type HistoryEntry = {
+  content: string;
+  selectionStart: number;
+  selectionEnd: number;
+  mode: 'markdown' | 'rich-text';
+};
 
 const props = withDefaults(defineProps<{
   initialContent?: string;
@@ -140,394 +144,294 @@ const emit = defineEmits(['saved', 'cancel']);
 const content = ref('');
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const previewRef = ref<HTMLElement | null>(null);
-const fileInput = ref<HTMLInputElement | null>(null);
-const isUploading = ref(false);
+const editorCardRef = ref<HTMLElement | null>(null);
+const undoStack = ref<HistoryEntry[]>([]);
+const redoStack = ref<HistoryEntry[]>([]);
 const showTagInput = ref(false);
 const tagInput = ref('');
 const showPreview = ref(true); // 默认“富文本预览/渲染”模式
 const isComposing = ref(false);
+const isApplyingHistory = ref(false);
+const historyReady = ref(false);
 const draftStorageKey = 'bemo.editor.draft';
-let autoSaveTimer: number | null = null;
 const placeholderText = computed(() => props.placeholder);
 const showCancelButton = computed(() => props.showCancel);
+const attachments = computed(() => extractEditorAttachments(content.value));
+const imageAttachments = computed(() => attachments.value
+  .filter((attachment) => attachment.kind === 'image')
+  .map((attachment) => ({
+    alt: attachment.label,
+    url: attachment.url,
+  })));
 const submitButtonTitle = computed(() => (isUploading.value ? '图片上传中' : props.submitTitle));
 
-// 双模式下的 content 是否有内容判定（富文本模式下结合 DOM 文本）
-const hasContent = computed(() => {
-  if (showPreview.value) {
-    return !!(previewRef.value?.textContent?.trim()) || !!content.value.trim();
-  }
-  return !!content.value.trim();
+const {
+  handleCompositionEnd,
+  handlePreviewInput,
+  hasContent,
+  syncEditorPreview,
+  togglePreview,
+} = useEditorRichText({
+  content,
+  previewRef,
+  textareaRef,
+  showPreview,
+  isComposing,
+  attachments,
 });
 
-const attachedImages = computed(() => {
-  const matches = Array.from(content.value.matchAll(/!\[([^\]]*)\]\((\/images\/[^)]+)\)/g));
-  return matches.map((match) => ({
-    alt: match[1] || 'image',
-    url: match[2],
-  }));
+const {
+  fileInput,
+  handleImageUpload,
+  handlePaste,
+  isUploading,
+  removeAttachedImage,
+  triggerImageUpload,
+} = useEditorImages({
+  content,
+  previewRef,
+  textareaRef,
+  showPreview,
+  handlePreviewInput,
+  syncEditorPreview,
 });
 
-const stripAttachmentMarkdown = (value: string) => {
-  return value
-    .replace(/\n?!\[[^\]]*\]\((\/images\/[^)]+)\)\n?/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+const {
+  clearDraft,
+  restoreDraft,
+} = useEditorDraft({
+  autosaveDraft: props.autosaveDraft,
+  draftStorageKey,
+  content,
+  tagInput,
+  showTagInput,
+  showPreview,
+});
+void fileInput;
+
+const resizeTextarea = () => {
+  const textarea = textareaRef.value;
+  if (!textarea || showPreview.value) return;
+
+  textarea.style.height = 'auto';
+  textarea.style.height = `${textarea.scrollHeight}px`;
 };
 
-const renderMarkdown = async (value: string) => {
-  const renderer = new marked.Renderer();
-  renderer.image = ({ href, title, text }) => {
-    const src = resolveBackendUrl(href || '');
-    const titleAttr = title ? ` title="${title}"` : '';
-    const altAttr = text || '';
-    return `<img src="${src}" alt="${altAttr}"${titleAttr}>`;
-  };
-  renderer.link = ({ href, title, text }) => {
-    const resolved = href?.startsWith('/images/') ? resolveBackendUrl(href) : (href || '');
-    const titleAttr = title ? ` title="${title}"` : '';
-    return `<a href="${resolved}"${titleAttr} target="_blank" rel="noreferrer">${text}</a>`;
-  };
+const getPreviewSelectionOffsets = () => {
+  const preview = previewRef.value;
+  const selection = window.getSelection();
+  if (!preview || !selection || selection.rangeCount === 0) {
+    const length = preview?.textContent?.length || 0;
+    return { start: length, end: length };
+  }
 
-  return marked.parse(value, {
+  const range = selection.getRangeAt(0);
+  if (!preview.contains(range.startContainer) || !preview.contains(range.endContainer)) {
+    const length = preview.textContent?.length || 0;
+    return { start: length, end: length };
+  }
+
+  const startRange = range.cloneRange();
+  startRange.selectNodeContents(preview);
+  startRange.setEnd(range.startContainer, range.startOffset);
+
+  const endRange = range.cloneRange();
+  endRange.selectNodeContents(preview);
+  endRange.setEnd(range.endContainer, range.endOffset);
+
+  return {
+    start: startRange.toString().length,
+    end: endRange.toString().length,
+  };
+};
+
+const restorePreviewSelectionOffsets = (start: number, end: number) => {
+  const preview = previewRef.value;
+  const selection = window.getSelection();
+  if (!preview || !selection) return;
+
+  const walker = document.createTreeWalker(preview, NodeFilter.SHOW_TEXT);
+  let currentOffset = 0;
+  let startNode: Node | null = null;
+  let endNode: Node | null = null;
+  let startNodeOffset = 0;
+  let endNodeOffset = 0;
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    const textLength = node.textContent?.length || 0;
+
+    if (!startNode && currentOffset + textLength >= start) {
+      startNode = node;
+      startNodeOffset = Math.max(0, start - currentOffset);
+    }
+
+    if (!endNode && currentOffset + textLength >= end) {
+      endNode = node;
+      endNodeOffset = Math.max(0, end - currentOffset);
+      break;
+    }
+
+    currentOffset += textLength;
+  }
+
+  const range = document.createRange();
+  if (startNode && endNode) {
+    range.setStart(startNode, Math.min(startNodeOffset, startNode.textContent?.length || 0));
+    range.setEnd(endNode, Math.min(endNodeOffset, endNode.textContent?.length || 0));
+  } else {
+    range.selectNodeContents(preview);
+    range.collapse(false);
+  }
+
+  selection.removeAllRanges();
+  selection.addRange(range);
+  preview.focus();
+};
+
+const resetHistory = (value: string) => {
+  undoStack.value = [];
+  redoStack.value = [];
+  historyReady.value = true;
+  if (value !== content.value) {
+    content.value = value;
+  }
+};
+
+const captureHistoryEntry = (entryContent: string): HistoryEntry => {
+  if (!showPreview.value) {
+    return {
+      content: entryContent,
+      selectionStart: textareaRef.value?.selectionStart ?? entryContent.length,
+      selectionEnd: textareaRef.value?.selectionEnd ?? entryContent.length,
+      mode: 'markdown',
+    };
+  }
+
+  const offsets = getPreviewSelectionOffsets();
+  return {
+    content: entryContent,
+    selectionStart: offsets.start,
+    selectionEnd: offsets.end,
+    mode: 'rich-text',
+  };
+};
+
+const applyHistoryContent = async (entry: HistoryEntry) => {
+  isApplyingHistory.value = true;
+  try {
+    content.value = entry.content;
+    await nextTick();
+    resizeTextarea();
+
+    if (showPreview.value && previewRef.value) {
+      await syncEditorPreview();
+      requestAnimationFrame(() => restorePreviewSelectionOffsets(entry.selectionStart, entry.selectionEnd));
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.value;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(
+        Math.min(entry.selectionStart, textarea.value.length),
+        Math.min(entry.selectionEnd, textarea.value.length),
+      );
+    });
+  } finally {
+    isApplyingHistory.value = false;
+  }
+};
+
+const undoContent = async () => {
+  const previous = undoStack.value.pop();
+  if (previous === undefined) return;
+
+  redoStack.value.push(captureHistoryEntry(content.value));
+  await applyHistoryContent(previous);
+};
+
+const redoContent = async () => {
+  const next = redoStack.value.pop();
+  if (next === undefined) return;
+
+  undoStack.value.push(captureHistoryEntry(content.value));
+  await applyHistoryContent(next);
+};
+
+const blockTags = new Set([
+  'P', 'DIV', 'SECTION', 'ARTICLE', 'BLOCKQUOTE',
+  'UL', 'OL', 'LI', 'PRE',
+  'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+]);
+
+const normalizePlainText = (value: string) => value
+  .replace(/\u00a0/g, ' ')
+  .replace(/[ \t]+\n/g, '\n')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
+
+const isCitationLikeText = (value: string) => /^\[\d+\]$/.test(value.trim());
+
+const extractPlainText = (node: Node): string => {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent || '';
+  }
+
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return '';
+  }
+
+  const element = node as HTMLElement;
+  const tagName = element.tagName.toUpperCase();
+
+  if (tagName === 'BR') {
+    return '\n';
+  }
+
+  const childrenText = Array.from(element.childNodes).map(extractPlainText).join('');
+
+  if (tagName === 'A' && isCitationLikeText(childrenText)) {
+    return '';
+  }
+
+  if (tagName === 'LI') {
+    return `${childrenText.trim()}\n`;
+  }
+
+  if (blockTags.has(tagName)) {
+    return `${childrenText.trim()}\n\n`;
+  }
+
+  return childrenText;
+};
+
+const stripMarkdownFormatting = async (value: string) => {
+  const html = await marked.parse(value || '', {
     gfm: settings.editor.markdownGfm,
     breaks: settings.editor.markdownBreaks,
-    renderer,
-  }) as Promise<string>;
+  });
+  const container = document.createElement('div');
+  container.innerHTML = String(html);
+  return normalizePlainText(Array.from(container.childNodes).map(extractPlainText).join(''));
 };
 
-const syncEditorPreview = async () => {
-  if (!previewRef.value) return;
-  const displayContent = stripAttachmentMarkdown(content.value);
-  previewRef.value.innerHTML = displayContent ? await renderMarkdown(displayContent) : '';
-};
-
-const buildAttachmentMarkdown = () => {
-  return attachedImages.value.map((image) => `![${image.alt}](${image.url})`).join('\n');
-};
-
-const mergeTextAndAttachments = (textMarkdown: string) => {
-  const normalizedText = textMarkdown.trim();
-  const attachmentMarkdown = buildAttachmentMarkdown();
-  if (!normalizedText) return attachmentMarkdown;
-  if (!attachmentMarkdown) return normalizedText;
-  return `${normalizedText}\n\n${attachmentMarkdown}`;
-};
-
-const saveDraft = () => {
-  const payload = {
-    content: content.value,
-    tagInput: tagInput.value,
-    showTagInput: showTagInput.value,
-    showPreview: showPreview.value,
-  };
-
-  if (!payload.content.trim() && !payload.tagInput.trim()) {
-    localStorage.removeItem(draftStorageKey);
-    return;
+const clearFormatting = async () => {
+  if (showPreview.value) {
+    handlePreviewInput();
   }
 
-  localStorage.setItem(draftStorageKey, JSON.stringify(payload));
-};
+  const { body, attachments } = splitEditorMarkdown(content.value);
+  const plainText = await stripMarkdownFormatting(body);
+  content.value = mergeEditorMarkdown(plainText, attachments);
+  await nextTick();
+  resizeTextarea();
+  editorCardRef.value?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 
-const clearDraft = () => {
-  localStorage.removeItem(draftStorageKey);
-};
-
-const removeAttachedImage = (url: string) => {
-  const escapedUrl = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`\\n?!\\[[^\\]]*\\]\\(${escapedUrl}\\)\\n?`, 'g');
-  content.value = content.value.replace(pattern, '\n').replace(/\n{3,}/g, '\n\n').trim();
-  if (showPreview.value && previewRef.value) {
-    syncEditorPreview();
-  }
-};
-
-const queueAutoSave = () => {
-  if (!props.autosaveDraft || !settings.editor.autoSaveEnabled) {
-    if (autoSaveTimer) {
-      window.clearTimeout(autoSaveTimer);
-      autoSaveTimer = null;
-    }
-    return;
-  }
-
-  if (autoSaveTimer) {
-    window.clearTimeout(autoSaveTimer);
-  }
-
-  autoSaveTimer = window.setTimeout(() => {
-    saveDraft();
-    autoSaveTimer = null;
-  }, settings.editor.autoSaveDelaySec * 1000);
-};
-
-// 当从 markdown 切换到富文本时，或者 markdown 更新时，需要重新渲染预览区
-// 为了避免在富文本模式打字时光标乱跳，只有在处于 markdown 模式时才覆盖 html
-watch(content, async (newVal) => {
-  queueAutoSave();
-  if (!showPreview.value && previewRef.value) {
-    const displayContent = stripAttachmentMarkdown(newVal);
-    previewRef.value.innerHTML = displayContent ? await renderMarkdown(displayContent) : '';
-  }
-});
-
-watch(tagInput, () => {
-  queueAutoSave();
-});
-
-watch(showTagInput, () => {
-  queueAutoSave();
-});
-
-watch(() => settings.editor.autoSaveEnabled, (enabled) => {
-  if (!props.autosaveDraft) return;
-  if (enabled) {
-    queueAutoSave();
-  } else {
-    clearDraft();
-  }
-});
-
-watch(() => [settings.editor.markdownGfm, settings.editor.markdownBreaks], async () => {
   if (showPreview.value && previewRef.value) {
     await syncEditorPreview();
-  }
-});
-
-const handlePreviewInput = () => {
-  if (isComposing.value) {
-    return;
-  }
-
-  if (previewRef.value) {
-    const textMarkdown = turndownService.turndown(previewRef.value.innerHTML);
-    content.value = mergeTextAndAttachments(textMarkdown);
-  }
-};
-
-const handleCompositionEnd = () => {
-  isComposing.value = false;
-  if (showPreview.value) {
-    handlePreviewInput();
-  }
-};
-
-const persistEditorModePreference = () => {
-  settings.editor.preferredMode = showPreview.value ? 'rich-text' : 'markdown';
-  saveSettings();
-};
-
-
-
-const togglePreview = () => {
-  showPreview.value = !showPreview.value;
-  persistEditorModePreference();
-  if (!showPreview.value) {
-    // 切回 markdown 源码时聚焦
-    requestAnimationFrame(() => textareaRef.value?.focus());
-  } else {
-    // 切回富文本态时基于此时的 markdown 强制重新渲染一次 html 以保证状态准确
-    if (previewRef.value) {
-      syncEditorPreview().then(() => {
-        requestAnimationFrame(() => previewRef.value?.focus());
-      });
-    }
-  }
-};
-
-
-// ──────────── Text Manipulation Helpers ────────────
-
-/**
- * Wrap the current selection (or insert at cursor) with prefix/suffix.
- * If text is selected, wraps it: prefix + selectedText + suffix.
- * If no selection, inserts: prefix + placeholder + suffix, with placeholder selected.
- */
-const wrapSelection = (prefix: string, suffix: string, placeholder: string = '') => {
-  const el = textareaRef.value;
-  if (!el) return;
-  
-  const start = el.selectionStart;
-  const end = el.selectionEnd;
-  const text = content.value;
-  const selected = text.substring(start, end);
-  
-  const insertText = selected || placeholder;
-  const newText = text.substring(0, start) + prefix + insertText + suffix + text.substring(end);
-  content.value = newText;
-  
-  // Restore cursor position / selection
-  requestAnimationFrame(() => {
-    el.focus();
-    if (selected) {
-      el.selectionStart = el.selectionEnd = start + prefix.length + selected.length + suffix.length;
-    } else {
-      // Select the placeholder so user can type over it
-      el.selectionStart = start + prefix.length;
-      el.selectionEnd = start + prefix.length + placeholder.length;
-    }
-  });
-};
-
-/**
- * Insert text at the beginning of the current line.
- */
-const insertAtLineStart = (prefix: string) => {
-  const el = textareaRef.value;
-  if (!el) return;
-  
-  const start = el.selectionStart;
-  const text = content.value;
-  
-  // Find the start of the current line
-  const lineStart = text.lastIndexOf('\n', start - 1) + 1;
-  
-  const newText = text.substring(0, lineStart) + prefix + text.substring(lineStart);
-  content.value = newText;
-  
-  requestAnimationFrame(() => {
-    el.focus();
-    el.selectionStart = el.selectionEnd = start + prefix.length;
-  });
-};
-
-
-// ──────────── Toolbar Actions ────────────
-
-const insertBold = () => {
-  if (showPreview.value) { document.execCommand('bold'); handlePreviewInput(); previewRef.value?.focus(); }
-  else wrapSelection('**', '**', '粗体文字');
-};
-const insertItalic = () => {
-  if (showPreview.value) { document.execCommand('italic'); handlePreviewInput(); previewRef.value?.focus(); }
-  else wrapSelection('*', '*', '斜体文字');
-};
-const insertStrikethrough = () => {
-  if (showPreview.value) { document.execCommand('strikeThrough'); handlePreviewInput(); previewRef.value?.focus(); }
-  else wrapSelection('~~', '~~', '删除线');
-};
-const insertLink = () => {
-  if (showPreview.value) { 
-    const url = prompt('请输入链接地址:', 'https://');
-    if (url) { document.execCommand('createLink', false, url); handlePreviewInput(); previewRef.value?.focus(); }
-  }
-  else wrapSelection('[', '](url)', '链接文字');
-};
-const insertCode = () => {
-  if (showPreview.value) {
-    const sel = window.getSelection();
-    if (sel && sel.toString()) {
-      document.execCommand('insertHTML', false, `<code>${sel.toString()}</code>`);
-    } else {
-      document.execCommand('insertHTML', false, `<code>code</code>`);
-    }
-    handlePreviewInput(); previewRef.value?.focus();
-  }
-  else wrapSelection('`', '`', 'code');
-};
-const insertList = () => {
-  if (showPreview.value) { document.execCommand('insertUnorderedList'); handlePreviewInput(); previewRef.value?.focus(); }
-  else insertAtLineStart('- ');
-};
-const insertOrderedList = () => {
-  if (showPreview.value) {
-    document.execCommand('insertOrderedList');
-    handlePreviewInput();
-    previewRef.value?.focus();
-  }
-  else insertAtLineStart('1. ');
-};
-const insertChecklist = () => {
-  if (showPreview.value && previewRef.value) {
-    // execCommand('insertHTML') 对 <input> 不可靠，直接操作 DOM
-    const li = document.createElement('li');
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    li.appendChild(cb);
-    li.appendChild(document.createTextNode(' 待办事项'));
-    const ul = document.createElement('ul');
-    ul.appendChild(li);
-
-    // 在光标位置插入
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      range.deleteContents();
-      range.insertNode(ul);
-      // 光标移到 checkbox 后方
-      range.setStartAfter(ul);
-      range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    } else {
-      previewRef.value.appendChild(ul);
-    }
-    handlePreviewInput();
-    previewRef.value.focus();
-  }
-  else insertAtLineStart('- [ ] 待办事项');
-};
-
-
-// ──────────── Keyboard Shortcuts ────────────
-
-const handleKeydown = (e: KeyboardEvent) => {
-  if (e.isComposing || isComposing.value) {
-    return;
-  }
-
-  const isCtrl = e.ctrlKey || e.metaKey;
-  
-  if (isCtrl && !e.shiftKey) {
-    switch (e.key.toLowerCase()) {
-      case 'b':
-        e.preventDefault();
-        insertBold();
-        break;
-      case 'i':
-        e.preventDefault();
-        insertItalic();
-        break;
-      case 'k':
-        e.preventDefault();
-        insertLink();
-        break;
-      case '`':
-        e.preventDefault();
-        insertCode();
-        break;
-      case 'enter':
-        e.preventDefault();
-        saveNote();
-        break;
-    }
-  }
-  
-  if (isCtrl && e.shiftKey) {
-    switch (e.key.toLowerCase()) {
-      case 'x':
-        e.preventDefault();
-        insertStrikethrough();
-        break;
-      case 'l':
-        e.preventDefault();
-        insertList();
-        break;
-      case 'o':
-        e.preventDefault();
-        insertOrderedList();
-        break;
-      case 't':
-        e.preventDefault();
-        insertChecklist();
-        break;
-    }
-  }
-  
-  if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'p') {
-    e.preventDefault();
-    togglePreview();
+    requestAnimationFrame(() => previewRef.value?.focus());
   }
 };
 
@@ -551,19 +455,7 @@ const saveNote = async () => {
       tags,
     });
   } else {
-    if (isOnline()) {
-      try {
-        await axios.post(`${API_BASE}/notes/`, {
-          content: content.value,
-          tags: tags.length > 0 ? tags : undefined
-        });
-      } catch (error) {
-        console.warn("Server unreachable, saving offline");
-        await addToPendingQueue({ content: content.value, tags });
-      }
-    } else {
-      await addToPendingQueue({ content: content.value, tags });
-    }
+    await createNoteContent({ content: content.value, tags });
   }
 
   if (props.resetOnSuccess) {
@@ -572,168 +464,113 @@ const saveNote = async () => {
     tagInput.value = '';
     showTagInput.value = false;
     clearDraft();
+    resetHistory('');
   }
   emit('saved');
 };
 
-
-// ──────────── Image Upload ────────────
-
-const triggerImageUpload = () => {
-  fileInput.value?.click();
-};
-
-const compressImage = (file: File) => {
-  const mode = settings.editor.imageCompression;
-  const compressibleTypes = ['image/jpeg', 'image/png', 'image/webp'];
-  if (mode === 'original' || !compressibleTypes.includes(file.type)) {
-    return Promise.resolve(file);
-  }
-
-  const maxWidth = mode === 'compact' ? 1280 : 1920;
-  const outputType = file.type === 'image/png' ? 'image/png' : file.type;
-  const quality = outputType === 'image/png' ? undefined : (mode === 'compact' ? 0.72 : 0.82);
-
-  return new Promise<File>((resolve) => {
-    const image = new Image();
-    const objectUrl = URL.createObjectURL(file);
-
-    image.onload = () => {
-      const scale = Math.min(1, maxWidth / image.width);
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(image.width * scale);
-      canvas.height = Math.round(image.height * scale);
-
-      const context = canvas.getContext('2d');
-      if (!context) {
-        URL.revokeObjectURL(objectUrl);
-        resolve(file);
-        return;
-      }
-
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob((blob) => {
-        URL.revokeObjectURL(objectUrl);
-        if (!blob || blob.size >= file.size) {
-          resolve(file);
-          return;
-        }
-
-        resolve(new File([blob], file.name, { type: blob.type || file.type, lastModified: file.lastModified }));
-      }, outputType, quality);
-    };
-
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve(file);
-    };
-
-    image.src = objectUrl;
-  });
-};
-
-const uploadFile = async (file: File) => {
-  if (!file.type.startsWith('image/')) return;
-  const uploadTarget = await compressImage(file);
-  
-  const formData = new FormData();
-  formData.append('file', uploadTarget);
-  
-  try {
-    isUploading.value = true;
-    const res = await axios.post(`${API_BASE}/uploads/`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-    
-    // Use relative URL — works regardless of host/port
-    const imageMarkdown = `\n![${uploadTarget.name}](${res.data.url})\n`;
-    content.value += imageMarkdown;
-    if (showPreview.value && previewRef.value) {
-      await syncEditorPreview();
-      requestAnimationFrame(() => previewRef.value?.focus());
-    }
-  } catch (err) {
-    console.error("Failed to upload image", err);
-  } finally {
-    isUploading.value = false;
-  }
-};
-
-const handleImageUpload = (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  if (target.files && target.files.length > 0) {
-    uploadFile(target.files[0]);
-    target.value = '';
-  }
-};
-
-const handlePaste = (event: ClipboardEvent) => {
-  const items = event.clipboardData?.items;
-  if (!items) return;
-  
-  for (let i = 0; i < items.length; i++) {
-    if (items[i].type.indexOf('image') !== -1) {
-      const file = items[i].getAsFile();
-      if (file) {
-        event.preventDefault();
-        uploadFile(file);
-        break;
-      }
-    }
-  }
-};
-
+const {
+  handleKeydown,
+  insertBold,
+  insertChecklist,
+  insertCode,
+  insertItalic,
+  insertLink,
+  insertList,
+  insertOrderedList,
+  insertStrikethrough,
+} = useEditorFormatting({
+  content,
+  textareaRef,
+  previewRef,
+  showPreview,
+  isComposing,
+  handlePreviewInput,
+  togglePreview,
+  clearFormatting,
+  undo: undoContent,
+  redo: redoContent,
+  submit: saveNote,
+});
 onMounted(async () => {
   content.value = props.initialContent;
   tagInput.value = (props.initialTags || []).join(', ');
   showPreview.value = settings.editor.preferredMode === 'rich-text';
 
+  await nextTick();
+  resizeTextarea();
+
   if (!props.autosaveDraft) {
     if (showPreview.value && previewRef.value && content.value) {
       await syncEditorPreview();
     }
+    resetHistory(content.value);
     return;
   }
 
   try {
-    const raw = localStorage.getItem(draftStorageKey);
-    if (!raw) return;
-    const draft = JSON.parse(raw) as Partial<{
-      content: string;
-      tagInput: string;
-      showTagInput: boolean;
-      showPreview: boolean;
-    }>;
+    const draft = restoreDraft();
+    if (!draft) {
+      if (showPreview.value && previewRef.value && content.value) {
+        await syncEditorPreview();
+      }
+      resetHistory(content.value);
+      return;
+    }
 
     content.value = draft.content ?? '';
     tagInput.value = draft.tagInput ?? '';
     showTagInput.value = draft.showTagInput ?? false;
 
+    await nextTick();
+    resizeTextarea();
+
     if (showPreview.value && previewRef.value && content.value) {
       await syncEditorPreview();
     }
+    resetHistory(content.value);
   } catch (error) {
     console.warn('Failed to restore draft.', error);
+    resetHistory(content.value);
   }
 });
 
 watch(
-  () => [props.initialContent, (props.initialTags || []).join(',')],
-  async ([nextContent, nextTags]) => {
+  [() => props.initialContent, () => (props.initialTags || []).join(',')],
+  async ([nextContent, nextTags]: [string | undefined, string]) => {
     if (props.autosaveDraft) return;
     content.value = String(nextContent || '');
     tagInput.value = String(nextTags || '');
     showTagInput.value = false;
+    await nextTick();
+    resizeTextarea();
     if (showPreview.value && previewRef.value) {
       await syncEditorPreview();
     }
+    resetHistory(content.value);
   },
 );
 
-onBeforeUnmount(() => {
-  if (autoSaveTimer) {
-    window.clearTimeout(autoSaveTimer);
+watch(content, (newVal, oldVal) => {
+  if (!historyReady.value || isApplyingHistory.value || newVal === oldVal) {
+    return;
   }
+
+  undoStack.value.push(captureHistoryEntry(oldVal));
+  if (undoStack.value.length > 200) {
+    undoStack.value.shift();
+  }
+  redoStack.value = [];
+});
+
+watch(content, async () => {
+  await nextTick();
+  resizeTextarea();
+});
+
+watch(showPreview, async () => {
+  await nextTick();
+  resizeTextarea();
 });
 </script>
 
@@ -747,6 +584,13 @@ onBeforeUnmount(() => {
   flex-direction: column;
   overflow: hidden;
   transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.editor-card,
+.editor-body,
+.editor-preview,
+.editor-input {
+  min-width: 0;
 }
 .editor-card:focus-within {
   border-color: var(--accent-color, #10b981);
@@ -872,13 +716,17 @@ onBeforeUnmount(() => {
   padding: 8px 16px;
   border-top: 1px solid var(--border-color, #e4e4e7);
   background-color: var(--bg-main, #fafafa);
+  gap: 12px;
 }
 
 .toolbar-icons {
   display: flex;
   align-items: center;
   gap: 4px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  min-width: 0;
 }
 
 .icon-btn {
@@ -910,6 +758,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-shrink: 0;
 }
 
 .btn-cancel-text {
@@ -969,4 +818,47 @@ onBeforeUnmount(() => {
   padding: 6px 10px; font-size: 0.85rem; outline: none; background: var(--bg-card, white); color: var(--text-primary);
 }
 .tag-input:focus { border-color: var(--accent-color, #10b981); }
+
+@media (max-width: 767px) {
+  .editor-preview,
+  .editor-input {
+    padding: 14px 16px;
+    font-size: 0.92rem;
+  }
+
+  .image-strip {
+    gap: 10px;
+    padding: 0 16px 14px;
+  }
+
+  .image-chip,
+  .image-add-tile {
+    width: 72px;
+    height: 72px;
+    border-radius: 14px;
+  }
+
+  .editor-toolbar {
+    align-items: flex-end;
+    padding: 8px 12px;
+  }
+
+  .toolbar-icons {
+    flex: 1;
+    margin-right: 4px;
+  }
+
+  .toolbar-action {
+    gap: 8px;
+  }
+
+  .btn-send {
+    width: 48px;
+    height: 36px;
+  }
+
+  .tag-input-area {
+    padding: 8px 12px 12px;
+  }
+}
 </style>

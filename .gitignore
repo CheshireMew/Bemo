@@ -1,3 +1,6 @@
 /Example
 /backend/data/
 /backend/data/ai_settings.json
+__pycache__/
+*.py[cod]
+backend/tests/.tmp/

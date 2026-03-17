@@ -7,29 +7,63 @@
   padding: 0;
 }
 
+html,
+body {
+  min-height: 100%;
+}
+
+body,
+#app {
+  min-height: 100dvh;
+}
+
 body {
   font-family: var(--font-sans);
   background-color: var(--bg-main);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   transition: background-color 0.3s, color 0.3s;
+  overflow-x: hidden;
 }
 
 /* 整个应用容器居中，两侧自动留白 */
 .flomo-layout {
   display: flex;
-  height: 100vh;
-  max-width: 1040px; /* 控制总宽度 */
+  min-height: 100dvh;
+  width: min(100%, var(--layout-max-width));
   margin: 0 auto;    /* 居中 */
-  overflow: hidden;
+  padding-left: max(20px, var(--safe-left));
+  padding-right: max(20px, var(--safe-right));
+  gap: 20px;
+  align-items: stretch;
+}
+
+.surface-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.surface-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 /* Mobile Responsive */
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
+  .flomo-layout {
+    padding-left: max(16px, var(--safe-left));
+    padding-right: max(16px, var(--safe-right));
+    gap: 16px;
+  }
+}
+
+@media (max-width: 767px) {
   .app-container, .flomo-layout {
     flex-direction: column;
     max-width: 100%;
     margin: 0;
-    height: 100vh;
+    min-height: 100dvh;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bottom);
+    gap: 0;
   }
 }

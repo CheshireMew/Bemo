@@ -1,14 +1,17 @@
 <template>
   <div>
     <nav class="nav-menu">
-      <a href="#" class="nav-item" :class="{ active: currentView === 'all' }" @click.prevent="setView('all')">
+      <a href="#" class="nav-item" :class="{ active: currentView === 'all' }" @click.prevent="handleAllNotes">
         <LayoutGrid class="icon" :size="18" /> 全部笔记
       </a>
-      <a href="#" class="nav-item" :class="{ active: currentView === 'random' }" @click.prevent="openRandomWalk">
+      <a href="#" class="nav-item" :class="{ active: currentView === 'random' }" @click.prevent="handleRandomWalk">
         <Dices class="icon" :size="18" /> 随机漫步
       </a>
-      <a href="#" class="nav-item" @click.prevent="openAiChat">
+      <a href="#" class="nav-item" @click.prevent="openDefaultAiChat">
         <MessagesSquare class="icon" :size="18" /> AI 对话
+      </a>
+      <a href="#" class="nav-item" :class="{ active: currentView === 'conflicts' }" @click.prevent="openConflicts">
+        <ShieldAlert class="icon" :size="18" /> 冲突记录
       </a>
     </nav>
 
@@ -24,14 +27,41 @@
 
 <script setup lang="ts">
 import { 
-  LayoutGrid, Dices, Trash2, MessagesSquare
+  LayoutGrid, Dices, Trash2, MessagesSquare, ShieldAlert
 } from 'lucide-vue-next';
 import { currentView, setView, openRandomWalk, openAiChat } from '../../store/ui';
+import { fetchConflicts } from '../../store/conflicts';
 import { fetchTrash } from '../../store/notes';
+
+const emit = defineEmits<{
+  navigate: [];
+}>();
+
+const handleAllNotes = () => {
+  setView('all');
+  emit('navigate');
+};
+
+const handleRandomWalk = () => {
+  openRandomWalk();
+  emit('navigate');
+};
 
 const openTrash = async () => {
   setView('trash');
   await fetchTrash();
+  emit('navigate');
+};
+
+const openConflicts = async () => {
+  setView('conflicts');
+  await fetchConflicts();
+  emit('navigate');
+};
+
+const openDefaultAiChat = () => {
+  openAiChat();
+  emit('navigate');
 };
 </script>
 

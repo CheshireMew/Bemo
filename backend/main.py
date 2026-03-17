@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import os
 
-from api import notes, uploads, settings, ai
+from core.paths import IMAGES_DIR, ensure_data_directories
+from api import notes, uploads, settings, ai, sync
 
 app = FastAPI(title="Bemo Notes API")
 
@@ -16,15 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ensure data directories exist
-DATA_DIR = os.getenv("BEMO_DATA_DIR", "./data")
-NOTES_DIR = os.path.join(DATA_DIR, "notes")
-IMAGES_DIR = os.path.join(DATA_DIR, "images")
-TRASH_DIR = os.path.join(DATA_DIR, "trash")
-
-os.makedirs(NOTES_DIR, exist_ok=True)
-os.makedirs(IMAGES_DIR, exist_ok=True)
-os.makedirs(TRASH_DIR, exist_ok=True)
+ensure_data_directories()
 
 # Mount static files for images
 app.mount("/images", StaticFiles(directory=IMAGES_DIR), name="images")
@@ -34,6 +26,7 @@ app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
 app.include_router(uploads.router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
+app.include_router(sync.router, prefix="/api/sync", tags=["sync"])
 
 @app.get("/")
 def read_root():

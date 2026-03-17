@@ -1,7 +1,10 @@
 <template>
   <div class="trash-view">
     <div class="trash-header">
-      <h3>🗑️ 回收站</h3>
+      <h3>
+        <Trash2 class="section-icon" :size="18" />
+        回收站
+      </h3>
       <button v-if="trashNotes.length" class="btn-empty-trash" @click="emptyTrash">清空回收站</button>
     </div>
     <div v-if="trashNotes.length === 0" class="trash-empty">回收站是空的</div>
@@ -20,13 +23,22 @@
 
 <script setup lang="ts">
 import { trashNotes, emptyTrash, restoreNote, permanentDelete } from '../../store/notes';
+import { Trash2 } from 'lucide-vue-next';
 import NoteCard from './NoteCard.vue';
 </script>
 
 <style scoped>
 .trash-view { margin-top: 24px; }
 .trash-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.trash-header h3 { font-size: 1.1rem; font-weight: 600; color: var(--text-primary); }
+.trash-header h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-icon { color: var(--text-secondary); }
 .btn-empty-trash { 
   background: #fee2e2; color: #ef4444; border: none; 
   padding: 6px 14px; border-radius: var(--radius-md); cursor: pointer;

@@ -7,6 +7,7 @@
             <h2>AI 对话</h2>
             <p>
               {{ activeConversation?.title || '未选择对话' }}
+              <span v-if="aiContextNote"> · 当前笔记 {{ aiContextLabel }}</span>
               <span v-if="selectedTag"> · 标签 #{{ selectedTag }}</span>
               <span v-if="selectedDate"> · 日期 {{ selectedDate.toLocaleDateString() }}</span>
               · 共 {{ contextNotes.length }} 条
@@ -17,7 +18,7 @@
 
         <div class="ai-shell">
           <aside class="conversation-sidebar">
-            <button class="new-chat-btn" type="button" @click="createConversation" :disabled="isLoadingList">
+            <button class="new-chat-btn" type="button" @click="createBlankConversation" :disabled="isLoadingList">
               新对话
             </button>
             <div ref="conversationListRef" class="conversation-list">
@@ -29,7 +30,19 @@
                 :class="{ active: activeConversationId === conversation.id }"
               >
                 <button class="conversation-item" type="button" @click="selectConversation(conversation.id)">
-                  <span class="conversation-title">{{ conversation.title }}</span>
+                  <template v-if="editingConversationId === conversation.id">
+                    <input
+                      ref="editingTitleInput"
+                      v-model.trim="editingTitleDraft"
+                      class="conversation-title-input"
+                      type="text"
+                      @click.stop
+                      @keydown.enter.prevent="submitConversationRename(conversation)"
+                      @keydown.esc.prevent="cancelConversationRename"
+                      @blur="submitConversationRename(conversation)"
+                    />
+                  </template>
+                  <span v-else class="conversation-title">{{ conversation.title }}</span>
                   <span class="conversation-meta">{{ formatContextMode(conversation.context_mode) }}</span>
                 </button>
                 <div class="conversation-actions">
@@ -38,7 +51,7 @@
                     type="button"
                     title="重命名"
                     aria-label="重命名"
-                    @click.stop="renameConversation(conversation)"
+                    @click.stop="startConversationRename(conversation)"
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path
@@ -154,7 +167,7 @@
                   </div>
                 </div>
                 <div class="footer-action-buttons">
-                  <button class="secondary-btn" type="button" @click="createConversation" :disabled="isLoading">
+                  <button class="secondary-btn" type="button" @click="createBlankConversation" :disabled="isLoading">
                     新对话
                   </button>
                   <button class="primary-btn" type="button" @click="sendMessage" :disabled="isLoading || !draft.trim()">
@@ -172,51 +185,26 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
-import axios from 'axios';
-import { API_BASE } from '../config';
+import { computed, ref, watch } from 'vue';
 import { displayedNotes, notes, selectedDate, selectedTag } from '../store/notes';
-import type { AiPromptPreset } from '../store/settings';
-import { removeAiPromptPreset, settings, upsertAiPromptPreset } from '../store/settings';
-import { closeAiChat, isAiChatOpen } from '../store/ui';
-
-type LocalMessage = {
-  role: 'user' | 'assistant';
-  content: string;
-};
-
-type TimeRange = 'filtered' | 'all-notes' | 'day' | 'week' | 'month' | 'year';
-
-type ConversationSummary = {
-  id: string;
-  title: string;
-  context_mode: TimeRange | null;
-  created_at: number;
-  updated_at: number;
-  message_count: number;
-};
-
-type ConversationDetail = ConversationSummary & {
-  messages: Array<{
-    role: 'user' | 'assistant';
-    content: string;
-    created_at: number;
-  }>;
-};
+import { aiChatNoteId, aiChatNoteLabel, closeAiChat, isAiChatOpen } from '../store/ui';
+import {
+  type ConversationSummary,
+  type LocalMessage,
+  type TimeRange,
+  useAiConversations,
+} from '../composables/useAiConversations';
+import { useAiChat } from '../composables/useAiChat';
+import { useAiPromptPresets } from '../composables/useAiPromptPresets';
+import { useScrollLock } from '../composables/useScrollLock';
 
 const messages = ref<LocalMessage[]>([]);
 const draft = ref('');
-const isLoading = ref(false);
-const isLoadingList = ref(false);
 const errorMessage = ref('');
 const selectedRange = ref<TimeRange | null>(null);
-const conversations = ref<ConversationSummary[]>([]);
-const activeConversationId = ref<string | null>(null);
-const conversationListRef = ref<HTMLElement | null>(null);
-const conversationItemRefs = new Map<string, HTMLElement>();
-const isPresetPanelOpen = ref(false);
-const presetDraft = ref('');
-const editingPresetId = ref<string | null>(null);
+const editingConversationId = ref<string | null>(null);
+const editingTitleDraft = ref('');
+const editingTitleInput = ref<HTMLInputElement | null>(null);
 
 const rangeOptions: Array<{ value: TimeRange; label: string }> = [
   { value: 'filtered', label: '已筛选笔记' },
@@ -227,6 +215,20 @@ const rangeOptions: Array<{ value: TimeRange; label: string }> = [
   { value: 'year', label: '过去一年' },
 ];
 
+const aiContextNote = computed(() => {
+  if (!aiChatNoteId.value) return null;
+  return notes.value.find((note) => note.note_id === aiChatNoteId.value) || null;
+});
+
+const aiContextLabel = computed(() => {
+  const explicit = aiChatNoteLabel.value.trim();
+  if (explicit) return explicit;
+  const content = aiContextNote.value?.content?.trim() || '';
+  const firstLine = content.split('\n')[0]?.replace(/^#+\s*/, '').trim() || '';
+  if (firstLine) return firstLine.slice(0, 20);
+  return '当前笔记';
+});
+
 const contextNotes = computed(() => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const rangeSecondsMap: Record<'day' | 'week' | 'month' | 'year', number> = {
@@ -235,6 +237,10 @@ const contextNotes = computed(() => {
     month: 30 * 24 * 60 * 60,
     year: 365 * 24 * 60 * 60,
   };
+
+  if (aiContextNote.value) {
+    return [aiContextNote.value];
+  }
 
   if (selectedRange.value === null) {
     return [];
@@ -252,11 +258,76 @@ const contextNotes = computed(() => {
   return notes.value.filter((note) => note.created_at >= cutoff);
 });
 
-const activeConversation = computed(() => {
-  if (!activeConversationId.value) return null;
-  return conversations.value.find((conversation) => conversation.id === activeConversationId.value) || null;
+const {
+  editingPresetId,
+  handleClosed,
+  isPresetPanelOpen,
+  presetDraft,
+  promptPresets,
+  removePrompt,
+  resetPresetEditor,
+  savePreset,
+  startEditPreset,
+  togglePresetPanel,
+  usePromptPreset,
+} = useAiPromptPresets({
+  draft,
 });
-const promptPresets = computed(() => settings.aiPrompts.presets);
+const {
+  activeConversation,
+  activeConversationId,
+  conversationListRef,
+  conversations,
+  createConversation,
+  deleteConversation,
+  isLoadingList,
+  renameConversation,
+  selectConversation,
+  setConversationItemRef,
+  syncConversationSummary,
+  updateConversationContext,
+} = useAiConversations({
+  messages,
+  selectedRange,
+  errorMessage,
+  onClosed: handleClosed,
+});
+void conversationListRef;
+
+const createNoteConversation = async () => {
+  await createConversation({
+    title: `笔记对话 · ${aiContextLabel.value}`,
+    contextMode: null,
+  });
+};
+
+const createBlankConversation = async () => {
+  await createConversation();
+};
+
+const startConversationRename = (conversation: ConversationSummary) => {
+  editingConversationId.value = conversation.id;
+  editingTitleDraft.value = conversation.title;
+  requestAnimationFrame(() => {
+    editingTitleInput.value?.focus();
+    editingTitleInput.value?.select();
+  });
+};
+
+const cancelConversationRename = () => {
+  editingConversationId.value = null;
+  editingTitleDraft.value = '';
+};
+
+const submitConversationRename = async (conversation: ConversationSummary) => {
+  const nextTitle = editingTitleDraft.value.trim();
+  if (!nextTitle || nextTitle === conversation.title) {
+    cancelConversationRename();
+    return;
+  }
+  await renameConversation(conversation, nextTitle);
+  cancelConversationRename();
+};
 
 const formatContextMode = (value: TimeRange | null | undefined) => {
   const labelMap: Record<TimeRange, string> = {
@@ -271,178 +342,6 @@ const formatContextMode = (value: TimeRange | null | undefined) => {
   return labelMap[value];
 };
 
-const setConversationItemRef = (conversationId: string, element: unknown) => {
-  if (element instanceof HTMLElement) {
-    conversationItemRefs.set(conversationId, element);
-    return;
-  }
-  conversationItemRefs.delete(conversationId);
-};
-
-const togglePresetPanel = () => {
-  isPresetPanelOpen.value = !isPresetPanelOpen.value;
-};
-
-const resetPresetEditor = () => {
-  presetDraft.value = '';
-  editingPresetId.value = null;
-};
-
-const savePreset = () => {
-  if (!presetDraft.value.trim()) return;
-  upsertAiPromptPreset({
-    id: editingPresetId.value || undefined,
-    content: presetDraft.value,
-  });
-  resetPresetEditor();
-};
-
-const usePromptPreset = (preset: string) => {
-  draft.value = preset;
-  isPresetPanelOpen.value = false;
-};
-
-const startEditPreset = (preset: AiPromptPreset) => {
-  editingPresetId.value = preset.id;
-  presetDraft.value = preset.content;
-};
-
-const removePrompt = (presetId: string) => {
-  if (editingPresetId.value === presetId) {
-    resetPresetEditor();
-  }
-  removeAiPromptPreset(presetId);
-};
-
-const scrollActiveConversationIntoView = async () => {
-  await nextTick();
-  if (!activeConversationId.value) return;
-  const activeElement = conversationItemRefs.get(activeConversationId.value);
-  if (!activeElement || !conversationListRef.value) return;
-  activeElement.scrollIntoView({
-    block: 'nearest',
-    inline: 'nearest',
-    behavior: 'smooth',
-  });
-};
-
-const syncConversationSummary = (detail: ConversationDetail) => {
-  const summary: ConversationSummary = {
-    id: detail.id,
-    title: detail.title,
-    context_mode: detail.context_mode,
-    created_at: detail.created_at,
-    updated_at: detail.updated_at,
-    message_count: detail.message_count,
-  };
-  const next = conversations.value.filter((item) => item.id !== summary.id);
-  conversations.value = [summary, ...next];
-};
-
-const loadConversations = async () => {
-  try {
-    isLoadingList.value = true;
-    const res = await axios.get(`${API_BASE}/ai/conversations`);
-    conversations.value = res.data || [];
-  } catch (error) {
-    console.error('Failed to load AI conversations.', error);
-  } finally {
-    isLoadingList.value = false;
-  }
-};
-
-const selectConversation = async (conversationId: string) => {
-  try {
-    const res = await axios.get(`${API_BASE}/ai/conversations/${conversationId}`);
-    const detail = res.data as ConversationDetail;
-    activeConversationId.value = detail.id;
-    selectedRange.value = detail.context_mode || null;
-    messages.value = detail.messages.map((message) => ({
-      role: message.role,
-      content: message.content,
-    }));
-    syncConversationSummary(detail);
-    errorMessage.value = '';
-    await scrollActiveConversationIntoView();
-  } catch (error: any) {
-    errorMessage.value = error.response?.data?.detail || error.message || '加载对话失败';
-  }
-};
-
-const createConversation = async () => {
-  try {
-    const res = await axios.post(`${API_BASE}/ai/conversations`, {
-      title: '新对话',
-      context_mode: null,
-    });
-    const detail = res.data as ConversationDetail;
-    activeConversationId.value = detail.id;
-    selectedRange.value = detail.context_mode || null;
-    messages.value = [];
-    syncConversationSummary(detail);
-    errorMessage.value = '';
-    await scrollActiveConversationIntoView();
-  } catch (error: any) {
-    errorMessage.value = error.response?.data?.detail || error.message || '创建对话失败';
-  }
-};
-
-const renameConversation = async (conversation: ConversationSummary) => {
-  const nextTitle = window.prompt('输入新的对话名称', conversation.title)?.trim();
-  if (nextTitle === undefined) return;
-  if (!nextTitle || nextTitle === conversation.title) return;
-
-  try {
-    const res = await axios.patch(`${API_BASE}/ai/conversations/${conversation.id}`, {
-      title: nextTitle,
-    });
-    syncConversationSummary(res.data as ConversationDetail);
-    if (activeConversationId.value === conversation.id) {
-      await selectConversation(conversation.id);
-    }
-  } catch (error: any) {
-    errorMessage.value = error.response?.data?.detail || error.message || '重命名失败';
-  }
-};
-
-const deleteConversation = async (conversation: ConversationSummary) => {
-  if (!window.confirm(`确定删除“${conversation.title}”吗？`)) return;
-
-  try {
-    await axios.delete(`${API_BASE}/ai/conversations/${conversation.id}`);
-    const nextConversations = conversations.value.filter((item) => item.id !== conversation.id);
-    conversations.value = nextConversations;
-
-    if (activeConversationId.value !== conversation.id) {
-      return;
-    }
-
-    if (nextConversations.length > 0) {
-      await selectConversation(nextConversations[0].id);
-      return;
-    }
-
-    activeConversationId.value = null;
-    selectedRange.value = null;
-    messages.value = [];
-    errorMessage.value = '';
-  } catch (error: any) {
-    errorMessage.value = error.response?.data?.detail || error.message || '删除对话失败';
-  }
-};
-
-const updateConversationContext = async (contextMode: TimeRange | null) => {
-  if (!activeConversationId.value) return;
-  try {
-    const res = await axios.patch(`${API_BASE}/ai/conversations/${activeConversationId.value}`, {
-      context_mode: contextMode,
-    });
-    syncConversationSummary(res.data as ConversationDetail);
-  } catch (error) {
-    console.error('Failed to update conversation context.', error);
-  }
-};
-
 const toggleRange = async (value: TimeRange) => {
   selectedRange.value = selectedRange.value === value ? null : value;
   await updateConversationContext(selectedRange.value);
@@ -450,84 +349,35 @@ const toggleRange = async (value: TimeRange) => {
     await selectConversation(activeConversationId.value);
   }
 };
+const {
+  handleKeydown,
+  isLoading,
+  sendMessage,
+} = useAiChat({
+  draft,
+  messages,
+  errorMessage,
+  selectedRange,
+  activeConversationId,
+  activeConversation,
+  contextNotes,
+  ensureConversation: createConversation,
+  syncConversationSummary,
+});
 
-const sendMessage = async () => {
-  const content = draft.value.trim();
-  if (!content) return;
-  if (!activeConversationId.value) {
-    await createConversation();
-  }
-  if (!activeConversationId.value) return;
-
-  messages.value.push({ role: 'user', content });
-  draft.value = '';
+watch(isAiChatOpen, async (open: boolean) => {
+  if (!open || !aiContextNote.value) return;
+  selectedRange.value = null;
+  messages.value = [];
   errorMessage.value = '';
-
-  try {
-    isLoading.value = true;
-    const currentConversationId = activeConversationId.value;
-    const currentConversation = activeConversation.value;
-    const res = await axios.post(`${API_BASE}/ai/chat`, {
-      message: content,
-      conversation_id: currentConversationId,
-      context_mode: selectedRange.value,
-      notes: contextNotes.value.map((note) => ({
-        title: note.title,
-        content: note.content,
-        created_at: note.created_at,
-      })),
-    });
-    messages.value.push({
-      role: 'assistant',
-      content: res.data.reply || '',
-    });
-    syncConversationSummary({
-      id: res.data.conversation_id,
-      title: res.data.title,
-      context_mode: res.data.context_mode,
-      created_at: currentConversation?.created_at || Math.floor(Date.now() / 1000),
-      updated_at: Math.floor(Date.now() / 1000),
-      message_count: messages.value.length,
-      messages: [],
-    });
-    await scrollActiveConversationIntoView();
-  } catch (error: any) {
-    errorMessage.value = error.response?.data?.detail || error.message || 'AI 对话失败';
-    messages.value = messages.value.filter((message, index) => {
-      return !(index === messages.value.length - 1 && message.role === 'user' && message.content === content);
-    });
-    draft.value = content;
-  } finally {
-    isLoading.value = false;
-  }
-};
-
-const handleKeydown = (event: KeyboardEvent) => {
-  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-    event.preventDefault();
-    void sendMessage();
-  }
-};
+  await createNoteConversation();
+});
 
 watch(activeConversationId, () => {
-  void scrollActiveConversationIntoView();
+  cancelConversationRename();
 });
 
-watch(isAiChatOpen, async (open) => {
-  if (!open) {
-    isPresetPanelOpen.value = false;
-    resetPresetEditor();
-    return;
-  }
-  await loadConversations();
-  if (conversations.value.length > 0) {
-    await selectConversation(conversations.value[0].id);
-  } else {
-    activeConversationId.value = null;
-    messages.value = [];
-    selectedRange.value = null;
-  }
-});
+useScrollLock(isAiChatOpen);
 </script>
 
 <style scoped>
@@ -539,12 +389,12 @@ watch(isAiChatOpen, async (open) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 24px max(24px, var(--safe-right)) max(24px, var(--safe-bottom)) max(24px, var(--safe-left));
 }
 
 .ai-modal {
   width: min(980px, 100%);
-  height: min(90vh, 980px);
+  height: min(90dvh, 980px);
   background: var(--bg-card, #fff);
   border: 1px solid var(--border-color, #e4e4e7);
   border-radius: 20px;
@@ -639,6 +489,20 @@ watch(isAiChatOpen, async (open) => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.conversation-title-input {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--accent-color) 28%, var(--border-color, #d4d4d8));
+  background: var(--bg-card, #fff);
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.35;
+  outline: none;
 }
 
 .conversation-meta,
@@ -1033,15 +897,17 @@ watch(isAiChatOpen, async (open) => {
   color: #b91c1c;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .ai-overlay {
     padding: 0;
+    align-items: flex-end;
   }
 
   .ai-modal {
     width: 100%;
-    height: 100%;
+    height: 100dvh;
     border-radius: 0;
+    border: none;
   }
 
   .ai-shell {
@@ -1052,6 +918,8 @@ watch(isAiChatOpen, async (open) => {
     width: 100%;
     border-right: none;
     border-bottom: 1px solid var(--border-color, #e4e4e7);
+    padding: 12px 16px;
+    max-height: 34dvh;
   }
 
   .ai-modal-header,
@@ -1064,6 +932,14 @@ watch(isAiChatOpen, async (open) => {
   .footer-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .ai-modal-header {
+    padding-top: calc(14px + var(--safe-top));
+  }
+
+  .ai-modal-footer {
+    padding-bottom: calc(16px + var(--safe-bottom));
   }
 
   .prompt-presets,
@@ -1082,6 +958,10 @@ watch(isAiChatOpen, async (open) => {
 
   .chat-bubble {
     max-width: 92%;
+  }
+
+  .preset-panel {
+    max-height: min(46dvh, 360px);
   }
 }
 </style>
