@@ -34,7 +34,7 @@
           :title="`移除 ${image.alt}`"
           @click="removeAttachedImage(image.url)"
         >
-          <img :src="resolveBackendUrl(image.url)" :alt="image.alt" class="image-chip-thumb" />
+          <img :src="resolvedImageUrls[image.url] || image.url" :alt="image.alt" class="image-chip-thumb" />
           <span class="image-chip-remove">×</span>
         </button>
 
@@ -68,8 +68,8 @@
       
       <div class="toolbar-action">
         <button v-if="showCancelButton" class="btn-cancel-text" type="button" @click="emit('cancel')">取消</button>
-        <button class="btn-send" :disabled="!hasContent || isUploading" @click="saveNote" :title="submitButtonTitle">
-          <span v-if="isUploading" class="send-loading">...</span>
+        <button class="btn-send" :disabled="!hasContent || isUploading || isSaving" @click="saveNote" :title="submitButtonTitle">
+          <span v-if="isUploading || isSaving" class="send-loading">...</span>
           <SendHorizontal v-else :size="18" class="send-icon" />
         </button>
       </div>
@@ -90,16 +90,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, nextTick } from 'vue';
+import { ref, watch, computed, nextTick, onBeforeUnmount } from 'vue';
 import { marked } from 'marked';
-import { resolveBackendUrl } from '../config';
 import { settings } from '../store/settings';
-import { createNoteContent } from '../store/notes';
 import { useEditorDraft } from '../composables/useEditorDraft';
 import { useEditorFormatting } from '../composables/useEditorFormatting';
+import { useEditorHistory } from '../composables/useEditorHistory';
 import { useEditorImages } from '../composables/useEditorImages';
+import { useEditorLifecycle } from '../composables/useEditorLifecycle';
 import { useEditorRichText } from '../composables/useEditorRichText';
-import { extractEditorAttachments, mergeEditorMarkdown, splitEditorMarkdown } from '../utils/editorAttachments';
+import { useEditorSelection } from '../composables/useEditorSelection';
+import { useEditorSubmit, type EditorSubmitPayload } from '../composables/useEditorSubmit';
+import { resolveAttachmentUrl } from '../utils/attachmentUrls';
+import { clearDraftAttachmentSession, createDraftAttachmentSessionKey } from '../utils/localAttachments.js';
+import {
+  extractEditorAttachments,
+  replaceEditorAttachmentsWithMarkers,
+  restoreEditorAttachmentMarkers,
+} from '../utils/editorAttachments';
 
 import { 
   Hash, Image as ImageIcon, Bold, Italic, Strikethrough,
@@ -107,21 +115,12 @@ import {
   Eye, PenLine, Eraser
 } from 'lucide-vue-next';
 
-export interface EditorSubmitPayload {
-  content: string;
-  tags: string[];
-}
-
-type HistoryEntry = {
-  content: string;
-  selectionStart: number;
-  selectionEnd: number;
-  mode: 'markdown' | 'rich-text';
-};
+export type { EditorSubmitPayload } from '../composables/useEditorSubmit';
 
 const props = withDefaults(defineProps<{
   initialContent?: string;
   initialTags?: string[];
+  draftKey?: string;
   placeholder?: string;
   showCancel?: boolean;
   autosaveDraft?: boolean;
@@ -131,6 +130,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   initialContent: '',
   initialTags: () => [],
+  draftKey: 'compose',
   placeholder: '现在的想法是...',
   showCancel: false,
   autosaveDraft: true,
@@ -142,18 +142,15 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits(['saved', 'cancel']);
 
 const content = ref('');
+const attachmentSessionKey = ref(createDraftAttachmentSessionKey());
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const previewRef = ref<HTMLElement | null>(null);
 const editorCardRef = ref<HTMLElement | null>(null);
-const undoStack = ref<HistoryEntry[]>([]);
-const redoStack = ref<HistoryEntry[]>([]);
 const showTagInput = ref(false);
 const tagInput = ref('');
 const showPreview = ref(true); // 默认“富文本预览/渲染”模式
 const isComposing = ref(false);
-const isApplyingHistory = ref(false);
-const historyReady = ref(false);
-const draftStorageKey = 'bemo.editor.draft';
+const draftStorageKey = `bemo.editor.draft:${props.draftKey}`;
 const placeholderText = computed(() => props.placeholder);
 const showCancelButton = computed(() => props.showCancel);
 const attachments = computed(() => extractEditorAttachments(content.value));
@@ -163,7 +160,18 @@ const imageAttachments = computed(() => attachments.value
     alt: attachment.label,
     url: attachment.url,
   })));
-const submitButtonTitle = computed(() => (isUploading.value ? '图片上传中' : props.submitTitle));
+const resolvedImageUrls = ref<Record<string, string>>({});
+const submitButtonTitle = computed(() => {
+  if (isUploading.value) return '图片上传中';
+  if (isSaving.value) return '保存中';
+  return props.submitTitle;
+});
+const propsTagString = computed(() => (props.initialTags || []).join(', '));
+const hasUnsavedLocalChanges = computed(() => (
+  content.value !== String(props.initialContent || '')
+  || tagInput.value !== propsTagString.value
+  || showTagInput.value
+));
 
 const {
   handleCompositionEnd,
@@ -177,7 +185,6 @@ const {
   textareaRef,
   showPreview,
   isComposing,
-  attachments,
 });
 
 const {
@@ -188,6 +195,7 @@ const {
   removeAttachedImage,
   triggerImageUpload,
 } = useEditorImages({
+  attachmentSessionKey,
   content,
   previewRef,
   textareaRef,
@@ -200,6 +208,7 @@ const {
   clearDraft,
   restoreDraft,
 } = useEditorDraft({
+  attachmentSessionKey,
   autosaveDraft: props.autosaveDraft,
   draftStorageKey,
   content,
@@ -217,148 +226,25 @@ const resizeTextarea = () => {
   textarea.style.height = `${textarea.scrollHeight}px`;
 };
 
-const getPreviewSelectionOffsets = () => {
-  const preview = previewRef.value;
-  const selection = window.getSelection();
-  if (!preview || !selection || selection.rangeCount === 0) {
-    const length = preview?.textContent?.length || 0;
-    return { start: length, end: length };
-  }
+const {
+  getPreviewSelectionOffsets,
+  restorePreviewSelectionOffsets,
+} = useEditorSelection(previewRef);
 
-  const range = selection.getRangeAt(0);
-  if (!preview.contains(range.startContainer) || !preview.contains(range.endContainer)) {
-    const length = preview.textContent?.length || 0;
-    return { start: length, end: length };
-  }
-
-  const startRange = range.cloneRange();
-  startRange.selectNodeContents(preview);
-  startRange.setEnd(range.startContainer, range.startOffset);
-
-  const endRange = range.cloneRange();
-  endRange.selectNodeContents(preview);
-  endRange.setEnd(range.endContainer, range.endOffset);
-
-  return {
-    start: startRange.toString().length,
-    end: endRange.toString().length,
-  };
-};
-
-const restorePreviewSelectionOffsets = (start: number, end: number) => {
-  const preview = previewRef.value;
-  const selection = window.getSelection();
-  if (!preview || !selection) return;
-
-  const walker = document.createTreeWalker(preview, NodeFilter.SHOW_TEXT);
-  let currentOffset = 0;
-  let startNode: Node | null = null;
-  let endNode: Node | null = null;
-  let startNodeOffset = 0;
-  let endNodeOffset = 0;
-
-  while (walker.nextNode()) {
-    const node = walker.currentNode;
-    const textLength = node.textContent?.length || 0;
-
-    if (!startNode && currentOffset + textLength >= start) {
-      startNode = node;
-      startNodeOffset = Math.max(0, start - currentOffset);
-    }
-
-    if (!endNode && currentOffset + textLength >= end) {
-      endNode = node;
-      endNodeOffset = Math.max(0, end - currentOffset);
-      break;
-    }
-
-    currentOffset += textLength;
-  }
-
-  const range = document.createRange();
-  if (startNode && endNode) {
-    range.setStart(startNode, Math.min(startNodeOffset, startNode.textContent?.length || 0));
-    range.setEnd(endNode, Math.min(endNodeOffset, endNode.textContent?.length || 0));
-  } else {
-    range.selectNodeContents(preview);
-    range.collapse(false);
-  }
-
-  selection.removeAllRanges();
-  selection.addRange(range);
-  preview.focus();
-};
-
-const resetHistory = (value: string) => {
-  undoStack.value = [];
-  redoStack.value = [];
-  historyReady.value = true;
-  if (value !== content.value) {
-    content.value = value;
-  }
-};
-
-const captureHistoryEntry = (entryContent: string): HistoryEntry => {
-  if (!showPreview.value) {
-    return {
-      content: entryContent,
-      selectionStart: textareaRef.value?.selectionStart ?? entryContent.length,
-      selectionEnd: textareaRef.value?.selectionEnd ?? entryContent.length,
-      mode: 'markdown',
-    };
-  }
-
-  const offsets = getPreviewSelectionOffsets();
-  return {
-    content: entryContent,
-    selectionStart: offsets.start,
-    selectionEnd: offsets.end,
-    mode: 'rich-text',
-  };
-};
-
-const applyHistoryContent = async (entry: HistoryEntry) => {
-  isApplyingHistory.value = true;
-  try {
-    content.value = entry.content;
-    await nextTick();
-    resizeTextarea();
-
-    if (showPreview.value && previewRef.value) {
-      await syncEditorPreview();
-      requestAnimationFrame(() => restorePreviewSelectionOffsets(entry.selectionStart, entry.selectionEnd));
-      return;
-    }
-
-    requestAnimationFrame(() => {
-      const textarea = textareaRef.value;
-      if (!textarea) return;
-      textarea.focus();
-      textarea.setSelectionRange(
-        Math.min(entry.selectionStart, textarea.value.length),
-        Math.min(entry.selectionEnd, textarea.value.length),
-      );
-    });
-  } finally {
-    isApplyingHistory.value = false;
-  }
-};
-
-const undoContent = async () => {
-  const previous = undoStack.value.pop();
-  if (previous === undefined) return;
-
-  redoStack.value.push(captureHistoryEntry(content.value));
-  await applyHistoryContent(previous);
-};
-
-const redoContent = async () => {
-  const next = redoStack.value.pop();
-  if (next === undefined) return;
-
-  undoStack.value.push(captureHistoryEntry(content.value));
-  await applyHistoryContent(next);
-};
+const {
+  resetHistory,
+  undoContent,
+  redoContent,
+} = useEditorHistory({
+  content,
+  showPreview,
+  textareaRef,
+  previewRef,
+  resizeTextarea,
+  syncEditorPreview,
+  getPreviewSelectionOffsets,
+  restorePreviewSelectionOffsets,
+});
 
 const blockTags = new Set([
   'P', 'DIV', 'SECTION', 'ARTICLE', 'BLOCKQUOTE',
@@ -422,9 +308,9 @@ const clearFormatting = async () => {
     handlePreviewInput();
   }
 
-  const { body, attachments } = splitEditorMarkdown(content.value);
+  const { body, attachments } = replaceEditorAttachmentsWithMarkers(content.value);
   const plainText = await stripMarkdownFormatting(body);
-  content.value = mergeEditorMarkdown(plainText, attachments);
+  content.value = restoreEditorAttachmentMarkers(plainText, attachments);
   await nextTick();
   resizeTextarea();
   editorCardRef.value?.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -434,40 +320,24 @@ const clearFormatting = async () => {
     requestAnimationFrame(() => previewRef.value?.focus());
   }
 };
-
-
-// ──────────── Note Saving ────────────
-
-const saveNote = async () => {
-  // 富文本模式下先强制同步一次，避免 content 滚后于 DOM
-  if (isUploading.value) return;
-  if (showPreview.value) handlePreviewInput();
-  if (!content.value.trim()) return;
-  
-  const tags = tagInput.value
-    .split(/[,，]/)
-    .map(t => t.trim())
-    .filter(t => t.length > 0);
-  
-  if (props.submitAction) {
-    await props.submitAction({
-      content: content.value,
-      tags,
-    });
-  } else {
-    await createNoteContent({ content: content.value, tags });
-  }
-
-  if (props.resetOnSuccess) {
-    content.value = '';
-    if (previewRef.value) previewRef.value.innerHTML = '';
-    tagInput.value = '';
-    showTagInput.value = false;
-    clearDraft();
-    resetHistory('');
-  }
-  emit('saved');
-};
+const {
+  isSaving,
+  saveNote,
+} = useEditorSubmit({
+  attachmentSessionKey,
+  content,
+  tagInput,
+  showTagInput,
+  showPreview,
+  previewRef,
+  isUploading,
+  handlePreviewInput,
+  clearDraft,
+  resetHistory,
+  resetOnSuccess: props.resetOnSuccess,
+  submitAction: props.submitAction,
+  emitSaved: () => emit('saved'),
+});
 
 const {
   handleKeydown,
@@ -492,85 +362,32 @@ const {
   redo: redoContent,
   submit: saveNote,
 });
-onMounted(async () => {
-  content.value = props.initialContent;
-  tagInput.value = (props.initialTags || []).join(', ');
-  showPreview.value = settings.editor.preferredMode === 'rich-text';
-
-  await nextTick();
-  resizeTextarea();
-
-  if (!props.autosaveDraft) {
-    if (showPreview.value && previewRef.value && content.value) {
-      await syncEditorPreview();
-    }
-    resetHistory(content.value);
-    return;
-  }
-
-  try {
-    const draft = restoreDraft();
-    if (!draft) {
-      if (showPreview.value && previewRef.value && content.value) {
-        await syncEditorPreview();
-      }
-      resetHistory(content.value);
-      return;
-    }
-
-    content.value = draft.content ?? '';
-    tagInput.value = draft.tagInput ?? '';
-    showTagInput.value = draft.showTagInput ?? false;
-
-    await nextTick();
-    resizeTextarea();
-
-    if (showPreview.value && previewRef.value && content.value) {
-      await syncEditorPreview();
-    }
-    resetHistory(content.value);
-  } catch (error) {
-    console.warn('Failed to restore draft.', error);
-    resetHistory(content.value);
-  }
+useEditorLifecycle({
+  attachmentSessionKey,
+  initialContent: props.initialContent,
+  initialTags: props.initialTags,
+  autosaveDraft: props.autosaveDraft,
+  content,
+  tagInput,
+  showTagInput,
+  showPreview,
+  previewRef,
+  propsTagString,
+  hasUnsavedLocalChanges,
+  resizeTextarea,
+  syncEditorPreview,
+  restoreDraft,
+  resetHistory,
 });
 
-watch(
-  [() => props.initialContent, () => (props.initialTags || []).join(',')],
-  async ([nextContent, nextTags]: [string | undefined, string]) => {
-    if (props.autosaveDraft) return;
-    content.value = String(nextContent || '');
-    tagInput.value = String(nextTags || '');
-    showTagInput.value = false;
-    await nextTick();
-    resizeTextarea();
-    if (showPreview.value && previewRef.value) {
-      await syncEditorPreview();
-    }
-    resetHistory(content.value);
-  },
-);
+watch(imageAttachments, async (nextImages) => {
+  const entries = await Promise.all(nextImages.map(async (image) => ([image.url, await resolveAttachmentUrl(image.url)] as const)));
+  resolvedImageUrls.value = Object.fromEntries(entries);
+}, { immediate: true });
 
-watch(content, (newVal, oldVal) => {
-  if (!historyReady.value || isApplyingHistory.value || newVal === oldVal) {
-    return;
-  }
-
-  undoStack.value.push(captureHistoryEntry(oldVal));
-  if (undoStack.value.length > 200) {
-    undoStack.value.shift();
-  }
-  redoStack.value = [];
-});
-
-watch(content, async () => {
-  await nextTick();
-  resizeTextarea();
-});
-
-watch(showPreview, async () => {
-  await nextTick();
-  resizeTextarea();
+onBeforeUnmount(() => {
+  if (props.autosaveDraft) return;
+  void clearDraftAttachmentSession(attachmentSessionKey.value);
 });
 </script>
 
@@ -594,7 +411,7 @@ watch(showPreview, async () => {
 }
 .editor-card:focus-within {
   border-color: var(--accent-color, #10b981);
-  box-shadow: 0 4px 6px -1px rgba(16,185,129,0.05), 0 2px 4px -1px rgba(16,185,129,0.05);
+  box-shadow: 0 4px 6px -1px color-mix(in srgb, var(--accent-color) 8%, transparent), 0 2px 4px -1px color-mix(in srgb, var(--accent-color) 8%, transparent);
 }
 
 .editor-body {
@@ -775,7 +592,7 @@ watch(showPreview, async () => {
 }
 
 .btn-send {
-  background-color: #dff5e8;
+  background-color: var(--accent-sidebar-bg, #e6f7ef);
   color: var(--accent-color, #31d279);
   border: none;
   border-radius: 9px;

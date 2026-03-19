@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.dylan.bemo',
-  appName: 'bemo',
+  appId: 'io.github.cheshiremew.bemo',
+  appName: 'Bemo',
   webDir: 'dist'
 };
 

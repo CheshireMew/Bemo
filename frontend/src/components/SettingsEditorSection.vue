@@ -13,7 +13,10 @@
           <span class="field-label">自动保存草稿</span>
           <span class="field-hint">保存未发送的输入内容，下次打开编辑器自动恢复。</span>
         </div>
-        <input v-model="settings.editor.autoSaveEnabled" type="checkbox" @change="persistSettings" />
+        <div class="toggle-switch-wrapper">
+          <input v-model="settings.editor.autoSaveEnabled" type="checkbox" @change="persistSettings" />
+          <span class="toggle-switch-slider"></span>
+        </div>
       </label>
 
       <label class="field-row">
@@ -44,7 +47,10 @@
           <span class="field-label">启用 GFM 扩展</span>
           <span class="field-hint">支持任务列表、表格、删除线等扩展语法。</span>
         </div>
-        <input v-model="settings.editor.markdownGfm" type="checkbox" @change="persistSettings" />
+        <div class="toggle-switch-wrapper">
+          <input v-model="settings.editor.markdownGfm" type="checkbox" @change="persistSettings" />
+          <span class="toggle-switch-slider"></span>
+        </div>
       </label>
 
       <label class="toggle-row">
@@ -52,7 +58,10 @@
           <span class="field-label">换行转 &lt;br&gt;</span>
           <span class="field-hint">开启后单个换行会在预览里保留显示。</span>
         </div>
-        <input v-model="settings.editor.markdownBreaks" type="checkbox" @change="persistSettings" />
+        <div class="toggle-switch-wrapper">
+          <input v-model="settings.editor.markdownBreaks" type="checkbox" @change="persistSettings" />
+          <span class="toggle-switch-slider"></span>
+        </div>
       </label>
 
       <label class="field-row">
@@ -82,105 +91,5 @@ const normalizeDelay = () => {
 </script>
 
 <style scoped>
-.settings-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.section-header,
-.toggle-row,
-.field-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.section-header h3 {
-  margin: 0;
-  color: var(--text-primary, #18181b);
-}
-
-.section-header p,
-.field-hint {
-  margin: 6px 0 0;
-  color: var(--text-secondary, #71717a);
-  font-size: 0.92rem;
-  line-height: 1.5;
-}
-
-.settings-card {
-  background: var(--bg-card, #ffffff);
-  border: 1px solid var(--border-color, #e4e4e7);
-  border-radius: var(--radius-lg, 0.75rem);
-  padding: 18px;
-}
-
-.form-card {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.toggle-row,
-.field-row {
-  align-items: center;
-}
-
-.field-row {
-  flex-wrap: wrap;
-}
-
-.field-label {
-  display: block;
-  font-weight: 600;
-  color: var(--text-primary, #18181b);
-}
-
-.field-input,
-.field-row input,
-.field-row select {
-  min-width: 220px;
-}
-
-.field-row input,
-.field-row select {
-  border: 1px solid var(--border-color, #d4d4d8);
-  background: var(--bg-card, #fff);
-  color: var(--text-primary, #18181b);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font: inherit;
-}
-
-.field-row input:focus,
-.field-row select:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent-color, #31d279) 20%, transparent);
-  border-color: var(--accent-color, #31d279);
-}
-
-.with-suffix {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.with-suffix input {
-  width: 88px;
-  min-width: 88px;
-}
-
-@media (max-width: 768px) {
-  .toggle-row,
-  .field-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .field-row input,
-  .field-row select,
-  .field-input {
-    width: 100%;
-  }
-}
+/* Scoped styles are handled by global settings.css */
 </style>

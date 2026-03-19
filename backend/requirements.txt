@@ -1,7 +1,4 @@
 fastapi
 uvicorn
-python-multipart
 pydantic
-aiofiles
-pyyaml
-beautifulsoup4
+httpx

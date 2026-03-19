@@ -4,3 +4,10 @@
 __pycache__/
 *.py[cod]
 backend/tests/.tmp/
+backend/venv/
+backend/build/
+backend/dist/
+frontend/src-tauri/target/
+frontend/src-tauri/*.exe
+codex-probe-*/
+backend/_archive_legacy/

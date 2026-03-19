@@ -5,7 +5,9 @@ import {
   extractEditorAttachments,
   mergeEditorMarkdown,
   mergeEditorMarkdownWithImages,
+  replaceEditorAttachmentsWithMarkers,
   removeEditorAttachment,
+  restoreEditorAttachmentMarkers,
   selectImageAttachmentInputs,
   splitEditorMarkdown,
 } from '../src/utils/editorAttachments.js';
@@ -130,11 +132,31 @@ function testMergeEditorMarkdownPreservesFileAttachments() {
   );
 }
 
+function testAttachmentMarkersRoundTripWithoutMovingAttachmentsToEnd() {
+  const markdown = [
+    'Alpha',
+    '',
+    '![cover](/images/cover.png)',
+    '',
+    'Beta',
+    '',
+    '[音频附件](/images/voice.mp3)',
+    '',
+    'Gamma',
+  ].join('\n');
+
+  const { body, attachments } = replaceEditorAttachmentsWithMarkers(markdown);
+  const restored = restoreEditorAttachmentMarkers(body, attachments);
+
+  assert.equal(restored, markdown);
+}
+
 testSplitEditorMarkdownPreservesBodyAndAttachments();
 testMergeEditorMarkdownWithImagesAppendsImageMarkdown();
 testRemoveEditorAttachmentOnlyRemovesMatchingAttachment();
 testBuildAndMergeHelpersUseConsistentAttachmentShape();
 testSelectImageAttachmentInputsOnlyReturnsImages();
 testMergeEditorMarkdownPreservesFileAttachments();
+testAttachmentMarkersRoundTripWithoutMovingAttachmentsToEnd();
 
 console.log('editorAttachments tests passed');

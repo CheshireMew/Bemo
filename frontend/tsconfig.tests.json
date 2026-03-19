@@ -5,14 +5,27 @@
     "moduleResolution": "NodeNext",
     "outDir": ".test-dist",
     "rootDir": ".",
-    "types": ["node"],
+    "types": ["node", "vite/client"],
     "strict": true,
     "skipLibCheck": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
   "include": [
+    "src/utils/db.ts",
+    "src/utils/attachmentUrls.ts",
+    "src/utils/localAttachments.ts",
+    "src/utils/syncAttachments.ts",
+    "src/domain/notes/localNotesRepository.ts",
     "src/utils/editorAttachments.ts",
+    "src/domain/notes/notesTypes.ts",
+    "src/domain/sync/conflictResolution.ts",
+    "src/domain/sync/localSyncApply.ts",
+    "src/domain/sync/pendingQueueSummary.ts",
+    "src/domain/sync/webdav/webdavTypes.ts",
+    "src/domain/sync/webdav/webdavSnapshot.ts",
+    "src/domain/sync/webdav/webdavChanges.ts",
+    "src/domain/sync/webdav/webdavRequest.ts",
     "tests/**/*.ts"
   ]
 }

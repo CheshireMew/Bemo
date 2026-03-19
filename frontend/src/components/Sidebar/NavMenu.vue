@@ -10,9 +10,6 @@
       <a href="#" class="nav-item" @click.prevent="openDefaultAiChat">
         <MessagesSquare class="icon" :size="18" /> AI 对话
       </a>
-      <a href="#" class="nav-item" :class="{ active: currentView === 'conflicts' }" @click.prevent="openConflicts">
-        <ShieldAlert class="icon" :size="18" /> 冲突记录
-      </a>
     </nav>
 
     <slot name="taglist"></slot>
@@ -27,11 +24,10 @@
 
 <script setup lang="ts">
 import { 
-  LayoutGrid, Dices, Trash2, MessagesSquare, ShieldAlert
+  LayoutGrid, Dices, Trash2, MessagesSquare
 } from 'lucide-vue-next';
 import { currentView, setView, openRandomWalk, openAiChat } from '../../store/ui';
-import { fetchConflicts } from '../../store/conflicts';
-import { fetchTrash } from '../../store/notes';
+import { fetchTrash, selectedDate } from '../../store/notes';
 
 const emit = defineEmits<{
   navigate: [];
@@ -39,6 +35,7 @@ const emit = defineEmits<{
 
 const handleAllNotes = () => {
   setView('all');
+  selectedDate.value = null; // 切换回全部笔记时，清空日期筛选
   emit('navigate');
 };
 
@@ -50,12 +47,6 @@ const handleRandomWalk = () => {
 const openTrash = async () => {
   setView('trash');
   await fetchTrash();
-  emit('navigate');
-};
-
-const openConflicts = async () => {
-  setView('conflicts');
-  await fetchConflicts();
   emit('navigate');
 };
 

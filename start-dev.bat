@@ -1,15 +1,20 @@
 @echo off
-:: Set console to UTF-8
-chcp 65001 >nul
+setlocal
 
-echo === Starting Bemo Local Development Environment ===
+set "WITH_SYNC_SERVER=0"
+if /I "%~1"=="--with-sync-server" set "WITH_SYNC_SERVER=1"
+if /I "%~1"=="-WithSyncServer" set "WITH_SYNC_SERVER=1"
 
-echo [1/2] Starting FastAPI backend in a new window...
-start "Bemo Backend" cmd /k "cd /d "%~dp0backend" && call venv\Scripts\activate.bat && pip install -r requirements.txt -q && echo [Backend] Starting uvicorn... && uvicorn main:app --reload --host 0.0.0.0 --port 8000 || (echo [Backend] FAILED! Check errors above. && pause)"
+echo ^>^>^> Starting Bemo Local Development Environment ^<^<^<
 
-:: Wait a moment for backend to start
-timeout /t 3 /nobreak >nul
+if "%WITH_SYNC_SERVER%"=="1" (
+  echo [1/2] Starting optional Python sync-server in a new window...
+  start "Bemo Sync Server" cmd /k "cd /d "%~dp0backend" && if not exist venv python -m venv venv && call venv\Scripts\activate.bat && pip install -r requirements.txt && set BEMO_SYNC_TOKEN=bemo-local-dev-sync-token && uvicorn main:app --reload --host 0.0.0.0 --port 8000"
+  echo Sync-server enabled for this run.
+) else (
+  echo [1/1] Sync-server not started. Pass --with-sync-server to enable it.
+)
 
-echo [2/2] Starting Vue frontend in current window...
+echo Starting Vue frontend in current window...
 cd /d "%~dp0frontend"
-npm run dev
+call npm run dev

@@ -10,36 +10,58 @@
 
     <div class="card-grid two-up">
       <article class="settings-card">
-        <h4>导出</h4>
-        <p>导出完整备份或 Flomo CSV 导入文件。</p>
+        <h4>完整备份</h4>
+        <p>导出全部笔记、回收站及引用的附件，用于数据备份或跨设备无损迁移。</p>
         <div class="button-row">
-          <button type="button" class="primary-btn" @click="exportZip">导出 ZIP</button>
-          <button type="button" class="secondary-btn" @click="exportFlomo">导出 Flomo CSV</button>
+          <button type="button" class="primary-btn" @click="exportBackup">导出完整备份 ZIP</button>
         </div>
       </article>
 
       <article class="settings-card">
-        <h4>导入</h4>
-        <p>从 Bemo 备份包或 Flomo ZIP 恢复笔记。</p>
+        <h4>完整恢复</h4>
+        <p>从完整备份解压并覆盖本机数据（此操作将重置本地的同步历史与基线状态）。</p>
         <div class="button-row">
-          <button type="button" class="primary-btn" @click="triggerZipImport">导入 ZIP</button>
-          <button type="button" class="secondary-btn" @click="triggerFlomoImport">导入 Flomo</button>
+          <button type="button" class="primary-btn" @click="triggerZipImport">导入完整备份 ZIP / JSON</button>
+        </div>
+      </article>
+
+      <article class="settings-card">
+        <h4>Markdown 归档</h4>
+        <p>导入或导出通用结构的 Markdown 规范文件夹集（含本地引用附件关联）。</p>
+        <div class="button-row">
+          <button type="button" class="secondary-btn" @click="exportMarkdownArchive">导出归档包</button>
+          <button type="button" class="secondary-btn" @click="triggerMarkdownArchiveImport">导入归档包</button>
+        </div>
+      </article>
+
+      <article class="settings-card">
+        <h4>兼容格式</h4>
+        <p>快捷导入 Flomo 标准备份（ZIP / HTML 等），或导出纯文本 CSV 数据。</p>
+        <div class="button-row">
+          <button type="button" class="secondary-btn" @click="exportFlomo">导出为 CSV</button>
+          <button type="button" class="secondary-btn" @click="triggerFlomoImport">从 Flomo 导入</button>
+        </div>
+      </article>
+
+      <article class="settings-card danger-card">
+        <h4>清空工作区</h4>
+        <p>一次性删去本地所有笔记、附件及同步记录，为您保留各种界面预设配置。</p>
+        <div class="button-row">
+          <button type="button" class="danger-btn" @click="clearAllExperimentData">删除全部记录</button>
+        </div>
+      </article>
+
+      <article class="settings-card danger-card">
+        <h4>深度重置</h4>
+        <p>彻底抹除本机的所有核心内容与环境参数，将应用强制恢复至刚安装的纯净初态。</p>
+        <div class="button-row">
+          <button type="button" class="danger-btn subtle-danger-btn" @click="resetToFirstInstallState">回到初始安装状态</button>
         </div>
       </article>
     </div>
-
-    <article class="settings-card">
-      <h4>维护</h4>
-      <p>扫描 `images` 目录，删除已经没有任何笔记或回收站条目引用的孤儿图片。</p>
-      <div class="button-row">
-        <button type="button" class="secondary-btn" :disabled="isCleaningOrphans" @click="cleanupOrphanImages">
-          {{ isCleaningOrphans ? '扫描中...' : '扫描并清理孤儿图片' }}
-        </button>
-      </div>
-    </article>
-
-    <input type="file" ref="zipFileInput" accept=".zip" hidden @change="handleZipImport" />
-    <input type="file" ref="flomoFileInput" accept=".zip" hidden @change="handleFlomoImport" />
+    <input type="file" ref="backupFileInput" accept=".zip,.json" hidden @change="handleZipImport" />
+    <input type="file" ref="markdownArchiveFileInput" accept=".zip" hidden @change="handleMarkdownArchiveImport" />
+    <input type="file" ref="flomoFileInput" accept=".zip,.csv,.txt,.html" hidden @change="handleFlomoImport" />
   </section>
 </template>
 
@@ -52,107 +74,29 @@ const emit = defineEmits<{
 
 const {
   isImporting,
-  isCleaningOrphans,
   flomoFileInput,
-  zipFileInput,
-  exportZip,
+  backupFileInput,
+  markdownArchiveFileInput,
+  exportBackup,
+  exportMarkdownArchive,
   exportFlomo,
   triggerZipImport,
   handleZipImport,
   triggerFlomoImport,
   handleFlomoImport,
-  cleanupOrphanImages,
+  triggerMarkdownArchiveImport,
+  handleMarkdownArchiveImport,
+  clearAllExperimentData,
+  resetToFirstInstallState,
 } = useImportExport(() => {
   emit('imported');
 });
 
 void flomoFileInput;
-void zipFileInput;
+void backupFileInput;
+void markdownArchiveFileInput;
 </script>
 
 <style scoped>
-.settings-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.section-header,
-.button-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.section-header h3,
-.settings-card h4 {
-  margin: 0;
-  color: var(--text-primary, #18181b);
-}
-
-.section-header p,
-.settings-card p {
-  margin: 6px 0 0;
-  color: var(--text-secondary, #71717a);
-  font-size: 0.92rem;
-  line-height: 1.5;
-}
-
-.section-badge {
-  background: var(--accent-sidebar-bg, #e6f7ef);
-  color: var(--accent-color, #31d279);
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  align-self: flex-start;
-}
-
-.card-grid {
-  display: grid;
-  gap: 16px;
-}
-
-.card-grid.two-up {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.settings-card {
-  background: var(--bg-card, #ffffff);
-  border: 1px solid var(--border-color, #e4e4e7);
-  border-radius: var(--radius-lg, 0.75rem);
-  padding: 18px;
-}
-
-.button-row {
-  margin-top: 16px;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-}
-
-.primary-btn,
-.secondary-btn {
-  border: none;
-  border-radius: var(--radius-md, 0.5rem);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  padding: 10px 14px;
-  font-weight: 600;
-}
-
-.primary-btn {
-  background: var(--accent-color, #31d279);
-  color: #fff;
-}
-
-.secondary-btn {
-  background: var(--bg-main, #f4f5f7);
-  color: var(--text-primary, #18181b);
-}
-
-@media (max-width: 768px) {
-  .card-grid.two-up {
-    grid-template-columns: 1fr;
-  }
-}
+/* Scoped styles are handled by global settings.css */
 </style>

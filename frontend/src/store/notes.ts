@@ -1,21 +1,22 @@
 import { ref, computed } from 'vue';
-import axios from 'axios';
-import { API_BASE } from '../config';
-import { enqueueChange, getCachedNotes, setCachedNotes } from '../utils/db';
-import { requestSyncNow } from '../utils/sync';
-import { settings } from './settings';
+import {
+  createNoteContentCommand,
+  deleteNoteCommand,
+  loadNotesForDisplay,
+  searchNotesCommand,
+  togglePinCommand,
+  updateNoteContentCommand,
+} from '../domain/notes/noteCommands';
+import type { NoteMeta } from '../domain/notes/notesTypes';
+import {
+  emptyTrashCommand,
+  loadTrashForDisplay,
+  permanentlyDeleteTrashNoteCommand,
+  restoreTrashNoteCommand,
+} from '../domain/notes/trashCommands';
+import { setView } from './ui';
 
-export interface NoteMeta {
-  note_id: string;
-  revision: number;
-  filename: string;
-  title: string;
-  created_at: number;
-  updated_at: number;
-  content: string;
-  tags: string[];
-  pinned: boolean;
-}
+export type { NoteMeta } from '../domain/notes/notesTypes';
 
 // ==========================
 // 状态 (State)
@@ -84,20 +85,9 @@ export const displayedNotes = computed(() => {
 
 export async function fetchNotes() {
   try {
-    const res = await axios.get(`${API_BASE}/notes/`);
-    notes.value = res.data;
-    // 异步更新离线缓存
-    setCachedNotes(res.data).catch(() => {});
+    notes.value = await loadNotesForDisplay();
   } catch (error) {
-    console.error('Failed to fetch notes from server, falling back to cache...', error);
-    try {
-      const cached = await getCachedNotes();
-      if (cached.length > 0) {
-        notes.value = cached;
-      }
-    } catch (e) {
-      console.error('Failed to load notes from cache either.', e);
-    }
+    console.error(error);
   }
 }
 
@@ -105,16 +95,7 @@ export async function deleteNote(filename: string) {
   try {
     const note = notes.value.find((item) => item.filename === filename);
     if (!note) return;
-    const baseRevision = note.revision;
-    await axios.delete(`${API_BASE}/notes/${filename}`);
-    await queueRemoteChange({
-      entityId: note.note_id,
-      type: 'note.delete',
-      baseRevision,
-      payload: {
-        filename: note.filename,
-      },
-    });
+    await deleteNoteCommand(note);
     await fetchNotes();
   } catch (e) {
     console.error('Error deleting note:', e);
@@ -123,18 +104,7 @@ export async function deleteNote(filename: string) {
 
 export async function togglePin(note: NoteMeta) {
   try {
-    const nextPinned = !note.pinned;
-    const baseRevision = note.revision;
-    await axios.patch(`${API_BASE}/notes/${note.filename}`, { pinned: nextPinned });
-    await queueRemoteChange({
-      entityId: note.note_id,
-      type: 'note.patch',
-      baseRevision,
-      payload: {
-        filename: note.filename,
-        pinned: nextPinned,
-      },
-    });
+    await togglePinCommand(note);
     await fetchNotes();
   } catch (e) {
     console.error('Error pinning note:', e);
@@ -142,68 +112,20 @@ export async function togglePin(note: NoteMeta) {
 }
 
 export async function updateNoteContent(note: NoteMeta, payload: { content: string; tags: string[] }) {
-  const baseRevision = note.revision;
-  await axios.put(`${API_BASE}/notes/${note.filename}`, {
-    content: payload.content,
-    tags: payload.tags,
-  });
-  await queueRemoteChange({
-    entityId: note.note_id,
-    type: 'note.update',
-    baseRevision,
-    payload: {
-      filename: note.filename,
-      content: payload.content,
-      tags: payload.tags,
-    },
-  });
+  await updateNoteContentCommand(note, payload);
   await fetchNotes();
 }
 
 export async function createNoteContent(payload: { content: string; tags: string[] }) {
-  const response = await axios.post(`${API_BASE}/notes/`, {
-    content: payload.content,
-    tags: payload.tags.length ? payload.tags : undefined,
-  });
-  const created = response.data as { note_id: string; revision: number; filename: string };
-  await queueRemoteChange({
-    entityId: created.note_id,
-    type: 'note.create',
-    baseRevision: 0,
-    payload: {
-      filename: created.filename,
-      content: payload.content,
-      tags: payload.tags,
-      pinned: false,
-      created_at: new Date().toISOString(),
-      revision: 1,
-    },
-  });
+  const created = await createNoteContentCommand(payload);
   await fetchNotes();
   return created;
-}
-
-async function queueRemoteChange(input: {
-  entityId: string;
-  type: 'note.create' | 'note.update' | 'note.patch' | 'note.delete';
-  baseRevision: number;
-  payload: Record<string, unknown>;
-}) {
-  if (settings.sync.mode === 'local') return;
-  await enqueueChange({
-    entityId: input.entityId,
-    type: input.type,
-    baseRevision: input.baseRevision,
-    payload: input.payload,
-  });
-  requestSyncNow();
 }
 
 // 回收站相关
 export async function fetchTrash() {
   try {
-    const res = await axios.get(`${API_BASE}/notes/trash/list`);
-    trashNotes.value = res.data;
+    trashNotes.value = await loadTrashForDisplay();
   } catch (e) {
     console.error(e);
   }
@@ -211,7 +133,7 @@ export async function fetchTrash() {
 
 export async function restoreNote(filename: string) {
   try {
-    await axios.post(`${API_BASE}/notes/trash/restore/${filename}`);
+    await restoreTrashNoteCommand(filename);
     await fetchTrash();
     await fetchNotes();
   } catch (e) {
@@ -222,7 +144,7 @@ export async function restoreNote(filename: string) {
 export async function permanentDelete(filename: string) {
   if (!confirm('永久删除后无法恢复，确定吗？')) return;
   try {
-    await axios.delete(`${API_BASE}/notes/trash/permanent/${filename}`);
+    await permanentlyDeleteTrashNoteCommand(filename);
     await fetchTrash();
   } catch (e) {
     console.error(e);
@@ -232,7 +154,7 @@ export async function permanentDelete(filename: string) {
 export async function emptyTrash() {
   if (!confirm('清空回收站后无法恢复，确定吗？')) return;
   try {
-    await axios.delete(`${API_BASE}/notes/trash/empty`);
+    await emptyTrashCommand();
     trashNotes.value = [];
   } catch (e) {
     console.error(e);
@@ -255,6 +177,7 @@ export function selectDate(date: Date) {
   } else {
     selectedDate.value = new Date(date);
     selectedDate.value.setHours(0, 0, 0, 0);
+    setView('all'); // 在非主界面点击日期时，自动切换回全维视角以展示筛选后的笔记
   }
 }
 
@@ -268,8 +191,7 @@ export function performSearch(q: string) {
   }
   searchTimer = setTimeout(async () => {
     try {
-      const res = await axios.get(`${API_BASE}/notes/search`, { params: { q } });
-      searchResults.value = res.data;
+      searchResults.value = await searchNotesCommand(q);
     } catch (e) {
       console.error(e);
     }

@@ -1,13 +1,9 @@
-import base64
-
-from fastapi import APIRouter, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Header, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from core.paths import SYNC_TOKEN
-from services.image_service import save_synced_image
+from core.paths import MAX_SYNC_BLOB_BYTES, SYNC_TOKEN
 from services.sync_service import (
-    apply_local_changes,
     ensure_sync_store,
     get_blob,
     get_sync_info,
@@ -31,10 +27,6 @@ class ChangePayload(BaseModel):
 
 
 class PushRequest(BaseModel):
-    changes: list[ChangePayload] = Field(default_factory=list)
-
-
-class LocalApplyRequest(BaseModel):
     changes: list[ChangePayload] = Field(default_factory=list)
 
 
@@ -76,7 +68,27 @@ def sync_blob_head(blob_hash: str, authorization: str | None = Header(default=No
 @router.put("/blobs/{blob_hash:path}")
 async def sync_blob_put(blob_hash: str, request: Request, authorization: str | None = Header(default=None)):
     _require_sync_auth(authorization)
-    put_blob(blob_hash, await request.body())
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_SYNC_BLOB_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail=f"Blob exceeds max size of {MAX_SYNC_BLOB_BYTES} bytes",
+                )
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length header")
+
+    chunks = bytearray()
+    async for chunk in request.stream():
+        chunks.extend(chunk)
+        if len(chunks) > MAX_SYNC_BLOB_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=f"Blob exceeds max size of {MAX_SYNC_BLOB_BYTES} bytes",
+            )
+
+    put_blob(blob_hash, bytes(chunks))
     return {"ok": True, "blob_hash": blob_hash}
 
 
@@ -86,15 +98,3 @@ def sync_blob_get(blob_hash: str, authorization: str | None = Header(default=Non
     if not has_blob(blob_hash):
         raise HTTPException(status_code=404, detail="Blob not found")
     return StreamingResponse(iter([get_blob(blob_hash)]), media_type="application/octet-stream")
-
-
-@router.post("/local/apply")
-def sync_local_apply(payload: LocalApplyRequest):
-    ensure_sync_store()
-    return apply_local_changes([item.model_dump() for item in payload.changes])
-
-
-@router.put("/local/blobs/{filename:path}")
-async def sync_local_blob_put(filename: str, request: Request):
-    ensure_sync_store()
-    return save_synced_image(filename=filename, data=await request.body())

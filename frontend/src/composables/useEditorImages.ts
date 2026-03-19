@@ -1,12 +1,12 @@
 import { ref, type Ref } from 'vue';
-import axios from 'axios';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
-import { API_BASE } from '../config';
 import { settings } from '../store/settings';
 import { removeEditorAttachment } from '../utils/editorAttachments';
+import { saveLocalAttachmentFile } from '../utils/localAttachments.js';
 
 type UseEditorImagesOptions = {
+  attachmentSessionKey: Ref<string>;
   content: Ref<string>;
   previewRef: Ref<HTMLElement | null>;
   textareaRef: Ref<HTMLTextAreaElement | null>;
@@ -258,16 +258,12 @@ export function useEditorImages(options: UseEditorImagesOptions) {
     if (!file.type.startsWith('image/')) return;
     const uploadTarget = await compressImage(file);
 
-    const formData = new FormData();
-    formData.append('file', uploadTarget);
-
     try {
       isUploading.value = true;
-      const res = await axios.post(`${API_BASE}/uploads/`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const saved = await saveLocalAttachmentFile(uploadTarget, {
+        draftSessionKey: options.attachmentSessionKey.value,
       });
-
-      const imageMarkdown = `\n![${uploadTarget.name}](${res.data.url})\n`;
+      const imageMarkdown = `\n![${uploadTarget.name}](${saved.url})\n`;
       options.content.value += imageMarkdown;
       if (options.showPreview.value && options.previewRef.value) {
         await options.syncEditorPreview();

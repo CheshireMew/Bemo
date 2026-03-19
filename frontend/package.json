@@ -1,15 +1,20 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "test:unit": "tsc -p tsconfig.tests.json && node .test-dist/tests/editorAttachments.spec.js",
+    "test:unit": "tsc -p tsconfig.tests.json && node .test-dist/tests/editorAttachments.spec.js && node .test-dist/tests/webdavRequest.spec.js && node .test-dist/tests/webdavChanges.spec.js && node .test-dist/tests/conflictResolution.spec.js && node .test-dist/tests/syncIntegrity.spec.js && node .test-dist/tests/pendingQueueSummary.spec.js && node .test-dist/tests/localAttachments.spec.js && node .test-dist/tests/attachmentUrls.spec.js && node .test-dist/tests/localImportExport.spec.js && node .test-dist/tests/legacyMigration.spec.js && node .test-dist/tests/markdownArchive.spec.js && node .test-dist/tests/remoteDeleteConflictFlow.spec.js && node .test-dist/tests/webdavSnapshot.spec.js && node .test-dist/tests/webdavProtocol.spec.js && node .test-dist/tests/webdavLocalServer.spec.js",
     "preview": "vite preview",
     "tauri": "tauri",
     "sync:mobile": "npm run build && cap sync",
+    "sync:android": "npm run build && cap sync android",
+    "android:open": "cap open android",
+    "android:debug": "npm run sync:android && cd android && gradlew.bat assembleDebug",
+    "android:release": "npm run sync:android && cd android && gradlew.bat assembleRelease",
+    "android:bundle": "npm run sync:android && cd android && gradlew.bat bundleRelease",
     "build:desktop": "npm run build && tauri build"
   },
   "dependencies": {
@@ -17,6 +22,7 @@
     "@capacitor/cli": "^8.2.0",
     "@capacitor/core": "^8.2.0",
     "axios": "^1.13.6",
+    "jszip": "^3.10.1",
     "lucide-vue-next": "^0.577.0",
     "marked": "^17.0.4",
     "turndown": "^7.2.2",

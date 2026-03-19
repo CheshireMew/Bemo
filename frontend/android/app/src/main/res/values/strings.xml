@@ -1,7 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">bemo</string>
-    <string name="title_activity_main">bemo</string>
-    <string name="package_name">com.dylan.bemo</string>
-    <string name="custom_url_scheme">com.dylan.bemo</string>
+    <string name="package_name">io.github.cheshiremew.bemo</string>
+    <string name="custom_url_scheme">io.github.cheshiremew.bemo</string>
 </resources>

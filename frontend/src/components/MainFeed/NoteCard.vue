@@ -26,10 +26,10 @@
     <div v-if="note.tags && note.tags.length" class="note-tags">
       <span v-for="t in note.tags" :key="t" class="note-tag" @click="isTrash ? null : toggleTag(t)">#{{ t }}</span>
     </div>
-
     <!-- Edit Mode -->
     <div v-if="isEditing" class="edit-area">
       <Editor
+        :draft-key="`note:${note.note_id}`"
         :initial-content="note.content"
         :initial-tags="note.tags"
         :show-cancel="true"
@@ -44,18 +44,67 @@
     </div>
     
     <!-- View Mode -->
-    <div v-else class="note-body markdown-body" v-html="renderMarkdown(note.content)"></div>
+    <template v-else>
+      <div class="note-body markdown-body" v-html="renderedHtml"></div>
+      <div v-if="imageAttachments.length" class="note-image-grid">
+        <button
+          v-for="(image, index) in imageAttachments"
+          :key="image.url"
+          type="button"
+          class="note-image-card"
+          :class="{ 'note-image-card-primary': index === 0, 'note-image-card-secondary': index > 0 }"
+          @click="openImagePreview(image.url)"
+        >
+          <img :src="resolvedImageUrls[image.url] || image.url" :alt="image.label" class="note-image" />
+        </button>
+      </div>
+      <div v-if="audioAttachments.length" class="note-audio-list">
+        <div
+          v-for="audio in audioAttachments"
+          :key="audio.url"
+          class="note-audio-card"
+        >
+          <div class="note-audio-title">{{ audio.label }}</div>
+          <audio class="note-audio-player" controls :src="resolvedAttachmentUrls[audio.url] || audio.url"></audio>
+        </div>
+      </div>
+      <div v-if="videoAttachments.length" class="note-video-list">
+        <div
+          v-for="video in videoAttachments"
+          :key="video.url"
+          class="note-video-card"
+        >
+          <div class="note-video-title">{{ video.label }}</div>
+          <video class="note-video-player" controls :src="resolvedAttachmentUrls[video.url] || video.url"></video>
+        </div>
+      </div>
+      <div v-if="fileAttachments.length" class="note-file-list">
+        <a
+          v-for="file in fileAttachments"
+          :key="file.url"
+          class="note-file-card"
+          :href="resolvedAttachmentUrls[file.url] || file.url"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <span class="note-file-label">{{ file.label }}</span>
+        </a>
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Pencil, Pin, Trash2, RotateCcw, Copy, Bot } from 'lucide-vue-next';
 import Editor, { type EditorSubmitPayload } from '../Editor.vue';
 import type { NoteMeta } from '../../store/notes';
 import { togglePin, deleteNote, toggleTag, updateNoteContent } from '../../store/notes';
+import { pushNotification } from '../../store/notifications';
 import { settings } from '../../store/settings';
 import { openAiChat } from '../../store/ui';
+import { resolveAttachmentUrl } from '../../utils/attachmentUrls';
+import { getEditorAttachmentDisplayKind, splitEditorMarkdownByKind } from '../../utils/editorAttachments';
 import { renderMarkdownToHtml } from '../../utils/markdownRenderer';
 import { useViewport } from '../../composables/useViewport';
 
@@ -75,13 +124,13 @@ const formatDate = (timestamp: number) => {
          String(d.getMinutes()).padStart(2, '0');
 };
 
-const renderMarkdown = (content: string) => {
-  return renderMarkdownToHtml(content);
-};
-
 const isEditing = ref(false);
+const renderedHtml = ref('');
+const resolvedImageUrls = ref<Record<string, string>>({});
+const resolvedAttachmentUrls = ref<Record<string, string>>({});
 const { isMobile, isTouch } = useViewport();
 const copyFeedback = ref(false);
+const editDraftStorageKey = computed(() => `bemo.editor.draft:note:${props.note.note_id}`);
 const copyButtonTitle = computed(() => {
   if (copyFeedback.value) {
     return '已复制';
@@ -98,10 +147,12 @@ const openNoteAiChat = () => {
 };
 
 const startEdit = () => {
+  localStorage.removeItem(editDraftStorageKey.value);
   isEditing.value = true;
 };
 
 const cancelEdit = () => {
+  localStorage.removeItem(editDraftStorageKey.value);
   isEditing.value = false;
 };
 
@@ -110,12 +161,13 @@ const saveEdit = async (payload: EditorSubmitPayload) => {
     await updateNoteContent(props.note, payload);
   } catch (e) {
     console.error(e);
-    alert('保存失败');
+    pushNotification('保存失败', 'error');
     throw e;
   }
 };
 
 const handleEditSaved = async () => {
+  localStorage.removeItem(editDraftStorageKey.value);
   isEditing.value = false;
 };
 
@@ -147,7 +199,7 @@ const copyNoteContent = async () => {
     flashCopyFeedback();
   } catch (error) {
     console.error('Failed to copy note content:', error);
-    alert('复制失败');
+    pushNotification('复制失败', 'error');
   }
 };
 
@@ -164,6 +216,34 @@ const flashCopyFeedback = () => {
 
 const alwaysShowActions = computed(() => isMobile.value || isTouch.value);
 const actionsOpacity = computed(() => (alwaysShowActions.value ? 1 : 0));
+const splitContent = computed(() => splitEditorMarkdownByKind(props.note.content || ''));
+const imageAttachments = computed(() => splitContent.value.attachments.filter((attachment) => getEditorAttachmentDisplayKind(attachment) === 'image'));
+const audioAttachments = computed(() => splitContent.value.attachments.filter((attachment) => getEditorAttachmentDisplayKind(attachment) === 'audio'));
+const videoAttachments = computed(() => splitContent.value.attachments.filter((attachment) => getEditorAttachmentDisplayKind(attachment) === 'video'));
+const fileAttachments = computed(() => splitContent.value.attachments.filter((attachment) => getEditorAttachmentDisplayKind(attachment) === 'file'));
+
+const openImagePreview = (url: string) => {
+  const target = resolvedImageUrls.value[url] || url;
+  window.open(target, '_blank', 'noopener,noreferrer');
+};
+
+watch(() => props.note.content, async (content) => {
+  renderedHtml.value = String(await renderMarkdownToHtml(splitEditorMarkdownByKind(content || '').body));
+}, { immediate: true });
+
+watch(imageAttachments, async (nextImages) => {
+  const entries = await Promise.all(nextImages.map(async (image) => (
+    [image.url, await resolveAttachmentUrl(image.url)] as const
+  )));
+  resolvedImageUrls.value = Object.fromEntries(entries);
+}, { immediate: true });
+
+watch(() => splitContent.value.attachments, async (nextAttachments) => {
+  const entries = await Promise.all(nextAttachments.map(async (attachment) => (
+    [attachment.url, await resolveAttachmentUrl(attachment.url)] as const
+  )));
+  resolvedAttachmentUrls.value = Object.fromEntries(entries);
+}, { immediate: true });
 </script>
 
 <style scoped>
@@ -207,6 +287,93 @@ const actionsOpacity = computed(() => (alwaysShowActions.value ? 1 : 0));
   transition: opacity 0.15s;
 }
 .note-tag:hover { opacity: 0.7; }
+.note-image-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.note-image-card {
+  border: 1px solid var(--border-color, #e4e4e7);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--bg-main, #f4f5f7);
+  padding: 0;
+  cursor: pointer;
+}
+
+.note-image-card-primary {
+  grid-column: 1 / -1;
+}
+
+.note-image-card-secondary {
+  min-width: 0;
+}
+
+.note-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 70vh;
+  object-fit: contain;
+  background: var(--bg-card, #fff);
+}
+
+.note-image-card-primary .note-image {
+  max-height: 72vh;
+}
+
+.note-image-card-secondary .note-image {
+  aspect-ratio: 1 / 1;
+  max-height: none;
+  object-fit: cover;
+}
+
+.note-audio-list,
+.note-video-list,
+.note-file-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.note-audio-card,
+.note-video-card,
+.note-file-card {
+  border: 1px solid var(--border-color, #e4e4e7);
+  border-radius: 14px;
+  background: var(--bg-main, #f4f5f7);
+  padding: 12px;
+}
+
+.note-file-card {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: var(--text-primary);
+}
+
+.note-audio-title,
+.note-video-title,
+.note-file-label {
+  font-size: 0.84rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+
+.note-audio-player,
+.note-video-player {
+  width: 100%;
+  display: block;
+}
+
+.note-video-player {
+  max-height: 320px;
+  background: #000;
+  border-radius: 10px;
+}
 /* Edit Area */
 .edit-area {
   margin-top: 4px;
@@ -242,6 +409,18 @@ const actionsOpacity = computed(() => (alwaysShowActions.value ? 1 : 0));
 
   .note-tag {
     font-size: 0.72rem;
+  }
+
+  .note-image-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .note-image {
+    max-height: 50vh;
+  }
+
+  .note-image-card-primary .note-image {
+    max-height: 52vh;
   }
 }
 </style>

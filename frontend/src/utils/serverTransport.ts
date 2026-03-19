@@ -6,6 +6,7 @@ export interface SyncTransport {
   hasBlob(blobHash: string): Promise<boolean>;
   putBlob(blobHash: string, data: Uint8Array, mimeType?: string): Promise<void>;
   getBlob(blobHash: string): Promise<Uint8Array>;
+  cleanupUnusedBlobs?(): Promise<{ deleted: number; retained: number }>;
 }
 
 export function createServerTransport(serverUrl: string, accessToken: string): SyncTransport {

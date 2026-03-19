@@ -4,6 +4,7 @@ from datetime import datetime
 
 import yaml
 
+from services import note_index_repository
 from services.service_errors import NotFoundError
 
 
@@ -114,11 +115,19 @@ def resolve_markdown_path(base_dir: str, filepath: str) -> str:
 
 
 def find_note_by_id(base_dir: str, note_id: str) -> tuple[str, str] | tuple[None, None]:
+    indexed_filename = note_index_repository.get_note_path(note_id)
+    if indexed_filename:
+        full_path = os.path.join(base_dir, indexed_filename)
+        if os.path.exists(full_path):
+            return indexed_filename, full_path
+        note_index_repository.remove_note_path(note_id)
+
     for note in collect_notes_recursive(base_dir):
         if note.get("note_id") == note_id:
             normalized = note["filename"]
             full_path = os.path.join(base_dir, normalized)
             if os.path.exists(full_path):
+                note_index_repository.upsert_note_path(note_id, normalized)
                 return normalized, full_path
     return None, None
 
@@ -235,9 +244,12 @@ def create_note_with_metadata(
     with open(filepath, "w", encoding="utf-8") as file:
         file.write(frontmatter + content)
 
+    relative_filename = f"{date_dir}/{filename}"
+    note_index_repository.upsert_note_path(note_id, relative_filename)
+
     return {
         "message": "Note created",
-        "filename": f"{date_dir}/{filename}",
+        "filename": relative_filename,
         "note_id": note_id,
         "revision": revision,
     }
@@ -273,6 +285,8 @@ def apply_note_update_by_id(
     )
     with open(full_path, "w", encoding="utf-8") as file:
         file.write(frontmatter + next_content)
+
+    note_index_repository.upsert_note_path(normalized_meta["note_id"], normalized)
 
     return {
         "filename": normalized,

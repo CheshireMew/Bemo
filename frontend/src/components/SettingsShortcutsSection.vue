@@ -29,36 +29,13 @@
 </template>
 
 <style scoped>
-.settings-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.section-header,
-.shortcut-list div {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.section-header h3 {
-  margin: 0;
-  color: var(--text-primary, #18181b);
-}
-
-.section-header p {
-  margin: 6px 0 0;
-  color: var(--text-secondary, #71717a);
-  font-size: 0.92rem;
-  line-height: 1.5;
-}
-
-.settings-card {
-  background: var(--bg-card, #ffffff);
-  border: 1px solid var(--border-color, #e4e4e7);
-  border-radius: var(--radius-lg, 0.75rem);
-  padding: 18px;
+kbd {
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border-color, #d4d4d8);
+  border-bottom-width: 2px;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
 }
 
 .shortcut-list {
@@ -68,16 +45,10 @@
 }
 
 .shortcut-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
   align-items: center;
-}
-
-kbd {
-  background: var(--bg-card, #fff);
-  border: 1px solid var(--border-color, #d4d4d8);
-  border-bottom-width: 2px;
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 0.85rem;
 }
 
 @media (max-width: 768px) {

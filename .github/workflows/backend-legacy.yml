@@ -1,0 +1,32 @@
+name: Backend Legacy Compatibility
+
+on:
+  workflow_dispatch:
+
+jobs:
+  backend-legacy:
+    name: Legacy Backend Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-legacy.txt
+
+      - name: Install sync and legacy dependencies
+        run: pip install -r requirements.txt -r requirements-legacy.txt
+
+      - name: Run legacy backend tests
+        env:
+          BEMO_SYNC_TOKEN: ci-sync-token
+        run: python run_legacy_tests.py

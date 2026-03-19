@@ -27,8 +27,7 @@
         </button>
       </div>
     </div>
-
-    <div class="sync-status" v-if="syncStatus !== 'online' || pendingCount > 0 || syncError">
+    <div class="sync-status" v-if="syncStatus !== 'online' || pendingCount > 0 || syncError || otherTargetPendingHint">
       <span v-if="syncStatus === 'offline'" class="sync-status-main">
         <CloudOff class="sync-status-icon" :size="14" />
         {{ syncTarget }}{{ pendingCount > 0 ? ` · ${pendingCount}条待同步` : '' }}
@@ -41,15 +40,16 @@
         <Cloud class="sync-status-icon" :size="14" />
         {{ syncTarget }} · {{ pendingCount }}条待同步
       </span>
+      <span v-if="otherTargetPendingHint" class="sync-other-target"> · {{ otherTargetPendingHint }}</span>
       <span v-if="syncError" class="sync-error"> · {{ syncError }}</span>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
-import { watch } from 'vue';
-import { Search, Sun, Moon, Settings, ArrowUpDown, Cloud, CloudOff, RefreshCw, PanelLeftOpen } from 'lucide-vue-next';
-import { syncStatus, pendingCount, syncTarget, syncError } from '../../store/sync';
+import { computed, watch } from 'vue';
+import { Search, Settings, ArrowUpDown, Cloud, CloudOff, RefreshCw, PanelLeftOpen, Sun, Moon } from 'lucide-vue-next';
+import { pendingCount, serverPendingCount, syncError, syncStatus, syncTarget, webdavPendingCount } from '../../store/sync';
 import { searchQuery, performSearch, sortOrder, toggleSortOrder } from '../../store/notes';
 import { isDarkMode, toggleTheme } from '../../store/ui';
 
@@ -60,6 +60,17 @@ withDefaults(defineProps<{
 });
 
 defineEmits(['openSettings', 'openSidebar']);
+
+const otherTargetPendingHint = computed(() => {
+  const hints: string[] = [];
+  if (syncTarget.value !== '自部署服务器' && serverPendingCount.value > 0) {
+    hints.push(`Server 还有${serverPendingCount.value}条`);
+  }
+  if (syncTarget.value !== 'WebDAV' && webdavPendingCount.value > 0) {
+    hints.push(`WebDAV 还有${webdavPendingCount.value}条`);
+  }
+  return hints.join('，');
+});
 
 watch(searchQuery, (q) => {
   performSearch(q);
@@ -193,6 +204,10 @@ watch(searchQuery, (q) => {
 
 .sync-error {
   color: #b91c1c;
+}
+
+.sync-other-target {
+  color: #92400e;
 }
 
 :root.dark .sync-status {

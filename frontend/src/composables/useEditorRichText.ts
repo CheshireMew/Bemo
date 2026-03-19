@@ -2,12 +2,7 @@ import { computed, watch, type Ref } from 'vue';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import { settings } from '../store/settings';
-import {
-  type EditorAttachment,
-  mergeEditorMarkdown,
-  splitEditorMarkdown,
-} from '../utils/editorAttachments';
-import { renderMarkdownToHtml } from '../utils/markdownRenderer';
+import { extractOriginalRenderedUrl, renderMarkdownToHtml } from '../utils/markdownRenderer';
 import { saveSettings } from '../services/localSettings';
 
 const turndownService = new TurndownService({
@@ -17,6 +12,25 @@ const turndownService = new TurndownService({
 });
 
 turndownService.use(gfm);
+turndownService.addRule('preserveRenderedImages', {
+  filter: 'img',
+  replacement(_content, node) {
+    const element = node as HTMLElement;
+    const src = extractOriginalRenderedUrl(element.getAttribute('src') || '');
+    const alt = element.getAttribute('alt') || '';
+    if (!src) return '';
+    return `![${alt}](${src})`;
+  },
+});
+turndownService.addRule('preserveRenderedLinks', {
+  filter: 'a',
+  replacement(content, node) {
+    const element = node as HTMLElement;
+    const href = extractOriginalRenderedUrl(element.getAttribute('href') || '');
+    if (!href) return content;
+    return `[${content || href}](${href})`;
+  },
+});
 
 type UseEditorRichTextOptions = {
   content: Ref<string>;
@@ -24,7 +38,6 @@ type UseEditorRichTextOptions = {
   textareaRef: Ref<HTMLTextAreaElement | null>;
   showPreview: Ref<boolean>;
   isComposing: Ref<boolean>;
-  attachments: Ref<EditorAttachment[]>;
 };
 
 export function useEditorRichText(options: UseEditorRichTextOptions) {
@@ -47,13 +60,7 @@ export function useEditorRichText(options: UseEditorRichTextOptions) {
 
   const syncEditorPreview = async () => {
     if (!options.previewRef.value) return;
-    const { body: displayContent } = splitEditorMarkdown(options.content.value);
-    options.previewRef.value.innerHTML = displayContent ? await renderMarkdownToHtml(displayContent) : '';
-  };
-
-  const mergeTextAndAttachments = (textMarkdown: string) => {
-    const normalizedText = normalizeMarkdownSpacing(textMarkdown);
-    return mergeEditorMarkdown(normalizedText, options.attachments.value);
+    options.previewRef.value.innerHTML = options.content.value ? await renderMarkdownToHtml(options.content.value) : '';
   };
 
   const handlePreviewInput = () => {
@@ -63,7 +70,7 @@ export function useEditorRichText(options: UseEditorRichTextOptions) {
 
     if (options.previewRef.value) {
       const textMarkdown = turndownService.turndown(options.previewRef.value.innerHTML);
-      options.content.value = mergeTextAndAttachments(textMarkdown);
+      options.content.value = normalizeMarkdownSpacing(textMarkdown);
     }
   };
 
@@ -100,8 +107,7 @@ export function useEditorRichText(options: UseEditorRichTextOptions) {
 
   watch(options.content, async (newVal) => {
     if (!options.showPreview.value && options.previewRef.value) {
-      const { body: displayContent } = splitEditorMarkdown(newVal);
-      options.previewRef.value.innerHTML = displayContent ? await renderMarkdownToHtml(displayContent) : '';
+      options.previewRef.value.innerHTML = newVal ? await renderMarkdownToHtml(newVal) : '';
     }
   });
 

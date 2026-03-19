@@ -185,16 +185,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { ref } from 'vue';
 import { displayedNotes, notes, selectedDate, selectedTag } from '../store/notes';
 import { aiChatNoteId, aiChatNoteLabel, closeAiChat, isAiChatOpen } from '../store/ui';
 import {
-  type ConversationSummary,
   type LocalMessage,
   type TimeRange,
   useAiConversations,
 } from '../composables/useAiConversations';
 import { useAiChat } from '../composables/useAiChat';
+import { useAiContextSelection } from '../composables/useAiContextSelection';
+import { useConversationRename } from '../composables/useConversationRename';
 import { useAiPromptPresets } from '../composables/useAiPromptPresets';
 import { useScrollLock } from '../composables/useScrollLock';
 
@@ -202,62 +203,6 @@ const messages = ref<LocalMessage[]>([]);
 const draft = ref('');
 const errorMessage = ref('');
 const selectedRange = ref<TimeRange | null>(null);
-const editingConversationId = ref<string | null>(null);
-const editingTitleDraft = ref('');
-const editingTitleInput = ref<HTMLInputElement | null>(null);
-
-const rangeOptions: Array<{ value: TimeRange; label: string }> = [
-  { value: 'filtered', label: '已筛选笔记' },
-  { value: 'all-notes', label: '全部笔记' },
-  { value: 'day', label: '过去一天' },
-  { value: 'week', label: '过去一周' },
-  { value: 'month', label: '过去一月' },
-  { value: 'year', label: '过去一年' },
-];
-
-const aiContextNote = computed(() => {
-  if (!aiChatNoteId.value) return null;
-  return notes.value.find((note) => note.note_id === aiChatNoteId.value) || null;
-});
-
-const aiContextLabel = computed(() => {
-  const explicit = aiChatNoteLabel.value.trim();
-  if (explicit) return explicit;
-  const content = aiContextNote.value?.content?.trim() || '';
-  const firstLine = content.split('\n')[0]?.replace(/^#+\s*/, '').trim() || '';
-  if (firstLine) return firstLine.slice(0, 20);
-  return '当前笔记';
-});
-
-const contextNotes = computed(() => {
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  const rangeSecondsMap: Record<'day' | 'week' | 'month' | 'year', number> = {
-    day: 24 * 60 * 60,
-    week: 7 * 24 * 60 * 60,
-    month: 30 * 24 * 60 * 60,
-    year: 365 * 24 * 60 * 60,
-  };
-
-  if (aiContextNote.value) {
-    return [aiContextNote.value];
-  }
-
-  if (selectedRange.value === null) {
-    return [];
-  }
-
-  if (selectedRange.value === 'filtered') {
-    return displayedNotes.value;
-  }
-
-  if (selectedRange.value === 'all-notes') {
-    return notes.value;
-  }
-
-  const cutoff = nowSeconds - rangeSecondsMap[selectedRange.value];
-  return notes.value.filter((note) => note.created_at >= cutoff);
-});
-
 const {
   editingPresetId,
   handleClosed,
@@ -276,6 +221,7 @@ const {
 const {
   activeConversation,
   activeConversationId,
+  appendConversationMessages,
   conversationListRef,
   conversations,
   createConversation,
@@ -305,29 +251,39 @@ const createBlankConversation = async () => {
   await createConversation();
 };
 
-const startConversationRename = (conversation: ConversationSummary) => {
-  editingConversationId.value = conversation.id;
-  editingTitleDraft.value = conversation.title;
-  requestAnimationFrame(() => {
-    editingTitleInput.value?.focus();
-    editingTitleInput.value?.select();
-  });
-};
+const {
+  aiContextLabel,
+  aiContextNote,
+  contextNotes,
+  rangeOptions,
+} = useAiContextSelection({
+  selectedRange,
+  notes,
+  displayedNotes,
+  aiChatNoteId,
+  aiChatNoteLabel,
+  isAiChatOpen,
+  createNoteConversation,
+  clearMessages: () => {
+    messages.value = [];
+  },
+  clearError: () => {
+    errorMessage.value = '';
+  },
+});
 
-const cancelConversationRename = () => {
-  editingConversationId.value = null;
-  editingTitleDraft.value = '';
-};
-
-const submitConversationRename = async (conversation: ConversationSummary) => {
-  const nextTitle = editingTitleDraft.value.trim();
-  if (!nextTitle || nextTitle === conversation.title) {
-    cancelConversationRename();
-    return;
-  }
-  await renameConversation(conversation, nextTitle);
-  cancelConversationRename();
-};
+const {
+  cancelConversationRename,
+  editingConversationId,
+  editingTitleDraft,
+  editingTitleInput,
+  startConversationRename,
+  submitConversationRename,
+} = useConversationRename({
+  activeConversationId,
+  renameConversation,
+});
+void editingTitleInput;
 
 const formatContextMode = (value: TimeRange | null | undefined) => {
   const labelMap: Record<TimeRange, string> = {
@@ -363,18 +319,7 @@ const {
   contextNotes,
   ensureConversation: createConversation,
   syncConversationSummary,
-});
-
-watch(isAiChatOpen, async (open: boolean) => {
-  if (!open || !aiContextNote.value) return;
-  selectedRange.value = null;
-  messages.value = [];
-  errorMessage.value = '';
-  await createNoteConversation();
-});
-
-watch(activeConversationId, () => {
-  cancelConversationRename();
+  appendConversationMessages,
 });
 
 useScrollLock(isAiChatOpen);

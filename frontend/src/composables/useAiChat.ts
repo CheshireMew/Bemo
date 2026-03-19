@@ -1,12 +1,11 @@
 import { ref, type Ref } from 'vue';
-import axios from 'axios';
-import { API_BASE } from '../config';
 import type {
   ConversationDetail,
   ConversationSummary,
   LocalMessage,
   TimeRange,
 } from './useAiConversations';
+import { requestAiChat } from '../domain/ai/aiClient';
 
 type ContextNote = {
   title: string;
@@ -24,12 +23,14 @@ type UseAiChatOptions = {
   contextNotes: Ref<ContextNote[]>;
   ensureConversation: () => Promise<void>;
   syncConversationSummary: (detail: ConversationDetail) => void;
+  appendConversationMessages: (conversationId: string, entries: Array<{ role: 'user' | 'assistant'; content: string }>) => ConversationDetail;
 };
 
 export function useAiChat(options: UseAiChatOptions) {
   const isLoading = ref(false);
 
   const sendMessage = async () => {
+    if (isLoading.value) return;
     const content = options.draft.value.trim();
     if (!content) return;
     if (!options.activeConversationId.value) {
@@ -46,39 +47,42 @@ export function useAiChat(options: UseAiChatOptions) {
       isLoading.value = true;
       const currentConversation = options.activeConversation.value;
       const optimisticMessageCount = options.messages.value.length;
-      const res = await axios.post(`${API_BASE}/ai/chat`, {
+      const res = await requestAiChat({
         message: content,
-        conversation_id: currentConversationId,
-        context_mode: options.selectedRange.value,
+        history: options.messages.value.slice(0, -1),
         notes: options.contextNotes.value.map((note) => ({
           title: note.title,
           content: note.content,
           created_at: Math.floor(note.created_at),
         })),
       });
+      const detail = options.appendConversationMessages(currentConversationId, [
+        { role: 'user', content },
+        { role: 'assistant', content: res.reply || '' },
+      ]);
 
       // If the user switched conversations while the request was in flight,
       // let a later refetch populate that thread instead of appending into the wrong UI.
       if (options.activeConversationId.value === currentConversationId) {
         options.messages.value.push({
           role: 'assistant',
-          content: res.data.reply || '',
+          content: res.reply || '',
         });
       }
 
       options.syncConversationSummary({
-        id: res.data.conversation_id,
-        title: res.data.title,
-        context_mode: res.data.context_mode,
-        created_at: currentConversation?.created_at || Math.floor(Date.now() / 1000),
-        updated_at: Math.floor(Date.now() / 1000),
+        id: detail.id,
+        title: detail.title,
+        context_mode: detail.context_mode,
+        created_at: currentConversation?.created_at || detail.created_at,
+        updated_at: detail.updated_at,
         message_count: options.activeConversationId.value === currentConversationId
           ? options.messages.value.length
           : optimisticMessageCount + 1,
         messages: [],
       });
     } catch (error: any) {
-      options.errorMessage.value = error.response?.data?.detail || error.message || 'AI 对话失败';
+      options.errorMessage.value = (error as Error).message || 'AI 对话失败';
       if (options.activeConversationId.value === currentConversationId) {
         options.messages.value = options.messages.value.filter((message, index) => {
           return !(index === options.messages.value.length - 1 && message.role === 'user' && message.content === content);

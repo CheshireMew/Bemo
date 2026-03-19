@@ -1,7 +1,13 @@
 import { computed, nextTick, ref, watch, type Ref } from 'vue';
-import axios from 'axios';
-import { API_BASE } from '../config';
 import { isAiChatOpen } from '../store/ui';
+import {
+  appendConversationMessages,
+  createConversation as createLocalConversation,
+  deleteConversation as deleteLocalConversation,
+  getConversation,
+  listConversations as listLocalConversations,
+  updateConversation as updateLocalConversation,
+} from '../domain/ai/localAiConversations';
 
 export type TimeRange = 'filtered' | 'all-notes' | 'day' | 'week' | 'month' | 'year';
 
@@ -82,8 +88,7 @@ export function useAiConversations(options: UseAiConversationsOptions) {
   const loadConversations = async () => {
     try {
       isLoadingList.value = true;
-      const res = await axios.get(`${API_BASE}/ai/conversations`);
-      conversations.value = res.data || [];
+      conversations.value = listLocalConversations();
     } catch (error) {
       console.error('Failed to load AI conversations.', error);
     } finally {
@@ -93,8 +98,7 @@ export function useAiConversations(options: UseAiConversationsOptions) {
 
   const selectConversation = async (conversationId: string) => {
     try {
-      const res = await axios.get(`${API_BASE}/ai/conversations/${conversationId}`);
-      const detail = res.data as ConversationDetail;
+      const detail = getConversation(conversationId) as ConversationDetail;
       activeConversationId.value = detail.id;
       options.selectedRange.value = detail.context_mode || null;
       options.messages.value = detail.messages.map((message) => ({
@@ -111,11 +115,10 @@ export function useAiConversations(options: UseAiConversationsOptions) {
 
   const createConversation = async (input?: { title?: string; contextMode?: TimeRange | null }) => {
     try {
-      const res = await axios.post(`${API_BASE}/ai/conversations`, {
-        title: input?.title?.trim() || '新对话',
-        context_mode: input?.contextMode ?? null,
-      });
-      const detail = res.data as ConversationDetail;
+      const detail = createLocalConversation(
+        input?.title?.trim() || '新对话',
+        input?.contextMode ?? null,
+      ) as ConversationDetail;
       activeConversationId.value = detail.id;
       options.selectedRange.value = detail.context_mode || null;
       options.messages.value = [];
@@ -131,10 +134,10 @@ export function useAiConversations(options: UseAiConversationsOptions) {
     const normalizedTitle = nextTitle.trim();
     if (!normalizedTitle || normalizedTitle === conversation.title) return;
     try {
-      const res = await axios.patch(`${API_BASE}/ai/conversations/${conversation.id}`, {
+      const detail = updateLocalConversation(conversation.id, {
         title: normalizedTitle,
-      });
-      syncConversationSummary(res.data as ConversationDetail);
+      }) as ConversationDetail;
+      syncConversationSummary(detail);
       if (activeConversationId.value === conversation.id) {
         await selectConversation(conversation.id);
       }
@@ -145,7 +148,7 @@ export function useAiConversations(options: UseAiConversationsOptions) {
 
   const deleteConversation = async (conversation: ConversationSummary) => {
     try {
-      await axios.delete(`${API_BASE}/ai/conversations/${conversation.id}`);
+      deleteLocalConversation(conversation.id);
       const nextConversations = conversations.value.filter((item) => item.id !== conversation.id);
       conversations.value = nextConversations;
 
@@ -170,10 +173,10 @@ export function useAiConversations(options: UseAiConversationsOptions) {
   const updateConversationContext = async (contextMode: TimeRange | null) => {
     if (!activeConversationId.value) return;
     try {
-      const res = await axios.patch(`${API_BASE}/ai/conversations/${activeConversationId.value}`, {
+      const detail = updateLocalConversation(activeConversationId.value, {
         context_mode: contextMode,
-      });
-      syncConversationSummary(res.data as ConversationDetail);
+      }) as ConversationDetail;
+      syncConversationSummary(detail);
     } catch (error) {
       console.error('Failed to update conversation context.', error);
     }
@@ -201,6 +204,7 @@ export function useAiConversations(options: UseAiConversationsOptions) {
   return {
     activeConversation,
     activeConversationId,
+    appendConversationMessages,
     conversationListRef,
     conversations,
     createConversation,

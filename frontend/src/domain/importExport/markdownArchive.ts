@@ -1,0 +1,344 @@
+import JSZip from 'jszip';
+
+import { getReferencedAttachmentFilenames } from '../attachments/attachmentRefStorage.js';
+import { getAllAttachmentBlobRecords, putAttachmentBlob } from '../attachments/blobStorage.js';
+import { getCachedNotes } from '../notes/notesStorage.js';
+import type { NoteMeta } from '../notes/notesTypes.js';
+import { getTrashNotes } from '../notes/trashStorage.js';
+import { extractAttachmentFilename } from '../../utils/attachmentUrls.js';
+import { extractAttachmentUrlsFromContent } from '../../utils/syncAttachments.js';
+import { replaceNoteAttachmentRefsForScope } from '../attachments/attachmentRefStorage.js';
+import { setCachedNotes } from '../notes/notesStorage.js';
+import { setTrashNotes } from '../notes/trashStorage.js';
+import { clearConflicts } from '../sync/conflictStorage.js';
+import { clearMutationLog } from '../sync/mutationLogStorage.js';
+import { removeSyncStateValue } from '../sync/syncStateStorage.js';
+
+type ArchiveManifest = {
+  format: 'bemo-markdown-archive';
+  version: 1;
+  exported_at: string;
+  notes: number;
+  trash: number;
+  attachments: number;
+};
+
+type ParsedFrontmatter = {
+  note_id: string;
+  filename: string;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+  pinned: boolean;
+  tags: string[];
+};
+
+function escapeYamlString(value: string) {
+  return JSON.stringify(String(value ?? ''));
+}
+
+function normalizeArchivePath(value: string) {
+  return value.replace(/\\/g, '/').replace(/^\/+/, '');
+}
+
+function getDirectoryDepth(path: string) {
+  const normalized = normalizeArchivePath(path);
+  const segments = normalized.split('/').filter(Boolean);
+  return Math.max(0, segments.length - 1);
+}
+
+function buildRelativeAttachmentPath(notePath: string, filename: string) {
+  const prefix = Array.from({ length: getDirectoryDepth(notePath) }, () => '..').join('/');
+  return `${prefix ? `${prefix}/` : ''}attachments/${encodeURIComponent(filename)}`;
+}
+
+function guessMimeType(path: string) {
+  const normalized = path.toLowerCase();
+  if (normalized.endsWith('.png')) return 'image/png';
+  if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) return 'image/jpeg';
+  if (normalized.endsWith('.gif')) return 'image/gif';
+  if (normalized.endsWith('.webp')) return 'image/webp';
+  if (normalized.endsWith('.svg')) return 'image/svg+xml';
+  if (normalized.endsWith('.mp3')) return 'audio/mpeg';
+  if (normalized.endsWith('.m4a')) return 'audio/mp4';
+  if (normalized.endsWith('.wav')) return 'audio/wav';
+  if (normalized.endsWith('.ogg')) return 'audio/ogg';
+  if (normalized.endsWith('.mp4')) return 'video/mp4';
+  if (normalized.endsWith('.pdf')) return 'application/pdf';
+  return 'application/octet-stream';
+}
+
+function buildArchiveAttachmentPrefix(notePath: string) {
+  const prefix = Array.from({ length: getDirectoryDepth(notePath) }, () => '..').join('/');
+  return `${prefix ? `${prefix}/` : ''}attachments/`;
+}
+
+function rewriteAttachmentUrls(content: string, notePath: string) {
+  let next = content;
+  for (const url of extractAttachmentUrlsFromContent(content)) {
+    const filename = extractAttachmentFilename(url);
+    if (!filename) continue;
+    const relative = buildRelativeAttachmentPath(notePath, filename);
+    next = next.split(url).join(relative);
+  }
+  return next;
+}
+
+function restoreAttachmentUrls(content: string, notePath: string) {
+  const prefix = buildArchiveAttachmentPrefix(notePath)
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`${prefix}([^\\s)"'\`>]+)`, 'g');
+  return content.replace(pattern, (_match, encodedFilename: string) => {
+    try {
+      return `/images/${decodeURIComponent(encodedFilename)}`;
+    } catch {
+      return `/images/${encodedFilename}`;
+    }
+  });
+}
+
+function buildFrontmatter(note: NoteMeta) {
+  const tags = (note.tags || []).map((tag) => `  - ${String(tag)}`).join('\n');
+  return [
+    '---',
+    `note_id: ${escapeYamlString(note.note_id)}`,
+    `filename: ${escapeYamlString(note.filename)}`,
+    `revision: ${Math.max(1, Number(note.revision) || 1)}`,
+    `created_at: ${escapeYamlString(new Date(note.created_at * 1000).toISOString())}`,
+    `updated_at: ${escapeYamlString(new Date(note.updated_at * 1000).toISOString())}`,
+    `pinned: ${note.pinned ? 'true' : 'false'}`,
+    'tags:',
+    tags || '  []',
+    '---',
+  ].join('\n');
+}
+
+function sortNotes(notes: NoteMeta[]) {
+  return [...notes].sort((a, b) => {
+    if (a.created_at !== b.created_at) {
+      return a.created_at - b.created_at;
+    }
+    return a.filename.localeCompare(b.filename);
+  });
+}
+
+function buildMarkdownDocument(note: NoteMeta, archivePath: string) {
+  const title = note.title || note.filename.replace(/\.md$/i, '') || 'Untitled';
+  const content = rewriteAttachmentUrls(note.content || '', archivePath);
+
+  return [
+    `# ${title}`,
+    '',
+    buildFrontmatter(note),
+    '',
+    content,
+    '',
+  ].join('\n');
+}
+
+function parseYamlScalar(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('"') || trimmed.startsWith('\'')) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed.slice(1, -1);
+    }
+  }
+  return trimmed;
+}
+
+function parseFrontmatterBlock(block: string): ParsedFrontmatter {
+  const lines = block.split(/\r?\n/);
+  const result: ParsedFrontmatter = {
+    note_id: '',
+    filename: '',
+    revision: 1,
+    created_at: new Date(0).toISOString(),
+    updated_at: new Date(0).toISOString(),
+    pinned: false,
+    tags: [],
+  };
+
+  let currentKey = '';
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    if (/^\s+-\s+/.test(line) && currentKey === 'tags') {
+      result.tags.push(parseYamlScalar(line.replace(/^\s+-\s+/, '')));
+      continue;
+    }
+
+    const separatorIndex = line.indexOf(':');
+    if (separatorIndex === -1) continue;
+    const key = line.slice(0, separatorIndex).trim();
+    const rawValue = line.slice(separatorIndex + 1).trim();
+    currentKey = key;
+
+    if (key === 'note_id') result.note_id = String(parseYamlScalar(rawValue) || '');
+    if (key === 'filename') result.filename = String(parseYamlScalar(rawValue) || '');
+    if (key === 'revision') result.revision = Math.max(1, Number(parseYamlScalar(rawValue)) || 1);
+    if (key === 'created_at') result.created_at = String(parseYamlScalar(rawValue) || result.created_at);
+    if (key === 'updated_at') result.updated_at = String(parseYamlScalar(rawValue) || result.updated_at);
+    if (key === 'pinned') result.pinned = String(parseYamlScalar(rawValue)).toLowerCase() === 'true';
+    if (key === 'tags' && rawValue === '[]') result.tags = [];
+  }
+
+  return result;
+}
+
+function parseMarkdownArchiveDocument(raw: string, archivePath: string): NoteMeta {
+  const normalized = raw.replace(/\r\n/g, '\n');
+  const frontmatterMatch = normalized.match(/^# .*?\n\n---\n([\s\S]*?)\n---\n\n?([\s\S]*)$/);
+  if (!frontmatterMatch) {
+    throw new Error(`归档笔记格式不正确: ${archivePath}`);
+  }
+
+  const frontmatter = parseFrontmatterBlock(frontmatterMatch[1] || '');
+  const content = restoreAttachmentUrls((frontmatterMatch[2] || '').trim(), archivePath);
+  const createdAtMs = Date.parse(frontmatter.created_at);
+  const updatedAtMs = Date.parse(frontmatter.updated_at);
+
+  return {
+    note_id: frontmatter.note_id || archivePath,
+    revision: Math.max(1, frontmatter.revision || 1),
+    filename: frontmatter.filename || archivePath.replace(/^(notes|trash)\//, ''),
+    title: content.split('\n').find(Boolean)?.replace(/^#+\s*/, '').slice(0, 80) || '未命名笔记',
+    created_at: Math.floor((Number.isNaN(createdAtMs) ? Date.now() : createdAtMs) / 1000),
+    updated_at: Math.floor((Number.isNaN(updatedAtMs) ? Date.now() : updatedAtMs) / 1000),
+    content,
+    tags: frontmatter.tags,
+    pinned: frontmatter.pinned,
+  };
+}
+
+function collectReferencedAttachmentFilenames(notes: NoteMeta[]) {
+  const filenames = new Set<string>();
+  for (const note of notes) {
+    for (const url of extractAttachmentUrlsFromContent(note.content || '')) {
+      const filename = extractAttachmentFilename(url);
+      if (filename) {
+        filenames.add(filename);
+      }
+    }
+  }
+  return filenames;
+}
+
+export async function buildMarkdownArchiveBlob() {
+  const [notes, trash, attachments] = await Promise.all([
+    getCachedNotes(),
+    getTrashNotes(),
+    getAllAttachmentBlobRecords(),
+  ]);
+
+  const zip = new JSZip();
+  const referencedFilenames = new Set<string>([
+    ...await getReferencedAttachmentFilenames(['active', 'trash']),
+    ...collectReferencedAttachmentFilenames([...notes, ...trash]),
+  ]);
+
+  sortNotes(notes).forEach((note) => {
+    const archivePath = `notes/${normalizeArchivePath(note.filename)}`;
+    zip.file(archivePath, buildMarkdownDocument(note, archivePath));
+  });
+
+  sortNotes(trash).forEach((note) => {
+    const archivePath = `trash/${normalizeArchivePath(note.filename)}`;
+    zip.file(archivePath, buildMarkdownDocument(note, archivePath));
+  });
+
+  let archivedAttachmentCount = 0;
+  for (const attachment of attachments) {
+    if (!referencedFilenames.has(attachment.filename)) continue;
+    const arrayBuffer = await attachment.blob.arrayBuffer();
+    zip.file(`attachments/${attachment.filename}`, arrayBuffer);
+    archivedAttachmentCount += 1;
+  }
+
+  const manifest: ArchiveManifest = {
+    format: 'bemo-markdown-archive',
+    version: 1,
+    exported_at: new Date().toISOString(),
+    notes: notes.length,
+    trash: trash.length,
+    attachments: archivedAttachmentCount,
+  };
+  zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+
+  return zip.generateAsync({ type: 'blob' });
+}
+
+export async function parseMarkdownArchive(file: File) {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const manifestText = await zip.file('manifest.json')?.async('string');
+  if (!manifestText) {
+    throw new Error('Markdown 归档 zip 缺少 manifest.json');
+  }
+
+  const manifest = JSON.parse(manifestText) as Partial<ArchiveManifest>;
+  if (manifest.format !== 'bemo-markdown-archive' || manifest.version !== 1) {
+    throw new Error('不支持的 Markdown 归档格式');
+  }
+
+  const notes: NoteMeta[] = [];
+  const trash: NoteMeta[] = [];
+  const attachments: Array<{ filename: string; mime_type: string; data: Uint8Array }> = [];
+
+  for (const entry of Object.values(zip.files)) {
+    if (entry.dir) continue;
+    if (entry.name === 'manifest.json') continue;
+
+    if (entry.name.startsWith('notes/') && entry.name.endsWith('.md')) {
+      notes.push(parseMarkdownArchiveDocument(await entry.async('string'), entry.name));
+      continue;
+    }
+    if (entry.name.startsWith('trash/') && entry.name.endsWith('.md')) {
+      trash.push(parseMarkdownArchiveDocument(await entry.async('string'), entry.name));
+      continue;
+    }
+    if (entry.name.startsWith('attachments/')) {
+      const filename = entry.name.slice('attachments/'.length);
+      attachments.push({
+        filename: decodeURIComponent(filename),
+        mime_type: guessMimeType(filename),
+        data: await entry.async('uint8array'),
+      });
+    }
+  }
+
+  return { notes, trash, attachments };
+}
+
+export async function importMarkdownArchive(file: File) {
+  const { notes, trash, attachments } = await parseMarkdownArchive(file);
+
+  await setCachedNotes(notes);
+  await setTrashNotes(trash);
+  await Promise.all([
+    replaceNoteAttachmentRefsForScope('active', notes),
+    replaceNoteAttachmentRefsForScope('trash', trash),
+  ]);
+
+  for (const attachment of attachments) {
+    await putAttachmentBlob({
+      filename: attachment.filename,
+      blob: new Blob([Uint8Array.from(attachment.data)], { type: attachment.mime_type || 'application/octet-stream' }),
+      mimeType: attachment.mime_type || 'application/octet-stream',
+    });
+  }
+
+  await clearMutationLog();
+  await clearConflicts();
+  await Promise.all([
+    removeSyncStateValue('server_cursor'),
+    removeSyncStateValue('webdav_cursor'),
+    removeSyncStateValue('server_last_sync_at'),
+    removeSyncStateValue('webdav_last_sync_at'),
+  ]);
+
+  return {
+    imported_notes: notes.length + trash.length,
+    imported_images: attachments.length,
+    imported_note_records: [],
+  };
+}

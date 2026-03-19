@@ -1,7 +1,10 @@
 import { onBeforeUnmount, watch, type Ref } from 'vue';
 import { settings } from '../store/settings';
+import { deleteAttachmentRefsForOwner, extractAttachmentFilenames, replaceAttachmentRefsForOwner } from '../domain/attachments/attachmentRefStorage.js';
+import { clearDraftAttachmentSession, pruneDraftAttachmentsForContent } from '../utils/localAttachments.js';
 
 type UseEditorDraftOptions = {
+  attachmentSessionKey: Ref<string>;
   autosaveDraft: boolean;
   draftStorageKey: string;
   content: Ref<string>;
@@ -19,18 +22,30 @@ export function useEditorDraft(options: UseEditorDraftOptions) {
       tagInput: options.tagInput.value,
       showTagInput: options.showTagInput.value,
       showPreview: options.showPreview.value,
+      attachmentSessionKey: options.attachmentSessionKey.value,
     };
 
     if (!payload.content.trim() && !payload.tagInput.trim()) {
       localStorage.removeItem(options.draftStorageKey);
+      void deleteAttachmentRefsForOwner('draft', options.draftStorageKey);
+      void clearDraftAttachmentSession(options.attachmentSessionKey.value);
       return;
     }
 
     localStorage.setItem(options.draftStorageKey, JSON.stringify(payload));
+    void replaceAttachmentRefsForOwner({
+      ownerType: 'draft',
+      ownerId: options.draftStorageKey,
+      scope: 'draft',
+      filenames: extractAttachmentFilenames(options.content.value),
+    });
+    void pruneDraftAttachmentsForContent(options.attachmentSessionKey.value, options.content.value);
   };
 
   const clearDraft = () => {
     localStorage.removeItem(options.draftStorageKey);
+    void deleteAttachmentRefsForOwner('draft', options.draftStorageKey);
+    void clearDraftAttachmentSession(options.attachmentSessionKey.value);
   };
 
   const queueAutoSave = () => {
@@ -65,6 +80,7 @@ export function useEditorDraft(options: UseEditorDraftOptions) {
         tagInput: string;
         showTagInput: boolean;
         showPreview: boolean;
+        attachmentSessionKey: string;
       }>;
     } catch (error) {
       console.warn('Failed to restore draft.', error);
@@ -84,6 +100,10 @@ export function useEditorDraft(options: UseEditorDraftOptions) {
     queueAutoSave();
   });
 
+  watch(options.showPreview, () => {
+    queueAutoSave();
+  });
+
   watch(() => settings.editor.autoSaveEnabled, (enabled) => {
     if (!options.autosaveDraft) return;
     if (enabled) {
@@ -96,6 +116,7 @@ export function useEditorDraft(options: UseEditorDraftOptions) {
   onBeforeUnmount(() => {
     if (autoSaveTimer) {
       window.clearTimeout(autoSaveTimer);
+      saveDraft();
     }
   });
 

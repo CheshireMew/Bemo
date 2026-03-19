@@ -7,7 +7,8 @@ from services.image_reference_service import (
     delete_unreferenced_images,
     extract_referenced_images_from_body,
 )
-from services.note_repository import cleanup_empty_dirs, collect_notes_recursive, parse_frontmatter
+from services import note_index_repository
+from services.note_repository import cleanup_empty_dirs, collect_notes_recursive, normalize_note_meta, parse_frontmatter
 from services.service_errors import NotFoundError
 
 TRASH_RETENTION_DAYS = 90
@@ -45,10 +46,13 @@ def restore_note(filepath: str, *, notes_dir: str, trash_dir: str) -> dict:
     if not os.path.exists(trash_path):
         raise NotFoundError("Note not found in trash")
 
+    meta, _body = parse_frontmatter(trash_path)
+    note_id = str(normalize_note_meta(meta)["note_id"])
     notes_path = os.path.join(notes_dir, normalized)
     os.makedirs(os.path.dirname(notes_path), exist_ok=True)
     shutil.move(trash_path, notes_path)
     cleanup_empty_dirs(os.path.dirname(trash_path), trash_dir)
+    note_index_repository.upsert_note_path(note_id, normalized)
     return {"message": "Note restored", "filename": normalized}
 
 
@@ -81,8 +85,11 @@ def move_note_to_trash(filepath: str, *, notes_dir: str, trash_dir: str) -> dict
     if not os.path.exists(full_path):
         raise NotFoundError("Note not found")
 
+    meta, _body = parse_frontmatter(full_path)
+    note_id = str(normalize_note_meta(meta)["note_id"])
     trash_path = os.path.join(trash_dir, normalized)
     os.makedirs(os.path.dirname(trash_path), exist_ok=True)
     shutil.move(full_path, trash_path)
     cleanup_empty_dirs(os.path.dirname(full_path), notes_dir)
+    note_index_repository.remove_note_path(note_id)
     return {"message": "Note moved to trash"}

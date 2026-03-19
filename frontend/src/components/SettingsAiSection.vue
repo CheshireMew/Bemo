@@ -13,12 +13,15 @@
           <span class="field-label">启用 AI 功能</span>
           <span class="field-hint">关闭后保留配置，但前端不展示 AI 相关能力。</span>
         </div>
-        <input v-model="settings.ai.enabled" type="checkbox" @change="persistAiSettings" />
+        <div class="toggle-switch-wrapper">
+          <input v-model="draftAi.enabled" type="checkbox" />
+          <span class="toggle-switch-slider"></span>
+        </div>
       </label>
 
       <label class="field-row">
         <span class="field-label">Provider</span>
-        <select v-model="settings.ai.provider" @change="handleProviderChange">
+        <select v-model="draftAi.provider" @change="handleProviderChange">
           <option value="openai">OpenAI</option>
           <option value="deepseek">DeepSeek</option>
           <option value="openai-compatible">OpenAI Compatible</option>
@@ -28,7 +31,7 @@
 
       <label class="field-row">
         <span class="field-label">Base URL</span>
-        <input v-model.trim="settings.ai.baseUrl" type="url" :placeholder="baseUrlPlaceholder" @change="persistAiSettings" />
+        <input v-model.trim="draftAi.baseUrl" type="url" :placeholder="baseUrlPlaceholder" />
       </label>
 
       <div class="field-row field-row-top">
@@ -43,42 +46,67 @@
             autocorrect="off"
             spellcheck="false"
             @input="handleApiKeyInput"
-            @change="saveApiKey"
           />
         </div>
       </div>
       <p class="field-hint ai-warning">
-        输入新 Key 后失焦会自动保存到后端；前端不会回读明文。
+        输入新 Key 后，点击“保存 AI 配置”才会写入本地设置；界面不会回显完整明文。
       </p>
 
       <label class="field-row">
         <span class="field-label">模型</span>
-        <input v-model.trim="settings.ai.model" type="text" :placeholder="modelPlaceholder" @change="persistAiSettings" />
+        <input v-model.trim="draftAi.model" type="text" :placeholder="modelPlaceholder" />
       </label>
 
       <label class="field-row field-row-top">
         <span class="field-label">系统提示词</span>
         <textarea
-          v-model="settings.ai.systemPrompt"
+          v-model="draftAi.systemPrompt"
           class="system-prompt-input"
           placeholder="默认留空；只有填写后才会作为 system 提示词发送给模型。"
-          @change="persistAiSettings"
         />
       </label>
 
       <p class="field-hint ai-hint">{{ providerHint }}</p>
+
+      <div class="button-row">
+        <button type="button" class="secondary-btn" :disabled="!isDirty || isSavingAi" @click="resetDraft">
+          取消修改
+        </button>
+        <button
+          v-if="settings.ai.hasApiKey"
+          type="button"
+          class="secondary-btn"
+          :disabled="isSavingAi"
+          @click="clearApiKey"
+        >
+          清除已保存的 API Key
+        </button>
+        <button type="button" class="primary-btn" :disabled="!isDirty || isSavingAi" @click="persistAiSettings">
+          {{ isSavingAi ? '保存中...' : '保存 AI 配置' }}
+        </button>
+      </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 
-import { saveAiSettings } from '../services/aiSettings';
+import { clearAiApiKey, saveAiSettings, type AiSettingsDraft } from '../domain/ai/localAiSettings';
+import { pushNotification } from '../store/notifications';
 import { settings } from '../store/settings';
+import type { AiProvider } from '../store/settings';
 
 const apiKeyInput = ref('');
 const isSavingAi = ref(false);
+const draftAi = reactive<AiSettingsDraft>({
+  enabled: false,
+  provider: 'openai' as AiProvider,
+  baseUrl: '',
+  model: '',
+  systemPrompt: '',
+});
 
 const providerDefaults = {
   openai: {
@@ -100,71 +128,108 @@ const providerDefaults = {
 } as const;
 
 watch(
-  () => settings.ai.maskedApiKey,
-  (maskedValue) => {
-    apiKeyInput.value = maskedValue || '';
+  () => ({
+    enabled: settings.ai.enabled,
+    provider: settings.ai.provider,
+    baseUrl: settings.ai.baseUrl,
+    model: settings.ai.model,
+    systemPrompt: settings.ai.systemPrompt,
+    maskedApiKey: settings.ai.maskedApiKey,
+  }),
+  (next) => {
+    draftAi.enabled = next.enabled;
+    draftAi.provider = next.provider;
+    draftAi.baseUrl = next.baseUrl;
+    draftAi.model = next.model;
+    draftAi.systemPrompt = next.systemPrompt;
+    apiKeyInput.value = next.maskedApiKey || '';
   },
   { immediate: true },
 );
 
+const isDirty = computed(() => {
+  const hasDraftApiKey = !!apiKeyInput.value.trim() && apiKeyInput.value.trim() !== settings.ai.maskedApiKey;
+  return (
+    draftAi.enabled !== settings.ai.enabled
+    || draftAi.provider !== settings.ai.provider
+    || draftAi.baseUrl !== settings.ai.baseUrl
+    || draftAi.model !== settings.ai.model
+    || draftAi.systemPrompt !== settings.ai.systemPrompt
+    || hasDraftApiKey
+  );
+});
+
 const persistAiSettings = async () => {
   try {
     isSavingAi.value = true;
-    await saveAiSettings();
+    const nextKey = apiKeyInput.value.trim();
+    await saveAiSettings({
+      values: {
+        enabled: draftAi.enabled,
+        provider: draftAi.provider,
+        baseUrl: draftAi.baseUrl.trim(),
+        model: draftAi.model.trim(),
+        systemPrompt: draftAi.systemPrompt,
+      },
+      apiKey: nextKey && nextKey !== settings.ai.maskedApiKey ? nextKey : undefined,
+    });
   } catch (error) {
     console.error('Failed to save AI settings.', error);
-    alert('保存 AI 配置失败');
+    pushNotification('保存 AI 配置失败', 'error');
   } finally {
     isSavingAi.value = false;
   }
 };
 
 const baseUrlPlaceholder = computed(() => {
-  return providerDefaults[settings.ai.provider].baseUrl || 'https://your-openai-compatible-host';
+  return providerDefaults[draftAi.provider].baseUrl || 'https://your-openai-compatible-host';
 });
 
 const modelPlaceholder = computed(() => {
-  return providerDefaults[settings.ai.provider].model || '输入模型名';
+  return providerDefaults[draftAi.provider].model || '输入模型名';
 });
 
 const providerHint = computed(() => {
-  if (settings.ai.provider === 'deepseek') {
+  if (draftAi.provider === 'deepseek') {
     return 'DeepSeek 兼容 OpenAI API。推荐 Base URL 使用 https://api.deepseek.com，常用模型可填 deepseek-chat 或 deepseek-reasoner。';
   }
-  if (settings.ai.provider === 'openai') {
+  if (draftAi.provider === 'openai') {
     return 'OpenAI 默认地址为 https://api.openai.com/v1，可按需填写具体模型名。';
   }
-  if (settings.ai.provider === 'openai-compatible') {
+  if (draftAi.provider === 'openai-compatible') {
     return '填写兼容 OpenAI API 的服务地址、密钥和模型名。';
   }
   return '自定义 Provider 需要你手动填写完整的 Base URL、API Key 和模型名。';
 });
 
 const handleProviderChange = () => {
-  const defaults = providerDefaults[settings.ai.provider];
-  settings.ai.baseUrl = defaults.baseUrl;
+  const defaults = providerDefaults[draftAi.provider];
+  draftAi.baseUrl = defaults.baseUrl;
 
-  if (!settings.ai.model.trim() || Object.values(providerDefaults).some((value) => value.model === settings.ai.model.trim())) {
-    settings.ai.model = defaults.model;
+  if (!draftAi.model.trim() || Object.values(providerDefaults).some((value) => value.model === draftAi.model.trim())) {
+    draftAi.model = defaults.model;
   }
-
-  void persistAiSettings();
 };
 
-const saveApiKey = async () => {
-  const nextKey = apiKeyInput.value.trim();
-  if (!nextKey || nextKey === settings.ai.maskedApiKey) return;
-
+const clearApiKey = async () => {
   try {
     isSavingAi.value = true;
-    await saveAiSettings({ apiKey: nextKey });
-    apiKeyInput.value = settings.ai.maskedApiKey;
+    await clearAiApiKey();
   } catch (error) {
-    console.error('Failed to save AI API key.', error);
-    alert('保存 API Key 失败');
+    console.error('Failed to clear AI API key.', error);
+    pushNotification('清除 API Key 失败', 'error');
   } finally {
     isSavingAi.value = false;
   }
+};
+
+const resetDraft = () => {
+  draftAi.enabled = settings.ai.enabled;
+  draftAi.provider = settings.ai.provider;
+  draftAi.baseUrl = settings.ai.baseUrl;
+  draftAi.model = settings.ai.model;
+  draftAi.systemPrompt = settings.ai.systemPrompt;
+  apiKeyInput.value = settings.ai.maskedApiKey;
 };
 
 const handleApiKeyInput = (event: Event) => {
@@ -248,8 +313,7 @@ const handleApiKeyInput = (event: Event) => {
 }
 
 .field-row input:focus,
-.field-row select:focus,
-.system-prompt-input:focus {
+.field-row select:focus {
   outline: 2px solid color-mix(in srgb, var(--accent-color, #31d279) 20%, transparent);
   border-color: var(--accent-color, #31d279);
 }
@@ -274,6 +338,11 @@ const handleApiKeyInput = (event: Event) => {
   resize: vertical;
 }
 
+.system-prompt-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent-color, #31d279) 20%, transparent);
+  border-color: var(--accent-color, #31d279);
+}
+
 .ai-hint {
   margin-top: -4px;
 }
@@ -281,6 +350,39 @@ const handleApiKeyInput = (event: Event) => {
 .ai-warning {
   margin-top: -10px;
   color: #b45309;
+}
+
+.button-row {
+  display: flex;
+  justify-content: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.primary-btn,
+.secondary-btn {
+  border: none;
+  border-radius: var(--radius-md, 0.5rem);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 10px 14px;
+  font-weight: 600;
+}
+
+.primary-btn {
+  background: var(--accent-color, #31d279);
+  color: #fff;
+}
+
+.secondary-btn {
+  background: var(--bg-main, #f4f5f7);
+  color: var(--text-primary, #18181b);
+}
+
+.primary-btn:disabled,
+.secondary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @media (max-width: 768px) {

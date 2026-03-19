@@ -1,0 +1,300 @@
+/* Settings Interface Shared Styles */
+
+/* Base Layouts */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section-header,
+.toggle-row,
+.field-row,
+.button-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.section-header {
+  align-items: flex-start;
+}
+
+.section-inline-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.section-header h3,
+.settings-card h4 {
+  margin: 0;
+  color: var(--text-primary, #18181b);
+}
+
+.section-header p,
+.settings-card p,
+.field-hint {
+  margin: 6px 0 0;
+  color: var(--text-secondary, #71717a);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.section-badge {
+  background: var(--accent-sidebar-bg, #e6f7ef);
+  color: var(--accent-color, #31d279);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  align-self: flex-start;
+  white-space: nowrap;
+}
+
+/* Cards */
+.card-grid {
+  display: grid;
+  gap: 16px;
+}
+.card-grid.two-up { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.card-grid.three-up { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.settings-card {
+  background: var(--bg-card, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--border-color, #e4e4e7) 80%, transparent);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.03);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-card:hover {
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.05);
+  border-color: color-mix(in srgb, var(--border-color, #e4e4e7) 60%, var(--accent-color, #31d279));
+}
+
+.form-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.danger-card {
+  border-color: color-mix(in srgb, #dc2626 28%, var(--border-color, #e4e4e7));
+  background: color-mix(in srgb, #fff5f5 72%, var(--bg-card, #ffffff));
+}
+
+.danger-card:hover {
+  border-color: color-mix(in srgb, #dc2626 40%, var(--border-color, #e4e4e7));
+}
+
+/* Field Rows */
+.toggle-row,
+.field-row {
+  align-items: center;
+}
+
+.field-row {
+  flex-wrap: wrap;
+}
+
+.field-row-top {
+  align-items: flex-start;
+}
+
+.field-label {
+  display: block;
+  font-weight: 600;
+  color: var(--text-primary, #18181b);
+}
+
+.field-input,
+.field-row input,
+.field-row select,
+.field-input-stack {
+  min-width: 220px;
+}
+
+.field-row input,
+.field-row select {
+  border: 1px solid var(--border-color, #d4d4d8);
+  background: var(--bg-card, #fff);
+  color: var(--text-primary, #18181b);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  transition: all 0.2s ease;
+}
+
+.field-row input:focus,
+.field-row select:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent-color, #31d279) 20%, transparent);
+  border-color: var(--accent-color, #31d279);
+}
+
+.with-suffix {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.with-suffix input {
+  width: 88px;
+  min-width: 88px;
+}
+
+/* Buttons */
+.button-row {
+  margin-top: 16px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.settings-card > .button-row {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.primary-btn,
+.secondary-btn,
+.danger-btn {
+  border: none;
+  border-radius: var(--radius-md, 0.5rem);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 10px 14px;
+  font-weight: 600;
+}
+
+.primary-btn {
+  background: var(--accent-color, #31d279);
+  color: #fff;
+}
+.primary-btn:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.secondary-btn {
+  background: var(--bg-main, #f4f5f7);
+  color: var(--text-primary, #18181b);
+}
+.secondary-btn:hover:not(:disabled) {
+  background: var(--border-color, #e4e4e7);
+}
+
+.danger-btn {
+  background: #dc2626;
+  color: #fff;
+}
+.danger-btn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+.subtle-danger-btn {
+  background: #991b1b;
+}
+
+.primary-btn:disabled,
+.secondary-btn:disabled,
+.danger-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Helper panels */
+.helper-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color, #e4e4e7);
+  background: var(--bg-main, #f4f5f7);
+  color: var(--text-primary, #18181b);
+}
+
+.helper-panel strong { font-size: 0.92rem; }
+.helper-panel span { color: var(--text-secondary, #71717a); font-size: 0.9rem; line-height: 1.5; }
+.helper-panel-muted { background: color-mix(in srgb, var(--accent-sidebar-bg, #e6f7ef) 28%, white); }
+.helper-panel-warning { margin-top: 16px; border-color: color-mix(in srgb, #f59e0b 28%, var(--border-color, #e4e4e7)); background: #fff8eb; }
+.helper-panel-danger { border-color: color-mix(in srgb, #dc2626 28%, var(--border-color, #e4e4e7)); background: #fff6f6; }
+
+
+/* Custom Toggle Switch (replaces native checkbox) */
+.toggle-switch-wrapper {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.toggle-switch-wrapper input[type="checkbox"] {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-switch-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--border-color, #d4d4d8);
+  transition: .3s;
+  border-radius: 24px;
+}
+
+.toggle-switch-slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.toggle-switch-wrapper input:checked + .toggle-switch-slider {
+  background-color: var(--accent-color, #31d279);
+}
+
+.toggle-switch-wrapper input:focus-visible + .toggle-switch-slider {
+  outline: 2px solid var(--accent-color, #31d279);
+  outline-offset: 2px;
+}
+
+.toggle-switch-wrapper input:checked + .toggle-switch-slider:before {
+  transform: translateX(20px);
+}
+
+/* Base Responsive */
+@media (max-width: 768px) {
+  .card-grid.two-up,
+  .card-grid.three-up {
+    grid-template-columns: 1fr;
+  }
+  .toggle-row,
+  .field-row,
+  .section-inline-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .field-row input,
+  .field-row select,
+  .field-input,
+  .field-input-stack {
+    width: 100%;
+  }
+}

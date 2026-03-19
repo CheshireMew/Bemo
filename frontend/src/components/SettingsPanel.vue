@@ -20,6 +20,7 @@
               :class="{ active: activeTab === tab.id }"
               @click="activeTab = tab.id"
             >
+              <component :is="tab.icon" class="tab-icon" :size="18" />
               <span class="tab-label">{{ tab.label }}</span>
             </button>
           </aside>
@@ -27,13 +28,19 @@
           <div class="settings-content">
             <SettingsSyncSection v-if="activeTab === 'sync'" />
 
+            <SettingsAppearanceSection v-else-if="activeTab === 'appearance'" />
+
+            <SettingsAttachmentsSection v-else-if="activeTab === 'attachments'" />
+
             <SettingsImportExportSection v-else-if="activeTab === 'import-export'" @imported="emit('notesImported')" />
 
             <SettingsEditorSection v-else-if="activeTab === 'editor'" />
 
             <SettingsShortcutsSection v-else-if="activeTab === 'shortcuts'" />
 
-            <SettingsAiSection v-else />
+            <SettingsAiSection v-else-if="activeTab === 'ai'" />
+
+            <SettingsConflictsSection v-else />
           </div>
         </div>
       </section>
@@ -43,16 +50,20 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { Cloud, Paperclip, Download, PenTool, Keyboard, Bot, Palette, ShieldAlert } from 'lucide-vue-next';
+import SettingsAppearanceSection from './SettingsAppearanceSection.vue';
 import SettingsAiSection from './SettingsAiSection.vue';
+import SettingsAttachmentsSection from './SettingsAttachmentsSection.vue';
 import SettingsEditorSection from './SettingsEditorSection.vue';
 import SettingsImportExportSection from './SettingsImportExportSection.vue';
 import SettingsShortcutsSection from './SettingsShortcutsSection.vue';
 import SettingsSyncSection from './SettingsSyncSection.vue';
+import SettingsConflictsSection from './SettingsConflictsSection.vue';
 import { settings } from '../store/settings';
 import { saveSettings } from '../services/localSettings';
 import { useScrollLock } from '../composables/useScrollLock';
 
-type TabId = 'sync' | 'import-export' | 'editor' | 'shortcuts' | 'ai';
+type TabId = 'sync' | 'conflicts' | 'appearance' | 'attachments' | 'import-export' | 'editor' | 'shortcuts' | 'ai';
 
 const props = defineProps<{
   open: boolean;
@@ -63,12 +74,15 @@ const emit = defineEmits<{
   notesImported: [];
 }>();
 
-const tabs: Array<{ id: TabId; label: string }> = [
-  { id: 'sync', label: '同步' },
-  { id: 'import-export', label: '导入导出' },
-  { id: 'editor', label: '编辑器' },
-  { id: 'shortcuts', label: '快捷键说明' },
-  { id: 'ai', label: 'AI' },
+const tabs: Array<{ id: TabId; label: string; icon: any }> = [
+  { id: 'sync', label: '同步', icon: Cloud },
+  { id: 'conflicts', label: '冲突处理', icon: ShieldAlert },
+  { id: 'appearance', label: '外观', icon: Palette },
+  { id: 'attachments', label: '附件', icon: Paperclip },
+  { id: 'import-export', label: '导入导出', icon: Download },
+  { id: 'editor', label: '编辑器', icon: PenTool },
+  { id: 'shortcuts', label: '快捷键', icon: Keyboard },
+  { id: 'ai', label: 'AI', icon: Bot },
 ];
 
 const activeTab = ref<TabId>('sync');
@@ -87,27 +101,42 @@ useScrollLock(computed(() => props.open));
 .settings-overlay {
   position: fixed;
   inset: 0;
-  background: color-mix(in srgb, var(--bg-main) 92%, rgba(15, 23, 42, 0.18));
-  z-index: 200;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--bg-main) 88%, rgba(255, 255, 255, 0.22)) 0%, rgba(255, 255, 255, 0.62) 100%);
+  backdrop-filter: blur(18px);
+  z-index: 400;
   display: flex;
   justify-content: center;
-  padding: 0 max(20px, var(--safe-right)) 0 max(20px, var(--safe-left));
+  align-items: stretch;
+  padding:
+    max(12px, var(--safe-top))
+    max(12px, var(--safe-right))
+    max(12px, var(--safe-bottom))
+    max(12px, var(--safe-left));
 }
 
 .settings-panel {
-  width: min(980px, calc(100vw - 120px));
-  height: 100dvh;
+  width: min(1060px, calc(100vw - 40px - var(--safe-left) - var(--safe-right)));
+  height: calc(100dvh - 28px - var(--safe-top) - var(--safe-bottom));
   background: var(--bg-main);
   display: flex;
   flex-direction: column;
+  border-radius: 28px;
+  border: 1px solid color-mix(in srgb, var(--border-color, #e4e4e7) 88%, white);
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.12);
+  overflow: hidden;
+  transform: translateX(-60px);
 }
 
 .settings-header {
-  padding: 32px 0 24px;
+  padding: 28px 28px 20px;
   display: flex;
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
+  border-bottom: 1px solid var(--border-color, #e4e4e7);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-main) 94%, #eefbf3) 0%, var(--bg-main) 100%);
 }
 
 .settings-header h2,
@@ -145,23 +174,27 @@ useScrollLock(computed(() => props.open));
 
 .close-btn {
   align-self: flex-start;
-  padding: 6px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-color, #e4e4e7);
+  border-radius: 999px;
 }
 
 .close-btn:hover {
   background: var(--bg-card);
+  border-color: color-mix(in srgb, var(--accent-color, #31d279) 25%, var(--border-color, #e4e4e7));
 }
 
 .settings-body {
   min-height: 0;
   display: flex;
   flex: 1;
+  overflow: hidden;
 }
 
 .tab-btn {
   width: 100%;
   text-align: left;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border: 1px solid transparent;
   border-radius: var(--radius-md, 0.5rem);
   background: transparent;
@@ -171,6 +204,7 @@ useScrollLock(computed(() => props.open));
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  gap: 12px;
   font-size: 0.95rem;
   font-weight: 500;
   line-height: 1.45;
@@ -182,7 +216,7 @@ useScrollLock(computed(() => props.open));
   font-weight: 600;
 }
 
-.tab-btn:hover {
+.tab-btn:hover:not(.active) {
   background: var(--border-color, #eaeaea);
   color: var(--text-primary, #333333);
 }
@@ -191,199 +225,43 @@ useScrollLock(computed(() => props.open));
   display: inline-block;
 }
 
-.settings-nav {
-  width: 220px;
+.tab-icon {
   flex-shrink: 0;
-  padding: 0 20px 24px 0;
+  opacity: 0.8;
+}
+
+.tab-btn.active .tab-icon {
+  color: white;
+  opacity: 1;
+}
+
+.settings-nav {
+  width: 280px;
+  flex-shrink: 0;
+  padding: 24px 20px 24px 24px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  background: color-mix(in srgb, var(--bg-main) 86%, #f2fbf6);
 }
 
 .settings-content {
-  padding: 0 0 32px 20px;
+  min-width: 0;
+  padding: 24px 24px 32px 20px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
   flex: 1;
   border-left: 1px solid var(--border-color, #eaeaea);
+  scrollbar-width: none;
 }
 
-.settings-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+.settings-content::-webkit-scrollbar {
+  display: none;
 }
 
-.section-header,
-.toggle-row,
-.field-row,
-.shortcut-list div,
-.button-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-}
 
-.section-badge {
-  background: var(--accent-sidebar-bg, #e6f7ef);
-  color: var(--accent-color, #31d279);
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  align-self: flex-start;
-}
-
-.card-grid {
-  display: grid;
-  gap: 16px;
-}
-
-.card-grid.two-up {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.settings-card {
-  background: var(--bg-card, #ffffff);
-  border: 1px solid var(--border-color, #e4e4e7);
-  border-radius: var(--radius-lg, 0.75rem);
-  padding: 18px;
-}
-
-.form-card {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.toggle-row,
-.field-row {
-  align-items: center;
-}
-
-.field-row {
-  flex-wrap: wrap;
-}
-
-.field-row-top {
-  align-items: flex-start;
-}
-
-.field-label {
-  display: block;
-  font-weight: 600;
-  color: var(--text-primary, #18181b);
-}
-
-.field-input,
-.field-row input,
-.field-row select {
-  min-width: 220px;
-}
-
-.field-input-stack {
-  min-width: 220px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.field-row input,
-.field-row select {
-  border: 1px solid var(--border-color, #d4d4d8);
-  background: var(--bg-card, #fff);
-  color: var(--text-primary, #18181b);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font: inherit;
-}
-
-.field-row input:focus,
-.field-row select:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent-color, #31d279) 20%, transparent);
-  border-color: var(--accent-color, #31d279);
-}
-
-.system-prompt-input {
-  width: min(460px, 100%);
-  min-height: 110px;
-  border: 1px solid var(--border-color, #d4d4d8);
-  background: var(--bg-card, #fff);
-  color: var(--text-primary, #18181b);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font: inherit;
-  line-height: 1.6;
-  resize: vertical;
-}
-
-.system-prompt-input:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent-color, #31d279) 20%, transparent);
-  border-color: var(--accent-color, #31d279);
-}
-
-.ai-hint {
-  margin-top: -4px;
-}
-
-.ai-warning {
-  margin-top: -10px;
-  color: #b45309;
-}
-
-.with-suffix {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.with-suffix input {
-  width: 88px;
-  min-width: 88px;
-}
-
-.button-row {
-  margin-top: 16px;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-}
-
-.primary-btn,
-.secondary-btn {
-  padding: 10px 14px;
-  font-weight: 600;
-}
-
-.primary-btn {
-  background: var(--accent-color, #31d279);
-  color: #fff;
-}
-
-.secondary-btn {
-  background: var(--bg-main, #f4f5f7);
-}
-
-.shortcut-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.shortcut-list div {
-  align-items: center;
-}
-
-kbd {
-  background: var(--bg-card, #fff);
-  border: 1px solid var(--border-color, #d4d4d8);
-  border-bottom-width: 2px;
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 0.85rem;
-}
 
 @media (max-width: 767px) {
   .settings-overlay {
@@ -393,11 +271,14 @@ kbd {
   .settings-panel {
     width: 100vw;
     height: 100dvh;
+    transform: none;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
   }
 
   .settings-header {
     padding: calc(16px + var(--safe-top)) 16px 14px;
-    border-bottom: 1px solid var(--border-color, #e4e4e7);
     background: color-mix(in srgb, var(--bg-main) 92%, transparent);
     backdrop-filter: blur(14px);
   }
@@ -421,22 +302,7 @@ kbd {
     padding: 18px 16px calc(24px + var(--safe-bottom));
   }
 
-  .card-grid.two-up {
-    grid-template-columns: 1fr;
-  }
 
-  .toggle-row,
-  .field-row,
-  .shortcut-list div {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .field-row input,
-  .field-row select,
-  .field-input {
-    width: 100%;
-  }
 
   .tab-btn {
     width: auto;
