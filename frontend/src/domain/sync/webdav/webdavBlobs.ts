@@ -52,7 +52,7 @@ export async function putWebDavBlob(
   const { algorithm, dir, url } = buildBlobPath(baseUrl, blobHash);
   await ensureCollection(`${baseUrl}/blobs/${algorithm}`, headers);
   await ensureCollection(dir, headers);
-  const response = await fetch(url, {
+  const response = await webdavRequest(url, {
     method: 'PUT',
     headers: {
       ...headers,
@@ -67,7 +67,11 @@ export async function putWebDavBlob(
 
 export async function getWebDavBlob(baseUrl: string, headers: HeadersInit, blobHash: string) {
   const { url } = buildBlobPath(baseUrl, blobHash);
-  const response = await webdavRequest(url, { method: 'GET', headers });
+  const response = await webdavRequest(url, {
+    method: 'GET',
+    headers,
+    responseType: 'arraybuffer',
+  });
   if (response.status === 404) {
     throw new Error(`WebDAV blob not found: ${blobHash}`);
   }

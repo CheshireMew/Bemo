@@ -35,10 +35,15 @@ export async function deleteNoteCommand(note: NoteMeta): Promise<void> {
   await deleteLocalNote(note.filename);
   await enqueueRemoteNoteChange({
     entityId: note.note_id,
-    type: 'note.delete',
+    type: 'note.trash',
     baseRevision: note.revision,
     payload: {
       filename: note.filename,
+      content: note.content,
+      tags: note.tags,
+      pinned: note.pinned,
+      created_at: new Date(note.created_at * 1000).toISOString(),
+      revision: note.revision + 1,
     },
   });
 }

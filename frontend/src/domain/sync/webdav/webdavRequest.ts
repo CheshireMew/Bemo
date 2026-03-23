@@ -1,9 +1,27 @@
+import { webdavHttpRequest, type WebDavRequestInit } from './webdavHttp.js';
+
 export function encodeBasicAuth(username: string, password: string) {
   return `Basic ${btoa(`${username}:${password}`)}`;
 }
 
+function normalizeKnownWebDavRoot(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (
+      parsed.hostname === 'dav.jianguoyun.com'
+      && (parsed.pathname === '' || parsed.pathname === '/')
+    ) {
+      parsed.pathname = '/dav';
+      return parsed.toString().replace(/\/$/, '');
+    }
+  } catch {
+    return url;
+  }
+  return url;
+}
+
 export function normalizeWebDavContainer(url: string, basePath: string) {
-  const root = url.replace(/\/$/, '');
+  const root = normalizeKnownWebDavRoot(url).replace(/\/$/, '');
   const path = basePath.replace(/^\/+|\/+$/g, '');
   return `${root}/${path ? `${path}` : ''}`.replace(/\/$/, '');
 }
@@ -48,12 +66,15 @@ function isAcceptableStatus(status: number) {
 
 export function formatWebDavError(error: unknown) {
   if (error instanceof WebDavRequestError) return error.message;
+  if (error instanceof TypeError && /Failed to fetch/i.test(error.message)) {
+    return '无法连接到同步服务器代理：请确认网页端已通过 start-dev 脚本启动，或已正确设置 API_BASE，并检查后端是否正在运行。';
+  }
   if (error instanceof Error) return error.message;
   return 'WebDAV 操作失败';
 }
 
-export async function webdavRequest(url: string, init: RequestInit = {}) {
-  const response = await fetch(url, {
+export async function webdavRequest(url: string, init: WebDavRequestInit = {}) {
+  const response = await webdavHttpRequest(url, {
     cache: 'no-store',
     redirect: 'follow',
     ...init,
@@ -65,7 +86,7 @@ export async function webdavRequest(url: string, init: RequestInit = {}) {
 }
 
 export async function ensureCollection(url: string, headers: HeadersInit) {
-  const response = await fetch(url, {
+  const response = await webdavHttpRequest(url, {
     method: 'MKCOL',
     headers,
     cache: 'no-store',
@@ -90,7 +111,7 @@ export async function readJson<T>(url: string, headers: HeadersInit): Promise<T 
 }
 
 export async function writeJson(url: string, headers: HeadersInit, payload: unknown) {
-  const response = await fetch(url, {
+  const response = await webdavHttpRequest(url, {
     method: 'PUT',
     cache: 'no-store',
     redirect: 'follow',

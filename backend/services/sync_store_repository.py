@@ -178,10 +178,10 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
         stored_change["payload"] = {**payload, "revision": revision}
         return {"status": "applied", "note_id": note_id, "revision": revision, "change": stored_change}
 
-    if not current or current["deleted_at"]:
+    if change_type not in {"note.trash", "note.delete", "note.restore", "note.purge"} and (not current or current["deleted_at"]):
         return {"status": "conflict", "operation_id": operation_id, "reason": "note_not_found"}
 
-    current_revision = int(current["revision"] or 1)
+    current_revision = int(current["revision"] or 1) if current else 0
     base_revision = _int_or_none(change.get("base_revision"))
 
     if change_type == "note.update":
@@ -235,24 +235,92 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
         stored_change["payload"] = {**payload, "revision": next_revision}
         return {"status": "applied", "note_id": note_id, "revision": next_revision, "change": stored_change}
 
-    if change_type == "note.delete":
-        if base_revision is not None and base_revision != current_revision:
-            return {
-                "status": "conflict",
-                "operation_id": operation_id,
-                "reason": "revision_conflict",
-                "note_id": note_id,
-                "current_revision": current_revision,
-            }
-        next_revision = current_revision + 1
+    if change_type in {"note.trash", "note.delete"}:
+        next_revision = (int(current["revision"] or 0) + 1) if current else max(1, int(payload.get("revision") or 1))
+        content = str(payload.get("content") or (current["content"] if current else ""))
+        tags = payload.get("tags") if payload.get("tags") is not None else (json.loads(current["tags_json"]) if current else [])
+        pinned = bool(payload.get("pinned", current["pinned"] if current else False))
+        created_at = str(payload.get("created_at") or (current["created_at"] if current else _now_iso()))
+        title = _derive_title(content)
         conn.execute(
             """
-            UPDATE notes_current
-            SET deleted_at = ?, revision = ?, updated_at = ?, last_operation_id = ?, last_device_id = ?
-            WHERE note_id = ?
+            INSERT OR REPLACE INTO notes_current (
+                note_id, filename, title, content, tags_json, pinned, revision,
+                created_at, updated_at, deleted_at, last_operation_id, last_device_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (_now_iso(), next_revision, _now_iso(), operation_id, device_id, note_id),
+            (
+                note_id,
+                str(payload.get("filename") or (current["filename"] if current else "")),
+                title,
+                content,
+                json.dumps(tags, ensure_ascii=False),
+                1 if pinned else 0,
+                next_revision,
+                created_at,
+                _now_iso(),
+                _now_iso(),
+                operation_id,
+                device_id,
+            ),
         )
+        stored_change = dict(change)
+        stored_change["type"] = "note.trash"
+        stored_change["payload"] = {
+            **payload,
+            "content": content,
+            "tags": tags,
+            "pinned": pinned,
+            "created_at": created_at,
+            "revision": next_revision,
+        }
+        return {"status": "applied", "note_id": note_id, "revision": next_revision, "change": stored_change}
+
+    if change_type == "note.restore":
+        next_revision = (int(current["revision"] or 0) + 1) if current else max(1, int(payload.get("revision") or 1))
+        content = str(payload.get("content") or (current["content"] if current else ""))
+        tags = payload.get("tags") if payload.get("tags") is not None else (json.loads(current["tags_json"]) if current else [])
+        pinned = bool(payload.get("pinned", current["pinned"] if current else False))
+        created_at = str(payload.get("created_at") or (current["created_at"] if current else _now_iso()))
+        title = _derive_title(content)
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO notes_current (
+                note_id, filename, title, content, tags_json, pinned, revision,
+                created_at, updated_at, deleted_at, last_operation_id, last_device_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+            """,
+            (
+                note_id,
+                str(payload.get("filename") or (current["filename"] if current else "")),
+                title,
+                content,
+                json.dumps(tags, ensure_ascii=False),
+                1 if pinned else 0,
+                next_revision,
+                created_at,
+                _now_iso(),
+                operation_id,
+                device_id,
+            ),
+        )
+        stored_change = dict(change)
+        stored_change["payload"] = {
+            **payload,
+            "content": content,
+            "tags": tags,
+            "pinned": pinned,
+            "created_at": created_at,
+            "revision": next_revision,
+        }
+        return {"status": "applied", "note_id": note_id, "revision": next_revision, "change": stored_change}
+
+    if change_type == "note.purge":
+        if current:
+            next_revision = int(current["revision"] or 1) + 1
+            conn.execute("DELETE FROM notes_current WHERE note_id = ?", (note_id,))
+        else:
+            next_revision = max(1, int(payload.get("revision") or 1))
         stored_change = dict(change)
         stored_change["payload"] = {**payload, "revision": next_revision}
         return {"status": "applied", "note_id": note_id, "revision": next_revision, "change": stored_change}

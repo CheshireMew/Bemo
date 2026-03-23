@@ -1,6 +1,13 @@
 import { openIndexedDb } from '../../utils/indexedDb.js';
 
-export type NoteMutationType = 'note.create' | 'note.update' | 'note.patch' | 'note.delete';
+export type NoteMutationType =
+  | 'note.create'
+  | 'note.update'
+  | 'note.patch'
+  | 'note.trash'
+  | 'note.restore'
+  | 'note.purge'
+  | 'note.delete';
 export type SyncTarget = 'server' | 'webdav';
 
 export interface ChangeRecord {

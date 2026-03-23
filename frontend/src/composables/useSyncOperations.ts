@@ -12,16 +12,15 @@ import { flushPendingQueue } from '../utils/sync.js';
 import { createWebDavTransport } from '../utils/webdavTransport.js';
 
 export function useSyncOperations(options: {
-  draftSync: {
+  syncSettings: {
     webdavUrl: string;
     username: string;
     password: string;
     basePath: string;
   };
   hasCompleteWebDavConfig: { value: boolean };
-  isSyncDirty: { value: boolean };
-  commitDraftToSettings: () => void;
-  saveSettings: () => void;
+  webdavConfigIssue: { value: string };
+  flushSyncSettings: () => void;
 }) {
   const isTestingWebDav = ref(false);
   const isInitializingWebDav = ref(false);
@@ -47,12 +46,15 @@ export function useSyncOperations(options: {
   };
 
   const getWebDavHeaders = () => ({
-    Authorization: encodeBasicAuth(options.draftSync.username.trim(), options.draftSync.password),
+    Authorization: encodeBasicAuth(options.syncSettings.username.trim(), options.syncSettings.password),
   });
 
   const ensureWebDavConfig = () => {
     if (options.hasCompleteWebDavConfig.value) return true;
-    pushNotification('请先填写完整的 WebDAV 地址、用户名和密码', 'error');
+    pushNotification(
+      options.webdavConfigIssue.value || '请先填写完整的 WebDAV 配置',
+      'error',
+    );
     return false;
   };
 
@@ -62,8 +64,8 @@ export function useSyncOperations(options: {
     try {
       isTestingWebDav.value = true;
       const result = await testWebDavConnection(
-        options.draftSync.webdavUrl.trim(),
-        options.draftSync.basePath.trim(),
+        options.syncSettings.webdavUrl.trim(),
+        options.syncSettings.basePath.trim(),
         getWebDavHeaders(),
       );
 
@@ -88,8 +90,8 @@ export function useSyncOperations(options: {
     try {
       isInitializingWebDav.value = true;
       const result = await initializeWebDavTarget(
-        options.draftSync.webdavUrl.trim(),
-        options.draftSync.basePath.trim(),
+        options.syncSettings.webdavUrl.trim(),
+        options.syncSettings.basePath.trim(),
         getWebDavHeaders(),
       );
       webdavConnectionStatus.value = `远端目录已就绪：${result.baseUrl}`;
@@ -106,10 +108,7 @@ export function useSyncOperations(options: {
   const handleSyncNow = async () => {
     try {
       isSyncingNow.value = true;
-      if (options.isSyncDirty.value) {
-        options.commitDraftToSettings();
-        options.saveSettings();
-      }
+      options.flushSyncSettings();
       await flushPendingQueue();
       await refreshPendingQueues();
       pushNotification('同步已执行', 'success');
@@ -126,10 +125,10 @@ export function useSyncOperations(options: {
     try {
       isCleaningWebDav.value = true;
       const transport = createWebDavTransport({
-        webdavUrl: options.draftSync.webdavUrl.trim(),
-        username: options.draftSync.username.trim(),
-        password: options.draftSync.password,
-        basePath: options.draftSync.basePath.trim(),
+        webdavUrl: options.syncSettings.webdavUrl.trim(),
+        username: options.syncSettings.username.trim(),
+        password: options.syncSettings.password,
+        basePath: options.syncSettings.basePath.trim(),
       });
       const result = await transport.cleanupUnusedBlobs?.();
       if (!result) {

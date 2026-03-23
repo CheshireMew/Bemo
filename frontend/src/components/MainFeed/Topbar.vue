@@ -27,29 +27,12 @@
         </button>
       </div>
     </div>
-    <div class="sync-status" v-if="syncStatus !== 'online' || pendingCount > 0 || syncError || otherTargetPendingHint">
-      <span v-if="syncStatus === 'offline'" class="sync-status-main">
-        <CloudOff class="sync-status-icon" :size="14" />
-        {{ syncTarget }}{{ pendingCount > 0 ? ` · ${pendingCount}条待同步` : '' }}
-      </span>
-      <span v-else-if="syncStatus === 'syncing'" class="sync-status-main">
-        <RefreshCw class="sync-status-icon spin" :size="14" />
-        {{ syncTarget }}同步中 · 剩余{{ pendingCount }}条
-      </span>
-      <span v-else class="sync-status-main">
-        <Cloud class="sync-status-icon" :size="14" />
-        {{ syncTarget }} · {{ pendingCount }}条待同步
-      </span>
-      <span v-if="otherTargetPendingHint" class="sync-other-target"> · {{ otherTargetPendingHint }}</span>
-      <span v-if="syncError" class="sync-error"> · {{ syncError }}</span>
-    </div>
   </header>
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue';
-import { Search, Settings, ArrowUpDown, Cloud, CloudOff, RefreshCw, PanelLeftOpen, Sun, Moon } from 'lucide-vue-next';
-import { pendingCount, serverPendingCount, syncError, syncStatus, syncTarget, webdavPendingCount } from '../../store/sync';
+import { watch } from 'vue';
+import { Search, Settings, ArrowUpDown, PanelLeftOpen, Sun, Moon } from 'lucide-vue-next';
 import { searchQuery, performSearch, sortOrder, toggleSortOrder } from '../../store/notes';
 import { isDarkMode, toggleTheme } from '../../store/ui';
 
@@ -60,17 +43,6 @@ withDefaults(defineProps<{
 });
 
 defineEmits(['openSettings', 'openSidebar']);
-
-const otherTargetPendingHint = computed(() => {
-  const hints: string[] = [];
-  if (syncTarget.value !== '自部署服务器' && serverPendingCount.value > 0) {
-    hints.push(`Server 还有${serverPendingCount.value}条`);
-  }
-  if (syncTarget.value !== 'WebDAV' && webdavPendingCount.value > 0) {
-    hints.push(`WebDAV 还有${webdavPendingCount.value}条`);
-  }
-  return hints.join('，');
-});
 
 watch(searchQuery, (q) => {
   performSearch(q);
@@ -173,53 +145,6 @@ watch(searchQuery, (q) => {
   background-color: var(--border-color, #e8eaed);
 }
 
-.sync-status {
-  font-size: 0.78rem;
-  color: #fbbf24;
-  background-color: #fef3c7;
-  padding: 6px 10px;
-  border-radius: 14px;
-  font-weight: 500;
-  white-space: nowrap;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-}
-
-.sync-status-main {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sync-status-icon {
-  flex-shrink: 0;
-}
-
-.spin {
-  animation: sync-spin 1s linear infinite;
-}
-
-.sync-error {
-  color: #b91c1c;
-}
-
-.sync-other-target {
-  color: #92400e;
-}
-
-:root.dark .sync-status {
-  background-color: #422006;
-  color: #fbbf24;
-}
-
-@keyframes sync-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 @media (max-width: 1023px) {
   .topbar {
     max-width: 720px;
@@ -258,13 +183,6 @@ watch(searchQuery, (q) => {
   .topbar-actions {
     gap: 4px;
   }
-
-  .sync-status {
-    width: 100%;
-    white-space: normal;
-    font-size: 0.75rem;
-  }
-
   .topbar-actions {
     justify-content: flex-end;
     margin-left: 0;

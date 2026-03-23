@@ -55,6 +55,15 @@ export function createWebDavTransport(config: {
       return { changes, latest_cursor: latestCursor };
     },
     async push(changes: any[]) {
+      if (!changes.length) {
+        const manifest = await readWebDavManifest(baseUrl, headers);
+        return {
+          accepted: [],
+          conflicts: [],
+          latest_cursor: String(manifest?.latest_cursor || '0'),
+        };
+      }
+
       await ensureWebDavLayout(baseUrl, headers);
       const deviceId = await getOrCreateDeviceId();
       const lease = await acquireWebDavLease(baseUrl, headers, deviceId);
@@ -67,10 +76,16 @@ export function createWebDavTransport(config: {
         const startingCursor = Number(manifest?.latest_cursor || '0');
         const { accepted, latestCursor } = await pushWebDavChanges(baseUrl, headers, startingCursor, changes);
         const latestCursorString = String(latestCursor);
+        const writtenChanges = accepted.filter((item: { deduplicated?: boolean }) => !item.deduplicated);
+
+        if (!writtenChanges.length) {
+          return { accepted, conflicts: [], latest_cursor: latestCursorString };
+        }
+
         const previousNotes = await buildSnapshotStateFromRemote(baseUrl, headers, manifest);
         const nextNotes = applyChangesToSnapshotState(
           previousNotes,
-          accepted.map((item: { change: Record<string, unknown> }) => item.change),
+          writtenChanges.map((item: { change: Record<string, unknown> }) => item.change),
         );
         const latestSnapshot = await writeWebDavSnapshot(baseUrl, headers, latestCursorString, nextNotes);
 

@@ -16,7 +16,41 @@ function toSnapshotNote(change: SyncChange, existing?: WebDavSnapshotNote): WebD
   const noteId = String(change.entity_id || existing?.note_id || '');
   if (!noteId) return null;
 
-  if (change.type === 'note.delete') return null;
+  if (change.type === 'note.purge') return null;
+
+  if (change.type === 'note.delete' || change.type === 'note.trash') {
+    return {
+      note_id: noteId,
+      scope: 'trash',
+      revision: Math.max(1, Number(payload.revision ?? existing?.revision ?? 1)),
+      filename: typeof payload.filename === 'string' ? payload.filename : existing?.filename,
+      content: typeof payload.content === 'string' ? payload.content : existing?.content || '',
+      tags: Array.isArray(payload.tags) ? payload.tags.map((tag) => String(tag)) : existing?.tags || [],
+      pinned: payload.pinned !== undefined ? Boolean(payload.pinned) : existing?.pinned || false,
+      created_at: typeof payload.created_at === 'string' ? payload.created_at : existing?.created_at,
+      updated_at: typeof change.timestamp === 'string' ? change.timestamp : existing?.updated_at,
+      attachments: Array.isArray(payload.attachments)
+        ? payload.attachments.flatMap((attachment) => normalizeAttachment(attachment))
+        : existing?.attachments || [],
+    };
+  }
+
+  if (change.type === 'note.restore') {
+    return {
+      note_id: noteId,
+      scope: 'active',
+      revision: Math.max(1, Number(payload.revision ?? existing?.revision ?? 1)),
+      filename: typeof payload.filename === 'string' ? payload.filename : existing?.filename,
+      content: typeof payload.content === 'string' ? payload.content : existing?.content || '',
+      tags: Array.isArray(payload.tags) ? payload.tags.map((tag) => String(tag)) : existing?.tags || [],
+      pinned: payload.pinned !== undefined ? Boolean(payload.pinned) : existing?.pinned || false,
+      created_at: typeof payload.created_at === 'string' ? payload.created_at : existing?.created_at,
+      updated_at: typeof change.timestamp === 'string' ? change.timestamp : existing?.updated_at,
+      attachments: Array.isArray(payload.attachments)
+        ? payload.attachments.flatMap((attachment) => normalizeAttachment(attachment))
+        : existing?.attachments || [],
+    };
+  }
 
   if (change.type === 'note.patch' && existing) {
     return {
@@ -34,6 +68,7 @@ function toSnapshotNote(change: SyncChange, existing?: WebDavSnapshotNote): WebD
   if (change.type === 'note.create' || change.type === 'note.update' || change.type === 'note.patch') {
     return {
       note_id: noteId,
+      scope: 'active',
       revision: Math.max(1, Number(payload.revision ?? existing?.revision ?? 1)),
       filename: typeof payload.filename === 'string' ? payload.filename : existing?.filename,
       content: typeof payload.content === 'string' ? payload.content : existing?.content || '',
@@ -60,7 +95,7 @@ export function applyChangesToSnapshotState(
     const noteId = String(change.entity_id || '');
     if (!noteId) continue;
 
-    if (change.type === 'note.delete') {
+    if (change.type === 'note.purge') {
       delete next[noteId];
       continue;
     }
@@ -81,7 +116,7 @@ export function buildBootstrapChangesFromSnapshot(snapshot: SnapshotRecord) {
       operation_id: `snapshot_${snapshot.latest_cursor}_${String(index + 1).padStart(6, '0')}_${note.note_id}`,
       device_id: 'snapshot',
       entity_id: note.note_id,
-      type: 'note.create',
+      type: note.scope === 'trash' ? 'note.trash' : 'note.create',
       timestamp: note.updated_at || snapshot.generated_at,
       base_revision: 0,
       cursor: snapshot.latest_cursor,

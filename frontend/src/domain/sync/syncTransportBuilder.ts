@@ -1,4 +1,9 @@
 import { settings } from '../../store/settings.js';
+import {
+  hasWebDavBackendProxyAccess,
+  hasWebDavBackendProxyConfig,
+  shouldProxyWebDavThroughBackend,
+} from './webdav/webdavHttp.js';
 import { createServerTransport } from '../../utils/serverTransport.js';
 import { createWebDavTransport } from '../../utils/webdavTransport.js';
 
@@ -17,6 +22,9 @@ export function buildSyncTransport() {
     return createServerTransport(settings.sync.serverUrl, settings.sync.accessToken);
   }
   if (settings.sync.mode === 'webdav' && settings.sync.webdavUrl && settings.sync.username && settings.sync.password) {
+    if (shouldProxyWebDavThroughBackend() && (!hasWebDavBackendProxyConfig() || !hasWebDavBackendProxyAccess())) {
+      return null;
+    }
     return createWebDavTransport({
       webdavUrl: settings.sync.webdavUrl,
       username: settings.sync.username,

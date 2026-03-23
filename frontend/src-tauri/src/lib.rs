@@ -1,3 +1,5 @@
+mod native_http;
+
 use tauri_plugin_shell::ShellExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -21,6 +23,7 @@ pub fn run() {
       }
       Ok(())
     })
+    .invoke_handler(tauri::generate_handler![native_http::native_http_request])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

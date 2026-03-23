@@ -4,10 +4,18 @@ function normalizeApiBase(url: string | undefined) {
   return (url || '').trim().replace(/\/$/, '');
 }
 
-function resolveApiBase() {
-  const env = (import.meta as ImportMeta & {
+function normalizeEnvValue(value: string | undefined) {
+  return (value || '').trim();
+}
+
+function getEnv() {
+  return (import.meta as ImportMeta & {
     env?: Record<string, string | undefined>;
   }).env ?? {};
+}
+
+function resolveApiBase() {
+  const env = getEnv();
   const shared = normalizeApiBase(env.VITE_API_BASE_URL);
   const web = normalizeApiBase(env.VITE_WEB_API_BASE_URL);
   const android = normalizeApiBase(env.VITE_ANDROID_API_BASE_URL);
@@ -26,11 +34,36 @@ function resolveApiBase() {
   return web || shared || '';
 }
 
+function resolveSyncProxyToken() {
+  const env = getEnv();
+  const shared = normalizeEnvValue(env.VITE_SYNC_PROXY_TOKEN);
+  const web = normalizeEnvValue(env.VITE_WEB_SYNC_PROXY_TOKEN);
+  const android = normalizeEnvValue(env.VITE_ANDROID_SYNC_PROXY_TOKEN);
+
+  const platform = Capacitor.getPlatform();
+  const isNative = Capacitor.isNativePlatform();
+
+  if (platform === 'android') {
+    return android || shared || '';
+  }
+
+  if (isNative) {
+    return shared || '';
+  }
+
+  return web || shared || '';
+}
+
 export const API_BASE = resolveApiBase();
 export const API_ORIGIN = API_BASE ? API_BASE.replace(/\/api\/?$/, '') : '';
+export const SYNC_PROXY_TOKEN = resolveSyncProxyToken();
 
 export function hasBackendOrigin() {
   return Boolean(API_ORIGIN);
+}
+
+export function hasSyncProxyToken() {
+  return Boolean(SYNC_PROXY_TOKEN);
 }
 
 export function resolveBackendUrl(path: string) {

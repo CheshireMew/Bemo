@@ -4,7 +4,7 @@
       <div>
         <h3>同步</h3>
       </div>
-      <span class="section-badge">{{ syncTarget }}</span>
+      <span class="section-badge">{{ currentModeBadge }}</span>
     </div>
 
     <article class="settings-card sync-hero">
@@ -18,24 +18,24 @@
         <button
           type="button"
           class="mode-pill"
-          :class="{ active: draftSync.mode === 'local' }"
-          @click="setMode('local')"
+          :class="{ active: syncSettings.mode === 'local' }"
+          @click="syncSettings.mode = 'local'"
         >
           本地模式
         </button>
         <button
           type="button"
           class="mode-pill"
-          :class="{ active: draftSync.mode === 'server' }"
-          @click="setMode('server')"
+          :class="{ active: syncSettings.mode === 'server' }"
+          @click="syncSettings.mode = 'server'"
         >
           自部署服务器
         </button>
         <button
           type="button"
           class="mode-pill"
-          :class="{ active: draftSync.mode === 'webdav' }"
-          @click="setMode('webdav')"
+          :class="{ active: syncSettings.mode === 'webdav' }"
+          @click="syncSettings.mode = 'webdav'"
         >
           WebDAV
         </button>
@@ -52,6 +52,11 @@
         <strong>切换提示</strong>
         <span>{{ modeSwitchNotice }}</span>
       </div>
+
+      <div class="helper-panel">
+        <strong>自动保存</strong>
+        <span>同步模式和当前表单内容会自动保存，关闭设置后会继续保留。</span>
+      </div>
     </article>
 
     <article class="settings-card form-card">
@@ -64,7 +69,7 @@
       <div class="overview-grid">
         <label class="device-card">
           <span class="field-label">设备名称</span>
-          <input id="device-name" v-model="draftSync.deviceName" type="text" />
+          <input id="device-name" v-model="syncSettings.deviceName" type="text" />
         </label>
 
         <div class="status-grid">
@@ -95,53 +100,76 @@
       </div>
     </article>
 
-    <article v-if="draftSync.mode === 'server'" class="settings-card form-card">
+    <article v-if="syncSettings.mode === 'server'" class="settings-card form-card">
       <h4>服务器配置</h4>
 
       <div class="field-row">
         <div>
           <label class="field-label" for="server-url">服务器地址</label>
         </div>
-        <input id="server-url" v-model="draftSync.serverUrl" type="url" placeholder="https://your-bemo.example.com" />
+        <input id="server-url" v-model="syncSettings.serverUrl" type="url" placeholder="https://your-bemo.example.com" />
       </div>
 
       <div class="field-row">
         <div>
           <label class="field-label" for="access-token">访问 Token</label>
         </div>
-        <input id="access-token" v-model="draftSync.accessToken" type="password" />
+        <input id="access-token" v-model="syncSettings.accessToken" type="password" />
       </div>
     </article>
 
-    <article v-if="draftSync.mode === 'webdav'" class="settings-card form-card">
+    <article v-if="syncSettings.mode === 'webdav'" class="settings-card form-card">
       <h4>WebDAV 配置</h4>
 
       <div class="field-row">
         <div>
           <label class="field-label" for="webdav-url">WebDAV 地址</label>
         </div>
-        <input id="webdav-url" v-model="draftSync.webdavUrl" type="url" placeholder="https://dav.example.com/path" />
+        <input id="webdav-url" v-model="syncSettings.webdavUrl" type="url" placeholder="https://dav.jianguoyun.com/dav" />
       </div>
+
+      <p class="field-hint">坚果云请填写 `https://dav.jianguoyun.com/dav`，不要只填域名根路径。</p>
 
       <div class="field-row">
         <div>
           <label class="field-label" for="webdav-username">用户名</label>
         </div>
-        <input id="webdav-username" v-model="draftSync.username" type="text" />
+        <input id="webdav-username" v-model="syncSettings.username" type="text" />
       </div>
 
       <div class="field-row">
         <div>
           <label class="field-label" for="webdav-password">密码</label>
         </div>
-        <input id="webdav-password" v-model="draftSync.password" type="password" />
+        <input id="webdav-password" v-model="syncSettings.password" type="password" />
       </div>
 
       <div class="field-row">
         <div>
           <label class="field-label" for="webdav-base-path">基础路径</label>
         </div>
-        <input id="webdav-base-path" v-model="draftSync.basePath" type="text" placeholder="可留空" />
+        <input id="webdav-base-path" v-model="syncSettings.basePath" type="text" placeholder="可留空" />
+      </div>
+
+      <div v-if="shouldProxyWebDavThroughBackend() && !hasBundledWebDavProxyAccessToken()" class="field-row">
+        <div>
+          <label class="field-label" for="webdav-proxy-token">同步服务器 Token</label>
+        </div>
+        <input id="webdav-proxy-token" v-model="syncSettings.accessToken" type="password" placeholder="网页端通过后端代理访问 WebDAV 时必填" />
+      </div>
+
+      <p v-if="shouldProxyWebDavThroughBackend()" class="field-hint">
+        网页端 WebDAV 会经由同步服务器代理转发，不再尝试浏览器直连第三方 WebDAV。
+      </p>
+
+      <div v-if="shouldProxyWebDavThroughBackend() && hasBundledWebDavProxyAccessToken()" class="helper-panel">
+        <strong>已注入开发环境 Token</strong>
+        <span>当前启动脚本已经为网页端注入同步服务器 Token，本地开发时不需要再手动填写。</span>
+      </div>
+
+      <div v-if="shouldProxyWebDavThroughBackend() && !hasWebDavBackendProxyConfig()" class="helper-panel helper-panel-warning">
+        <strong>需要同步服务器地址</strong>
+        <span>当前网页构建没有可用的 API_BASE。请通过 `start-dev` 脚本启动，或为网页端设置 `VITE_WEB_API_BASE_URL`。</span>
       </div>
 
       <div class="button-row">
@@ -175,15 +203,6 @@
       </div>
 
     </article>
-
-    <div class="button-row settings-actions">
-      <button type="button" class="secondary-btn" :disabled="!isSyncDirty || isSavingSync" @click="resetDraft">
-        取消修改
-      </button>
-      <button type="button" class="primary-btn" :disabled="!isSyncDirty || isSavingSync" @click="saveSyncConfig">
-        {{ isSavingSync ? '保存中...' : '保存同步配置' }}
-      </button>
-    </div>
 
     <article class="settings-card form-card">
       <div class="section-inline-header">
@@ -233,60 +252,44 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
 import { useSyncOperations } from '../composables/useSyncOperations';
-import { useSyncSettingsDraft } from '../composables/useSyncSettingsDraft';
-import { saveSettings } from '../services/localSettings';
-import { pushNotification } from '../store/notifications';
+import { useSyncSettings } from '../composables/useSyncSettings';
 import {
   serverLastSyncAt,
   serverPendingCount,
   syncError,
-  syncTarget,
   webdavLastSyncAt,
   webdavPendingCount,
 } from '../store/sync';
-const isSavingSync = ref(false);
 const {
-  commitDraftToSettings,
-  draftSync,
+  flushPersist,
+  hasBundledWebDavProxyAccessToken,
   hasCompleteWebDavConfig,
-  isSyncDirty,
+  hasWebDavBackendProxyConfig,
   modeSwitchNotice,
-  resetDraft,
-  saveSyncConfig: saveSyncConfigDraft,
-  setMode,
-} = useSyncSettingsDraft({
-  onSaved: async () => {
-    await refreshPendingQueues();
-  },
-  onReset: () => {
-    webdavConnectionStatus.value = '';
-  },
-});
-
-const saveSyncConfig = async () => {
-  try {
-    isSavingSync.value = true;
-    await saveSyncConfigDraft();
-  } catch (error) {
-    pushNotification(error instanceof Error ? error.message : '保存同步配置失败', 'error');
-  } finally {
-    isSavingSync.value = false;
-  }
-};
+  shouldProxyWebDavThroughBackend,
+  syncSettings,
+  webdavConfigIssue,
+} = useSyncSettings();
 
 const currentModeTitle = computed(() => {
-  if (draftSync.mode === 'server') return '自部署服务器';
-  if (draftSync.mode === 'webdav') return 'WebDAV 云盘';
+  if (syncSettings.mode === 'server') return '自部署服务器';
+  if (syncSettings.mode === 'webdav') return 'WebDAV 云盘';
   return '本地模式';
 });
 
 const currentModeTag = computed(() => {
-  if (draftSync.mode === 'server') return '完整双向';
-  if (draftSync.mode === 'webdav') return '免后端';
+  if (syncSettings.mode === 'server') return '完整双向';
+  if (syncSettings.mode === 'webdav') return shouldProxyWebDavThroughBackend() ? '经同步服务器' : '原生直连';
   return '推荐单机';
+});
+
+const currentModeBadge = computed(() => {
+  if (syncSettings.mode === 'server') return '自部署服务器';
+  if (syncSettings.mode === 'webdav') return 'WebDAV';
+  return '本地';
 });
 
 const {
@@ -304,11 +307,10 @@ const {
   webdavConnectionStatus,
   webdavPendingItems,
 } = useSyncOperations({
-  draftSync,
+  syncSettings,
   hasCompleteWebDavConfig,
-  isSyncDirty,
-  commitDraftToSettings,
-  saveSettings,
+  flushSyncSettings: flushPersist,
+  webdavConfigIssue,
 });
 </script>
 

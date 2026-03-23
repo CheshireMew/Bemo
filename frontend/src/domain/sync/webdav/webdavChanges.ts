@@ -115,7 +115,7 @@ export async function pullWebDavChanges(baseUrl: string, headers: HeadersInit, c
   for (const file of files) {
     const fileCursor = parseCursorFromPath(file);
     if (fileCursor <= nextCursor) continue;
-    const response = await fetch(file, { method: 'GET', headers });
+    const response = await webdavRequest(file, { method: 'GET', headers });
     if (!response.ok) continue;
     const change = await response.json();
     change.cursor = String(fileCursor);

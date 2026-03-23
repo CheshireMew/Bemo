@@ -24,11 +24,12 @@ Why Android is different:
 PowerShell:
 
 ```powershell
+$env:JAVA_HOME="D:\Android\Android Studio\jbr"
 $env:VITE_ANDROID_API_BASE_URL="http://192.168.1.100:8000/api"
 npm run sync:android
 ```
 
-You can also copy [`.env.android.local.example`](E:/Work/Code/Bemo/frontend/.env.android.local.example) to `.env.android.local` and adjust the IP before building for Android.
+如果你不想每次手动设置环境变量，可以复制 [`.env.android.local.example`](E:/Work/Code/Bemo/frontend/.env.android.local.example) 为 `.env.android.local`。`npm run sync:android`、`npm run android:debug`、`npm run android:release`、`npm run android:bundle` 现在都会走 Android 专用 build mode，并正确读取这个文件。
 
 ## Current Role of `VITE_*_API_BASE_URL`
 
@@ -75,6 +76,22 @@ keyPassword=your-key-password
 ```
 
 Then place the keystore file at the matching path. When `keystore.properties` exists, the release build in [build.gradle](E:/Work/Code/Bemo/frontend/android/app/build.gradle) will automatically use it.
+
+## Android doctor
+
+在真正出包前，建议先运行：
+
+```powershell
+npm run android:doctor
+```
+
+这一步会先检查：
+
+- `JAVA_HOME` 是否存在且版本兼容
+- Android SDK 是否可被 Gradle 找到
+- release 构建需要的 `keystore.properties` 是否已准备
+
+如果你看到 `Unsupported class file major version 70`，通常表示当前机器用了过新的 JDK。把 `JAVA_HOME` 切回 JDK 17 后再执行即可。
 
 For the full Android packaging flow, see [ANDROID_RELEASE_GUIDE.md](E:/Work/Code/Bemo/ANDROID_RELEASE_GUIDE.md).
 

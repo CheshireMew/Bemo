@@ -7,6 +7,7 @@ export type ManifestRecord = {
 
 export type WebDavSnapshotNote = {
   note_id: string;
+  scope: 'active' | 'trash';
   revision: number;
   filename?: string;
   content: string;

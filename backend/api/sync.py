@@ -12,6 +12,7 @@ from services.sync_service import (
     push_changes,
     put_blob,
 )
+from services.webdav_proxy_service import proxy_webdav_request
 
 router = APIRouter()
 
@@ -28,6 +29,14 @@ class ChangePayload(BaseModel):
 
 class PushRequest(BaseModel):
     changes: list[ChangePayload] = Field(default_factory=list)
+
+
+class WebDavProxyRequest(BaseModel):
+    url: str
+    method: str = "GET"
+    headers: dict[str, str] = Field(default_factory=dict)
+    body: str | None = None
+    bodyEncoding: str | None = None
 
 
 def _require_sync_auth(authorization: str | None) -> None:
@@ -55,6 +64,12 @@ def sync_pull(cursor: str | None = None, limit: int = 200, authorization: str | 
     _require_sync_auth(authorization)
     ensure_sync_store()
     return pull_changes(cursor, limit=limit)
+
+
+@router.post("/webdav/request")
+async def sync_webdav_request(payload: WebDavProxyRequest, authorization: str | None = Header(default=None)):
+    _require_sync_auth(authorization)
+    return await proxy_webdav_request(payload.model_dump())
 
 
 @router.head("/blobs/{blob_hash:path}")

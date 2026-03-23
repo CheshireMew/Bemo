@@ -98,6 +98,11 @@ export async function findLocalNoteById(noteId: string): Promise<NoteMeta | null
   return notes.find((note: NoteMeta) => note.note_id === noteId) || null;
 }
 
+export async function findLocalTrashNoteById(noteId: string): Promise<NoteMeta | null> {
+  const notes = await getTrashNotes();
+  return notes.find((note: NoteMeta) => note.note_id === noteId) || null;
+}
+
 export async function findLocalNoteByFilename(filename: string): Promise<NoteMeta | null> {
   return getCachedNote(filename);
 }
@@ -141,6 +146,45 @@ export async function createLocalNoteFromSync(input: {
   return note;
 }
 
+export async function createLocalTrashNoteFromSync(input: {
+  note_id: string;
+  revision: number;
+  filename?: string;
+  content: string;
+  tags: string[];
+  pinned: boolean;
+  created_at?: string;
+}): Promise<NoteMeta> {
+  const timestamp = input.created_at ? Date.parse(input.created_at) : Date.now();
+  const seconds = Math.floor((Number.isNaN(timestamp) ? Date.now() : timestamp) / 1000);
+  const title = deriveTitle(input.content);
+  const fallbackBase = `${seconds}-${slugifyTitle(title)}`;
+  const filename = await ensureUniqueFilename(
+    (input.filename || `${fallbackBase}.md`).replace(/\.md$/i, ''),
+    input.filename,
+  );
+  const note: NoteMeta = {
+    note_id: input.note_id,
+    revision: Math.max(1, input.revision || 1),
+    filename,
+    title,
+    created_at: seconds,
+    updated_at: Math.floor(Date.now() / 1000),
+    content: input.content,
+    tags: input.tags,
+    pinned: input.pinned,
+  };
+  await putTrashNote(note);
+  await replaceAttachmentRefsForOwner({
+    ownerType: 'note',
+    ownerId: note.note_id,
+    noteId: note.note_id,
+    scope: 'trash',
+    filenames: extractAttachmentFilenames(note.content),
+  });
+  return note;
+}
+
 export async function updateLocalNoteById(
   noteId: string,
   apply: (current: NoteMeta) => NoteMeta,
@@ -154,6 +198,24 @@ export async function updateLocalNoteById(
     ownerId: next.note_id,
     noteId: next.note_id,
     scope: 'active',
+    filenames: extractAttachmentFilenames(next.content),
+  });
+  return next;
+}
+
+export async function updateLocalTrashNoteById(
+  noteId: string,
+  apply: (current: NoteMeta) => NoteMeta,
+): Promise<NoteMeta | null> {
+  const current = await findLocalTrashNoteById(noteId);
+  if (!current) return null;
+  const next = apply(current);
+  await putTrashNote(next);
+  await replaceAttachmentRefsForOwner({
+    ownerType: 'note',
+    ownerId: next.note_id,
+    noteId: next.note_id,
+    scope: 'trash',
     filenames: extractAttachmentFilenames(next.content),
   });
   return next;
@@ -336,14 +398,35 @@ export async function permanentlyDeleteLocalTrashNote(filename: string) {
     await deleteAttachmentRefsForOwner('note', current.note_id);
     await cleanupOrphanImagesRequest();
   }
-  return { ok: true };
+  return current;
+}
+
+export async function purgeLocalNoteById(noteId: string) {
+  const [active, trash] = await Promise.all([
+    findLocalNoteById(noteId),
+    findLocalTrashNoteById(noteId),
+  ]);
+
+  if (active) {
+    await deleteCachedNote(active.filename);
+  }
+  if (trash) {
+    await deleteTrashNote(trash.filename);
+  }
+  if (active || trash) {
+    await deleteAttachmentRefsForOwner('note', noteId);
+    await cleanupOrphanImagesRequest();
+  }
+
+  return trash || active;
 }
 
 export async function emptyLocalTrashNotes() {
+  const trash = await getTrashNotes();
   await setTrashNotes([]);
   await replaceNoteAttachmentRefsForScope('trash', []);
   await cleanupOrphanImagesRequest();
-  return { ok: true };
+  return trash;
 }
 
 export async function importRemoteNotesAsLocal(notes: NoteMeta[]) {

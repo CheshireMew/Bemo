@@ -20,7 +20,16 @@
 ```powershell
 java -version
 echo $env:JAVA_HOME
+npm run android:doctor
 ```
+
+如果当前机器装的是更高版本 JDK，例如 JDK 26，Gradle 可能直接报：
+
+```text
+Unsupported class file major version 70
+```
+
+这种情况不要继续排查 Gradle 脚本，先把 `JAVA_HOME` 切回 JDK 17。
 
 ## 2. 调试联机准备
 
@@ -37,6 +46,7 @@ cd E:\Work\Code\Bemo
 
 ```powershell
 cd E:\Work\Code\Bemo\frontend
+$env:JAVA_HOME="D:\Android\Android Studio\jbr"
 $env:VITE_ANDROID_API_BASE_URL="http://192.168.1.100:8000/api"
 ```
 
@@ -45,6 +55,7 @@ $env:VITE_ANDROID_API_BASE_URL="http://192.168.1.100:8000/api"
 - 模拟器默认可走 `http://10.0.2.2:8000/api`
 - 真机必须改成你电脑的局域网 IPv4 地址
 - 手机和电脑要在同一局域网
+- 也可以复制 `frontend/.env.android.local.example` 为 `.env.android.local`，Android 构建脚本会自动读取
 
 ## 3. 同步 Web 资源到 Android
 
@@ -77,6 +88,7 @@ frontend/android/app/build/outputs/apk/debug/app-debug.apk
 
 - `debug` 允许明文 HTTP，适合局域网联调
 - 包名会追加 `.debug`
+- 该命令会先执行 Android 环境预检，再构建前端并同步到 Capacitor
 
 ## 5. 发布签名
 
@@ -117,6 +129,7 @@ keyPassword=your-key-password
 
 ```powershell
 cd E:\Work\Code\Bemo\frontend
+$env:JAVA_HOME="D:\Android\Android Studio\jbr"
 $env:VITE_ANDROID_API_BASE_URL="https://your-api.example.com/api"
 npm run android:release
 ```
@@ -131,6 +144,7 @@ frontend/android/app/build/outputs/apk/release/app-release.apk
 
 ```powershell
 cd E:\Work\Code\Bemo\frontend
+$env:JAVA_HOME="D:\Android\Android Studio\jbr"
 $env:VITE_ANDROID_API_BASE_URL="https://your-api.example.com/api"
 npm run android:bundle
 ```
@@ -178,6 +192,7 @@ frontend/android/app/build/outputs/bundle/release/app-release.aab
 在 `frontend` 目录下：
 
 ```powershell
+npm run android:doctor
 npm run sync:android
 npm run android:open
 npm run android:debug
