@@ -1,5 +1,6 @@
 import { computed, nextTick, ref, watch, type Ref } from 'vue';
 import { isAiChatOpen } from '../store/ui';
+import type { AiConversationTimeRange } from '../domain/ai/aiConversationTypes.js';
 import {
   appendConversationMessages,
   createConversation as createLocalConversation,
@@ -9,7 +10,7 @@ import {
   updateConversation as updateLocalConversation,
 } from '../domain/ai/localAiConversations';
 
-export type TimeRange = 'filtered' | 'all-notes' | 'day' | 'week' | 'month' | 'year';
+export type TimeRange = AiConversationTimeRange;
 
 export type LocalMessage = {
   role: 'user' | 'assistant';

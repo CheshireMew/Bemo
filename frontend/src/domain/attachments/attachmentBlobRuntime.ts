@@ -1,15 +1,13 @@
-import { resolveBackendUrl } from '../config.js';
-import { getAttachmentRefFilenamesForNote } from '../domain/attachments/attachmentRefStorage.js';
-import { extractAttachmentFilename } from './attachmentUrls.js';
+import { resolveBackendUrl } from '../../config.js';
 import {
-  getAttachmentBlob,
   deleteBlobIndexRecord,
+  getAttachmentBlob,
   getBlobIndexRecord,
   putAttachmentBlob,
   putBlobIndexRecord,
-} from './db.js';
-
-const ATTACHMENT_URL_PATTERN = /(\/images\/[^)\s"'`>]+)/g;
+} from './blobStorage.js';
+import { getAttachmentRefFilenamesForNote } from './attachmentRefStorage.js';
+import { buildAttachmentUrlFromFilename, extractAttachmentFilename, extractAttachmentUrlsFromContent } from './attachmentLinks.js';
 
 export type SyncAttachment = {
   url: string;
@@ -17,15 +15,6 @@ export type SyncAttachment = {
   blob_hash: string;
   mime_type: string;
 };
-
-export function extractAttachmentUrlsFromContent(content: string): string[] {
-  const matches = content.match(ATTACHMENT_URL_PATTERN) || [];
-  return Array.from(new Set(matches));
-}
-
-function buildAttachmentUrlFromFilename(filename: string) {
-  return `/images/${encodeURIComponent(filename)}`;
-}
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const exactBytes = Uint8Array.from(bytes);

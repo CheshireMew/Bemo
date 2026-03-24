@@ -1,4 +1,4 @@
-import type { TimeRange } from '../../composables/useAiConversations';
+import type { AiConversationTimeRange } from './aiConversationTypes.js';
 
 export type LocalMessageRecord = {
   role: 'user' | 'assistant';
@@ -9,7 +9,7 @@ export type LocalMessageRecord = {
 export type LocalConversationRecord = {
   id: string;
   title: string;
-  context_mode: TimeRange | null;
+  context_mode: AiConversationTimeRange | null;
   created_at: number;
   updated_at: number;
   message_count: number;
@@ -50,7 +50,7 @@ export function getConversation(conversationId: string) {
   return found;
 }
 
-export function createConversation(title: string, contextMode: TimeRange | null) {
+export function createConversation(title: string, contextMode: AiConversationTimeRange | null) {
   const now = Math.floor(Date.now() / 1000);
   const record: LocalConversationRecord = {
     id: createId(),
@@ -68,7 +68,7 @@ export function createConversation(title: string, contextMode: TimeRange | null)
 
 export function updateConversation(conversationId: string, updates: {
   title?: string | null;
-  context_mode?: TimeRange | null;
+  context_mode?: AiConversationTimeRange | null;
 }) {
   const all = readAll();
   const next = all.map((item) => {

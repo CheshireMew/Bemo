@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { refreshSyncPendingCounts, setSyncState } from '../domain/sync/syncStatusBus.js';
-import { getSyncTargetLabel } from '../domain/sync/syncTransportBuilder.js';
+import { getSyncTargetLabel } from '../domain/sync/syncConfig.js';
 import {
   hasBundledWebDavProxyAccessToken,
   hasWebDavBackendProxyAccess,
@@ -10,7 +10,7 @@ import {
 import { saveSettings } from '../services/localSettings.js';
 import { settings, type SyncMode } from '../store/settings.js';
 import { pendingCount, serverPendingCount, webdavPendingCount } from '../store/sync.js';
-import { requestSyncNow } from '../utils/sync.js';
+import { requestSyncNow } from '../domain/sync/syncCoordinator.js';
 
 const AUTO_SAVE_DELAY_MS = 400;
 

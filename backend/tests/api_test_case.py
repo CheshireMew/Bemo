@@ -20,23 +20,13 @@ class ApiTestCase(unittest.TestCase):
         os.environ["BEMO_SYNC_TOKEN"] = "test-sync-token"
 
         import core.paths as paths_module
-        import services.note_repository as note_repository_module
-        import services.image_reference_service as image_reference_service_module
-        import services.trash_service as trash_service_module
-        import services.note_index_repository as note_index_repository_module
         import services.sync_store_repository as sync_store_repository_module
-        import services.local_sync_note_repository as local_sync_note_repository_module
         import services.sync_service as sync_service_module
         import api.sync as sync_module
         import app_factory as app_factory_module
 
         importlib.reload(paths_module)
-        self.note_repository_module = importlib.reload(note_repository_module)
-        importlib.reload(image_reference_service_module)
-        importlib.reload(trash_service_module)
-        importlib.reload(note_index_repository_module)
         importlib.reload(sync_store_repository_module)
-        importlib.reload(local_sync_note_repository_module)
         importlib.reload(sync_service_module)
         self.sync_module = importlib.reload(sync_module)
         self.app_factory_module = importlib.reload(app_factory_module)

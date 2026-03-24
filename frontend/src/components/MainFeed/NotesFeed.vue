@@ -11,7 +11,7 @@
     
     <NoteCard 
       v-for="note in displayedNotes" 
-      :key="note.filename" 
+      :key="note.note_id" 
       :note="note"
     />
   </div>

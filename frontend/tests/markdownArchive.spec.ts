@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import JSZip from 'jszip';
 
 import { buildMarkdownArchiveBlob, importMarkdownArchive } from '../src/domain/importExport/markdownArchive.js';
-import { getAttachmentBlob, getCachedNotes, getTrashNotes, putAttachmentBlob, putCachedNote, putTrashNote } from '../src/utils/db.js';
+import { getAttachmentBlob, putAttachmentBlob } from '../src/domain/attachments/blobStorage.js';
+import { getCachedNotes, putCachedNote } from '../src/domain/notes/notesStorage.js';
+import { getTrashNotes, putTrashNote } from '../src/domain/notes/trashStorage.js';
 import { installMemoryIndexedDb } from './memoryIndexedDb.js';
 
 installMemoryIndexedDb();

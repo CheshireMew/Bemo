@@ -40,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import type { LegacyMigrationPreview } from '../domain/notes/legacyMigration.js';
+import type { LegacyMigrationPreview } from '../domain/importExport/legacyMarkdownMigration.js';
 
 defineProps<{
   open: boolean;

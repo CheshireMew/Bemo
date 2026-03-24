@@ -1,11 +1,11 @@
 import { buildBackupPayload, applyBackupPayload, type BackupPayload } from './backupPayload.js';
 import { buildBackupArchiveBlob, parseBackupArchive } from './backupArchive.js';
-import { cleanupOrphanImagesRequest } from './attachmentCleanup.js';
+import { cleanupOrphanAttachments } from '../attachments/orphanAttachmentCleanup.js';
+import { clearAttachmentUrlCache } from '../attachments/attachmentUrlResolver.js';
 import { exportFlomoCsv, importFlomoArchive } from './flomoImportExport.js';
 import { downloadBlob } from './importExportShared.js';
 import { buildMarkdownArchiveBlob, importMarkdownArchive } from './markdownArchive.js';
-import { openIndexedDb } from '../../utils/indexedDb.js';
-import { clearAttachmentUrlCache } from '../../utils/attachmentUrls.js';
+import { openIndexedDb } from '../storage/indexedDb.js';
 
 export type { BackupPayload } from './backupPayload.js';
 
@@ -98,16 +98,11 @@ export async function resetAppToFirstInstallState() {
   };
 }
 
-export const exportBackupJson = exportBackupArchive;
-export const importBackupJson = importBackupArchive;
-export const exportNotesZip = exportBackupArchive;
-export const importNotesZip = importBackupArchive;
-
 export {
   applyBackupPayload,
   buildBackupArchiveBlob,
   buildBackupPayload,
-  cleanupOrphanImagesRequest,
+  cleanupOrphanAttachments,
   exportFlomoCsv,
   importFlomoArchive,
 };

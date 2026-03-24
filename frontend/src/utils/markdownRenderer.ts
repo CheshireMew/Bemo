@@ -1,7 +1,7 @@
 import { marked } from 'marked';
 
 import { settings } from '../store/settings.js';
-import { resolveAttachmentUrl } from './attachmentUrls.js';
+import { resolveAttachmentUrl } from '../domain/attachments/attachmentUrlResolver.js';
 
 const ATTACHMENT_URL_PATTERN = /(\/images\/[^)\s"'`>]+)/g;
 const ORIGINAL_URL_FRAGMENT = '#bemo-original=';

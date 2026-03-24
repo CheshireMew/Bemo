@@ -1,5 +1,10 @@
 import { ref } from 'vue';
-import { onSyncStatusChange, flushPendingQueue, registerSyncWindowEvents, type SyncStatus } from '../utils/sync';
+import {
+  flushPendingQueue,
+  onSyncStatusChange,
+  registerSyncWindowEvents,
+} from '../domain/sync/syncCoordinator.js';
+import type { SyncStatus } from '../domain/sync/syncTypes.js';
 
 export const syncStatus = ref<SyncStatus>('online');
 export const pendingCount = ref(0);

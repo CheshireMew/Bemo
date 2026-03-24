@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 
 import { replaceNoteAttachmentRefsForScope } from '../src/domain/attachments/attachmentRefStorage.js';
 import { prepareOutboundChanges, hydrateInboundAttachments } from '../src/domain/sync/syncAttachmentRuntime.js';
-import { getAttachmentBlob, getBlobIndexRecord, putAttachmentBlob, putCachedNote } from '../src/utils/db.js';
+import { getAttachmentBlob, getBlobIndexRecord, putAttachmentBlob } from '../src/domain/attachments/blobStorage.js';
+import { putCachedNote } from '../src/domain/notes/notesStorage.js';
 import { installMemoryIndexedDb } from './memoryIndexedDb.js';
 
 installMemoryIndexedDb();

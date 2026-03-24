@@ -6,7 +6,9 @@ function testFormatPendingChangeTypeUsesReadableLabels() {
   assert.equal(formatPendingChangeType('note.create'), '新建');
   assert.equal(formatPendingChangeType('note.update'), '更新正文');
   assert.equal(formatPendingChangeType('note.patch'), '更新属性');
-  assert.equal(formatPendingChangeType('note.delete'), '删除');
+  assert.equal(formatPendingChangeType('note.trash'), '移入回收站');
+  assert.equal(formatPendingChangeType('note.delete'), '移入回收站');
+  assert.equal(formatPendingChangeType('note.purge'), '彻底删除');
 }
 
 function testSummarizePendingChangeKeepsKeyFields() {

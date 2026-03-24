@@ -1,22 +1,19 @@
 import {
   emptyLocalTrashNotes,
-  listLocalTrashNotes,
   permanentlyDeleteLocalTrashNote,
   restoreLocalTrashNote,
-} from './localNotesRepository.js';
+} from './localTrashMutations.js';
+import { listLocalTrashNotes } from './localNoteQueries.js';
 import type { NoteMeta } from './notesTypes.js';
-import { setSyncStateValue } from '../sync/syncStateStorage.js';
-import { enqueueRemoteNoteChange } from './notesSync.js';
+import { enqueueRemoteNoteChange } from '../sync/noteSyncOutbox.js';
 
 export async function loadTrashForDisplay(): Promise<NoteMeta[]> {
-  const trash = await listLocalTrashNotes();
-  await setSyncStateValue('local_trash_initialized', '1');
-  return trash;
+  return listLocalTrashNotes();
 }
 
-export async function restoreTrashNoteCommand(filename: string): Promise<void> {
-  const restored = await restoreLocalTrashNote(filename);
-  await enqueueRemoteNoteChange({
+export async function restoreTrashNoteCommand(noteId: string): Promise<boolean> {
+  const restored = await restoreLocalTrashNote(noteId);
+  return enqueueRemoteNoteChange({
     entityId: restored.note_id,
     type: 'note.restore',
     baseRevision: restored.revision - 1,
@@ -31,10 +28,10 @@ export async function restoreTrashNoteCommand(filename: string): Promise<void> {
   });
 }
 
-export async function permanentlyDeleteTrashNoteCommand(filename: string): Promise<void> {
-  const deleted = await permanentlyDeleteLocalTrashNote(filename);
-  if (!deleted) return;
-  await enqueueRemoteNoteChange({
+export async function permanentlyDeleteTrashNoteCommand(noteId: string): Promise<boolean> {
+  const deleted = await permanentlyDeleteLocalTrashNote(noteId);
+  if (!deleted) return false;
+  return enqueueRemoteNoteChange({
     entityId: deleted.note_id,
     type: 'note.purge',
     baseRevision: deleted.revision,
@@ -45,10 +42,11 @@ export async function permanentlyDeleteTrashNoteCommand(filename: string): Promi
   });
 }
 
-export async function emptyTrashCommand(): Promise<void> {
+export async function emptyTrashCommand(): Promise<boolean> {
   const deleted = await emptyLocalTrashNotes();
+  let queuedAny = false;
   for (const note of deleted) {
-    await enqueueRemoteNoteChange({
+    queuedAny = await enqueueRemoteNoteChange({
       entityId: note.note_id,
       type: 'note.purge',
       baseRevision: note.revision,
@@ -56,6 +54,7 @@ export async function emptyTrashCommand(): Promise<void> {
         filename: note.filename,
         revision: note.revision + 1,
       },
-    });
+    }) || queuedAny;
   }
+  return queuedAny;
 }

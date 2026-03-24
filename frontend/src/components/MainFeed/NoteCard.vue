@@ -17,7 +17,7 @@
           <button class="btn-action" title="与 AI 对话" @click="openNoteAiChat"><Bot :size="14" /></button>
           <button class="btn-action" :title="copyButtonTitle" @click="copyNoteContent"><Copy :size="14" /></button>
           <button class="btn-action" :title="note.pinned ? '取消置顶' : '置顶'" @click="togglePin(note)"><Pin :size="14" :class="{ 'pin-active': note.pinned }" /></button>
-          <button class="btn-action" title="删除" @click="deleteNote(note.filename)"><Trash2 :size="14" /></button>
+          <button class="btn-action" title="删除" @click="deleteNote(note.note_id)"><Trash2 :size="14" /></button>
         </template>
       </div>
     </div>
@@ -103,7 +103,7 @@ import { togglePin, deleteNote, toggleTag, updateNoteContent } from '../../store
 import { pushNotification } from '../../store/notifications';
 import { settings } from '../../store/settings';
 import { openAiChat } from '../../store/ui';
-import { resolveAttachmentUrl } from '../../utils/attachmentUrls';
+import { resolveAttachmentUrl } from '../../domain/attachments/attachmentUrlResolver';
 import { getEditorAttachmentDisplayKind, splitEditorMarkdownByKind } from '../../utils/editorAttachments';
 import { renderMarkdownToHtml } from '../../utils/markdownRenderer';
 import { useViewport } from '../../composables/useViewport';

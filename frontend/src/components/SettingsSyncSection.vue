@@ -159,7 +159,7 @@
       </div>
 
       <p v-if="shouldProxyWebDavThroughBackend()" class="field-hint">
-        网页端 WebDAV 会经由同步服务器代理转发，不再尝试浏览器直连第三方 WebDAV。
+        网页端 WebDAV 会经由同步服务器代理转发。原因不是 WebDAV 归后端所有，而是很多第三方 WebDAV 服务不放开浏览器 CORS，网页端无法稳定直连。
       </p>
 
       <div v-if="shouldProxyWebDavThroughBackend() && hasBundledWebDavProxyAccessToken()" class="helper-panel">

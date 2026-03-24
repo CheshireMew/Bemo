@@ -1,7 +1,6 @@
-import { openIndexedDb } from '../../utils/indexedDb.js';
+import { openIndexedDb } from '../storage/indexedDb.js';
 import type { NoteMeta } from '../notes/notesTypes.js';
-import { extractAttachmentFilename } from '../../utils/attachmentUrls.js';
-import { extractAttachmentUrlsFromContent } from '../../utils/syncAttachments.js';
+import { extractAttachmentFilenames } from './attachmentRefParser.js';
 
 export type AttachmentRefScope = 'active' | 'trash' | 'draft';
 export type AttachmentRefOwnerType = 'note' | 'draft';
@@ -18,17 +17,6 @@ export interface AttachmentRefRecord {
 
 function buildAttachmentRefId(ownerType: AttachmentRefOwnerType, ownerId: string, filename: string) {
   return `${ownerType}:${ownerId}:${filename}`;
-}
-
-export function extractAttachmentFilenames(content: string): string[] {
-  const filenames = new Set<string>();
-  for (const url of extractAttachmentUrlsFromContent(content || '')) {
-    const filename = extractAttachmentFilename(url);
-    if (filename) {
-      filenames.add(filename);
-    }
-  }
-  return [...filenames];
 }
 
 export async function getAllAttachmentRefs(): Promise<AttachmentRefRecord[]> {

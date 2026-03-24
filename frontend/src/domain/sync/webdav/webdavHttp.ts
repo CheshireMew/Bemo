@@ -5,7 +5,7 @@ import {
   resolveBackendUrl,
   SYNC_PROXY_TOKEN,
 } from '../../../config.js';
-import { settings } from '../../../store/settings.js';
+import { readSyncConfigSnapshot } from '../syncConfig.js';
 
 type WebDavResponseType = 'text' | 'arraybuffer';
 type NativeBodyEncoding = 'text' | 'base64' | 'json';
@@ -96,7 +96,7 @@ function isCapacitorAndroid() {
 }
 
 function isBrowserWebPlatform() {
-  return !isTauriDesktop() && !isCapacitorAndroid();
+  return typeof window !== 'undefined' && !isTauriDesktop() && !isCapacitorAndroid();
 }
 
 function normalizeHeaders(headers?: HeadersInit) {
@@ -229,9 +229,12 @@ async function requestViaCapacitor(url: string, init: WebDavRequestInit) {
 }
 
 function getWebDavProxyAccessToken() {
-  return SYNC_PROXY_TOKEN || settings.sync.accessToken.trim();
+  return SYNC_PROXY_TOKEN || readSyncConfigSnapshot().accessToken;
 }
 
+// Browser WebDAV access is constrained by third-party CORS policy.
+// Desktop and Android can use native HTTP directly, but the web build must
+// keep this proxy path for common providers that do not allow browser CORS.
 export function shouldProxyWebDavThroughBackend() {
   return isBrowserWebPlatform();
 }
@@ -254,6 +257,8 @@ async function requestViaBackend(url: string, init: WebDavRequestInit) {
     throw new Error('网页端 WebDAV 需要填写同步服务器 Token，才能通过后端代理访问第三方 WebDAV。');
   }
 
+  // This is a transport bridge for the browser runtime only.
+  // WebDAV ownership still lives in the frontend sync engine.
   const proxyUrl = resolveBackendUrl('/api/sync/webdav/request');
   if (!proxyUrl) {
     throw new Error('当前网页端没有可用的同步服务器代理地址。');

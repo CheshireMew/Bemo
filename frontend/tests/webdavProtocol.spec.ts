@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { listWebDavChangeFiles, pushWebDavChanges } from '../src/domain/sync/webdav/webdavChanges.js';
 import { acquireWebDavLease } from '../src/domain/sync/webdav/webdavLease.js';
 import { ensureWebDavLayout } from '../src/domain/sync/webdav/webdavRequest.js';
-import { createWebDavTransport } from '../src/utils/webdavTransport.js';
+import { createWebDavTransport } from '../src/domain/sync/webdavSyncTransport.js';
 
 type FetchCall = {
   url: string;
@@ -199,6 +199,12 @@ async function testTransportPullUsesSnapshotBootstrapWhenCursorMissing() {
           format_version: 1,
           latest_cursor: '12',
           latest_snapshot: 'snapshot_00000012.json',
+          bootstrap: {
+            status: 'completed',
+            fingerprint: 'webdav:test',
+            operation_ids: [],
+            updated_at: '2026-03-18T00:00:00.000Z',
+          },
           updated_at: '2026-03-18T00:00:00.000Z',
         });
       }
@@ -229,6 +235,7 @@ async function testTransportPullUsesSnapshotBootstrapWhenCursorMissing() {
         username: 'demo',
         password: 'secret',
         basePath: '',
+        bootstrapFingerprint: 'webdav:test',
       });
       const result = await transport.pull(null);
       assert.equal(result.latest_cursor, '12');
@@ -248,6 +255,12 @@ async function testCleanupUnusedBlobsDeletesOnlyUnreferencedRemoteBlobs() {
           format_version: 1,
           latest_cursor: '5',
           latest_snapshot: 'snapshot_00000005.json',
+          bootstrap: {
+            status: 'completed',
+            fingerprint: 'webdav:test',
+            operation_ids: [],
+            updated_at: '2026-03-18T00:00:00.000Z',
+          },
           updated_at: '2026-03-18T00:00:00.000Z',
         });
       }
@@ -298,6 +311,7 @@ async function testCleanupUnusedBlobsDeletesOnlyUnreferencedRemoteBlobs() {
         username: 'demo',
         password: 'secret',
         basePath: '',
+        bootstrapFingerprint: 'webdav:test',
       });
       const result = await transport.cleanupUnusedBlobs?.();
       assert.deepEqual(result, { deleted: 1, retained: 1 });

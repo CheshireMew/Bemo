@@ -1,6 +1,6 @@
 import { ref } from 'vue';
 import { clearConflict, getConflict, getConflicts } from '../domain/sync/conflictStorage.js';
-import { enqueueRemoteNoteChange } from '../domain/notes/notesSync';
+import { enqueueRemoteNoteChange } from '../domain/sync/noteSyncOutbox.js';
 import {
   buildKeepLocalResyncPayload,
   buildRemoteRecreationInput,
@@ -10,12 +10,15 @@ import {
 } from '../domain/sync/conflictResolution.js';
 import {
   createLocalNoteFromSync,
+} from '../domain/notes/localNoteCreation';
+import { moveLocalNoteToTrashById } from '../domain/notes/localTrashMutations';
+import { updateLocalNoteById } from '../domain/notes/localNoteMutations';
+import {
   findLocalNoteByFilename,
   findLocalNoteById,
-  moveLocalNoteToTrashById,
-  updateLocalNoteById,
-} from '../domain/notes/localNotesRepository';
+} from '../domain/notes/localNoteQueries';
 import { fetchNotes } from './notes';
+import { requestSyncNow } from '../domain/sync/syncCoordinator.js';
 
 export interface ConflictItem {
   id: number;
@@ -90,7 +93,10 @@ export async function keepLocalAndResync(id: number) {
       updated_at: Math.floor(Date.now() / 1000),
     }));
 
-    await enqueueRemoteNoteChange(resolution);
+    const queued = await enqueueRemoteNoteChange(resolution);
+    if (queued) {
+      requestSyncNow();
+    }
     await fetchNotes();
     await dismissConflict(id);
     return;

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 
-import { getAttachmentBlob, getCachedNotes, getMutationLog, getSyncStateValue, putCachedNote, setSyncStateValue } from '../src/utils/db.js';
-import { probeLegacyMarkdownLibrary, importLegacyMarkdownLibrary } from '../src/domain/notes/legacyMigration.js';
+import { getAttachmentBlob } from '../src/domain/attachments/blobStorage.js';
+import { getCachedNotes, putCachedNote } from '../src/domain/notes/notesStorage.js';
+import { getMutationLog } from '../src/domain/sync/mutationLogStorage.js';
+import { getSyncStateValue, setSyncStateValue } from '../src/domain/sync/syncStateStorage.js';
+import { probeLegacyMarkdownLibrary, importLegacyMarkdownLibrary } from '../src/domain/importExport/legacyMarkdownMigration.js';
 import { installMemoryIndexedDb } from './memoryIndexedDb.js';
 
 installMemoryIndexedDb();

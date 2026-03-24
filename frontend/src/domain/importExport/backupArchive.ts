@@ -2,11 +2,10 @@ import JSZip from 'jszip';
 
 import { getReferencedAttachmentFilenames } from '../../domain/attachments/attachmentRefStorage.js';
 import { getAllAttachmentBlobRecords } from '../../domain/attachments/blobStorage.js';
+import { extractAttachmentFilename, extractAttachmentUrlsFromContent } from '../../domain/attachments/attachmentLinks.js';
 import { getCachedNotes } from '../notes/notesStorage.js';
 import { getTrashNotes } from '../notes/trashStorage.js';
 import type { BackupAttachment, BackupPayload } from './backupPayload.js';
-import { extractAttachmentFilename } from '../../utils/attachmentUrls.js';
-import { extractAttachmentUrlsFromContent } from '../../utils/syncAttachments.js';
 
 type BackupArchiveManifest = Omit<BackupPayload, 'attachments'> & {
   version: 3;

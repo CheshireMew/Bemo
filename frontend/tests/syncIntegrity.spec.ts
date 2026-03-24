@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { claimMutationLogTargets, filterMutationLogByTarget, type ChangeRecord } from '../src/utils/db.js';
+import { claimMutationLogTargets, filterMutationLogByTarget, type ChangeRecord } from '../src/domain/sync/mutationLogStorage.js';
 import {
   hasConcurrentPatchConflict,
   hasConcurrentUpdateConflict,

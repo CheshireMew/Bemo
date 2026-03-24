@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 
 import { renderMarkdownToHtml } from '../src/utils/markdownRenderer.js';
-import { clearAttachmentUrlCache, resolveAttachmentUrl } from '../src/utils/attachmentUrls.js';
+import { clearAttachmentUrlCache, resolveAttachmentUrl } from '../src/domain/attachments/attachmentUrlResolver.js';
 import {
   getAttachmentBlob,
   putAttachmentBlob,
   putDraftAttachmentBlob,
+} from '../src/domain/attachments/blobStorage.js';
+import {
   replaceAttachmentRefsForOwner,
-} from '../src/utils/db.js';
-import { collectSyncAttachments, ensureLocalAttachment } from '../src/utils/syncAttachments.js';
+} from '../src/domain/attachments/attachmentRefStorage.js';
+import { collectSyncAttachments, ensureLocalAttachment } from '../src/domain/attachments/attachmentBlobRuntime.js';
 import { installMemoryIndexedDb } from './memoryIndexedDb.js';
 
 installMemoryIndexedDb();

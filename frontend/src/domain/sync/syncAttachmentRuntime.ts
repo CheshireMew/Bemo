@@ -1,4 +1,4 @@
-import { collectSyncAttachments, ensureBlobIndexValid, ensureLocalAttachment } from '../../utils/syncAttachments.js';
+import { collectSyncAttachments, ensureBlobIndexValid, ensureLocalAttachment } from '../attachments/attachmentBlobRuntime.js';
 import type { ChangeRecord } from './mutationLogStorage.js';
 import { buildSyncTransport } from './syncTransportBuilder.js';
 

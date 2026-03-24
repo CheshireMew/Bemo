@@ -8,10 +8,12 @@ import { readWebDavManifest, writeWebDavManifest } from '../src/domain/sync/webd
 import { ensureWebDavLayout, encodeBasicAuth } from '../src/domain/sync/webdav/webdavRequest.js';
 import {
   applyChangesToSnapshotState,
+} from '../src/domain/sync/webdav/webdavSnapshotState.js';
+import {
   buildSnapshotStateFromRemote,
   readWebDavSnapshot,
   writeWebDavSnapshot,
-} from '../src/domain/sync/webdav/webdavSnapshot.js';
+} from '../src/domain/sync/webdav/webdavSnapshotStorage.js';
 
 class FakeDomParser {
   parseFromString(xml: string) {
@@ -222,6 +224,12 @@ await withLocalWebDavServer(async ({ baseUrl, headers }) => {
     format_version: 1,
     latest_cursor: '1',
     latest_snapshot: snapshotName,
+    bootstrap: {
+      status: 'completed',
+      fingerprint: 'webdav:test',
+      operation_ids: [],
+      updated_at: '2026-03-18T00:00:00.000Z',
+    },
     updated_at: '2026-03-18T00:00:00.000Z',
   });
 

@@ -1,6 +1,5 @@
-import type { ManifestRecord, SnapshotRecord, WebDavSnapshotNote } from './webdavTypes.js';
-import { listWebDavChangeFiles } from './webdavChanges.js';
-import { readJson, webdavRequest, writeJson } from './webdavRequest.js';
+import { normalizeNoteRevision, normalizeNoteTags } from '../../notes/noteContract.js';
+import type { SnapshotRecord, WebDavSnapshotNote } from './webdavTypes.js';
 
 type SyncChange = {
   operation_id?: string;
@@ -10,6 +9,20 @@ type SyncChange = {
   timestamp?: string;
   payload?: Record<string, unknown>;
 };
+
+function normalizeAttachment(value: unknown) {
+  if (!value || typeof value !== 'object') return [];
+  const attachment = value as Record<string, unknown>;
+  const filename = typeof attachment.filename === 'string' ? attachment.filename : '';
+  const blobHash = typeof attachment.blob_hash === 'string' ? attachment.blob_hash : '';
+  const mimeType = typeof attachment.mime_type === 'string' ? attachment.mime_type : 'application/octet-stream';
+  if (!filename || !blobHash) return [];
+  return [{
+    filename,
+    blob_hash: blobHash,
+    mime_type: mimeType,
+  }];
+}
 
 function toSnapshotNote(change: SyncChange, existing?: WebDavSnapshotNote): WebDavSnapshotNote | null {
   const payload = change.payload || {};
@@ -22,10 +35,10 @@ function toSnapshotNote(change: SyncChange, existing?: WebDavSnapshotNote): WebD
     return {
       note_id: noteId,
       scope: 'trash',
-      revision: Math.max(1, Number(payload.revision ?? existing?.revision ?? 1)),
+      revision: normalizeNoteRevision(payload.revision, existing?.revision ?? 1),
       filename: typeof payload.filename === 'string' ? payload.filename : existing?.filename,
       content: typeof payload.content === 'string' ? payload.content : existing?.content || '',
-      tags: Array.isArray(payload.tags) ? payload.tags.map((tag) => String(tag)) : existing?.tags || [],
+      tags: Array.isArray(payload.tags) ? normalizeNoteTags(payload.tags) : existing?.tags || [],
       pinned: payload.pinned !== undefined ? Boolean(payload.pinned) : existing?.pinned || false,
       created_at: typeof payload.created_at === 'string' ? payload.created_at : existing?.created_at,
       updated_at: typeof change.timestamp === 'string' ? change.timestamp : existing?.updated_at,
@@ -39,10 +52,10 @@ function toSnapshotNote(change: SyncChange, existing?: WebDavSnapshotNote): WebD
     return {
       note_id: noteId,
       scope: 'active',
-      revision: Math.max(1, Number(payload.revision ?? existing?.revision ?? 1)),
+      revision: normalizeNoteRevision(payload.revision, existing?.revision ?? 1),
       filename: typeof payload.filename === 'string' ? payload.filename : existing?.filename,
       content: typeof payload.content === 'string' ? payload.content : existing?.content || '',
-      tags: Array.isArray(payload.tags) ? payload.tags.map((tag) => String(tag)) : existing?.tags || [],
+      tags: Array.isArray(payload.tags) ? normalizeNoteTags(payload.tags) : existing?.tags || [],
       pinned: payload.pinned !== undefined ? Boolean(payload.pinned) : existing?.pinned || false,
       created_at: typeof payload.created_at === 'string' ? payload.created_at : existing?.created_at,
       updated_at: typeof change.timestamp === 'string' ? change.timestamp : existing?.updated_at,
@@ -55,9 +68,9 @@ function toSnapshotNote(change: SyncChange, existing?: WebDavSnapshotNote): WebD
   if (change.type === 'note.patch' && existing) {
     return {
       ...existing,
-      revision: Math.max(existing.revision + 1, Number(payload.revision ?? existing.revision + 1)),
+      revision: normalizeNoteRevision(payload.revision, existing.revision + 1),
       pinned: payload.pinned !== undefined ? Boolean(payload.pinned) : existing.pinned,
-      tags: Array.isArray(payload.tags) ? payload.tags.map((tag) => String(tag)) : existing.tags,
+      tags: Array.isArray(payload.tags) ? normalizeNoteTags(payload.tags) : existing.tags,
       updated_at: typeof change.timestamp === 'string' ? change.timestamp : existing.updated_at,
       attachments: Array.isArray(payload.attachments)
         ? payload.attachments.flatMap((attachment) => normalizeAttachment(attachment))
@@ -69,10 +82,10 @@ function toSnapshotNote(change: SyncChange, existing?: WebDavSnapshotNote): WebD
     return {
       note_id: noteId,
       scope: 'active',
-      revision: Math.max(1, Number(payload.revision ?? existing?.revision ?? 1)),
+      revision: normalizeNoteRevision(payload.revision, existing?.revision ?? 1),
       filename: typeof payload.filename === 'string' ? payload.filename : existing?.filename,
       content: typeof payload.content === 'string' ? payload.content : existing?.content || '',
-      tags: Array.isArray(payload.tags) ? payload.tags.map((tag) => String(tag)) : existing?.tags || [],
+      tags: Array.isArray(payload.tags) ? normalizeNoteTags(payload.tags) : existing?.tags || [],
       pinned: payload.pinned !== undefined ? Boolean(payload.pinned) : existing?.pinned || false,
       created_at: typeof payload.created_at === 'string' ? payload.created_at : existing?.created_at,
       updated_at: typeof change.timestamp === 'string' ? change.timestamp : existing?.updated_at,
@@ -130,77 +143,6 @@ export function buildBootstrapChangesFromSnapshot(snapshot: SnapshotRecord) {
         attachments: note.attachments,
       },
     }));
-}
-
-function normalizeAttachment(value: unknown) {
-  if (!value || typeof value !== 'object') return [];
-  const attachment = value as Record<string, unknown>;
-  const filename = typeof attachment.filename === 'string' ? attachment.filename : '';
-  const blobHash = typeof attachment.blob_hash === 'string' ? attachment.blob_hash : '';
-  const mimeType = typeof attachment.mime_type === 'string' ? attachment.mime_type : 'application/octet-stream';
-  if (!filename || !blobHash) return [];
-  return [{
-    filename,
-    blob_hash: blobHash,
-    mime_type: mimeType,
-  }];
-}
-
-export async function readWebDavSnapshot(
-  baseUrl: string,
-  headers: HeadersInit,
-  manifest: ManifestRecord | null,
-): Promise<SnapshotRecord | null> {
-  if (!manifest?.latest_snapshot) return null;
-  return readJson<SnapshotRecord>(`${baseUrl}/snapshots/${manifest.latest_snapshot}`, headers);
-}
-
-async function fetchRemoteChanges(baseUrl: string, headers: HeadersInit, latestCursor: string) {
-  const files = await listWebDavChangeFiles(baseUrl, headers, null, latestCursor);
-  const changes: SyncChange[] = [];
-
-  for (const file of files) {
-    const response = await webdavRequest(file, { method: 'GET', headers });
-    if (response.status === 404) continue;
-    changes.push(await response.json());
-  }
-
-  return changes;
-}
-
-export async function buildSnapshotStateFromRemote(
-  baseUrl: string,
-  headers: HeadersInit,
-  manifest: ManifestRecord | null,
-): Promise<Record<string, WebDavSnapshotNote>> {
-  if (!manifest?.latest_cursor || manifest.latest_cursor === '0') {
-    return {};
-  }
-
-  const snapshot = await readWebDavSnapshot(baseUrl, headers, manifest);
-  if (snapshot?.notes) {
-    return snapshot.notes;
-  }
-
-  const changes = await fetchRemoteChanges(baseUrl, headers, manifest.latest_cursor);
-  return applyChangesToSnapshotState({}, changes);
-}
-
-export async function writeWebDavSnapshot(
-  baseUrl: string,
-  headers: HeadersInit,
-  latestCursor: string,
-  notes: Record<string, WebDavSnapshotNote>,
-) {
-  const snapshotName = `snapshot_${latestCursor.padStart(8, '0')}.json`;
-  const payload: SnapshotRecord = {
-    format_version: 1,
-    latest_cursor: latestCursor,
-    generated_at: new Date().toISOString(),
-    notes,
-  };
-  await writeJson(`${baseUrl}/snapshots/${snapshotName}`, headers, payload);
-  return snapshotName;
 }
 
 export function collectReferencedBlobHashes(notes: Record<string, WebDavSnapshotNote>) {

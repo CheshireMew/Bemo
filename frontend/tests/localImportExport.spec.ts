@@ -6,36 +6,39 @@ import {
   buildBackupArchiveBlob,
   buildBackupPayload,
   clearAllLocalExperimentData,
-  cleanupOrphanImagesRequest,
+  cleanupOrphanAttachments,
   importFlomoArchive,
   importBackupArchive,
   resetAppToFirstInstallState,
 } from '../src/domain/importExport/localImportExport.js';
 import {
   updateLocalNote,
+} from '../src/domain/notes/localNoteMutations.js';
+import {
   deleteLocalNote,
-  restoreLocalTrashNote,
   permanentlyDeleteLocalTrashNote,
-} from '../src/domain/notes/localNotesRepository.js';
-import { replaceNoteAttachmentRefsForScope } from '../src/domain/attachments/attachmentRefStorage.js';
+  restoreLocalTrashNote,
+} from '../src/domain/notes/localTrashMutations.js';
 import {
   getAttachmentBlob,
-  getAllAttachmentRefs,
-  getAttachmentReferenceSummary,
-  getCachedNotes,
-  getConflicts,
   getBlobIndexRecord,
   getDraftAttachmentBlob,
-  getMutationLog,
-  getSyncStateValue,
-  setSyncStateValue,
-  putBlobIndexRecord,
   putAttachmentBlob,
+  putBlobIndexRecord,
   putDraftAttachmentBlob,
-  putCachedNote,
-  enqueueChange,
-  setTrashNotes,
-} from '../src/utils/db.js';
+} from '../src/domain/attachments/blobStorage.js';
+import {
+  getAllAttachmentRefs,
+  getAttachmentReferenceSummary,
+  replaceNoteAttachmentRefsForScope,
+  type AttachmentRefRecord,
+} from '../src/domain/attachments/attachmentRefStorage.js';
+import { getCachedNotes, putCachedNote } from '../src/domain/notes/notesStorage.js';
+import { setTrashNotes } from '../src/domain/notes/trashStorage.js';
+import { getConflicts } from '../src/domain/sync/conflictStorage.js';
+import { getMutationLog } from '../src/domain/sync/mutationLogStorage.js';
+import { enqueueDeviceChange } from '../src/domain/sync/mutationLogRuntime.js';
+import { getSyncStateValue, setSyncStateValue } from '../src/domain/sync/syncStateStorage.js';
 import { addConflict } from '../src/domain/sync/conflictStorage.js';
 import { installMemoryIndexedDb } from './memoryIndexedDb.js';
 
@@ -295,8 +298,8 @@ async function testApplyBackupPayloadResetsSyncRuntimeState() {
   assert.equal(await getSyncStateValue('webdav_last_sync_at'), null);
   assert.deepEqual(
     (await getAllAttachmentRefs())
-      .filter((item) => item.scope === 'active')
-      .map((item) => item.filename),
+      .filter((item: AttachmentRefRecord) => item.scope === 'active')
+      .map((item: AttachmentRefRecord) => item.filename),
     [],
   );
 }
@@ -338,7 +341,7 @@ async function testCleanupOrphanImagesOnlyDeletesUnreferencedLocalAttachments() 
     size: 2,
   });
 
-  const result = await cleanupOrphanImagesRequest();
+  const result = await cleanupOrphanAttachments();
 
   assert.equal(result.deleted_count, 1);
   assert.deepEqual(result.deleted_files, ['orphan.png']);
@@ -378,7 +381,7 @@ async function testCleanupOrphanImagesKeepsDraftAndPendingMutationAttachments() 
     blob: new Blob([new Uint8Array([9])], { type: 'image/png' }),
     mimeType: 'image/png',
   });
-  await enqueueChange({
+  await enqueueDeviceChange({
     target: 'server',
     entityId: 'note-queued',
     type: 'note.create',
@@ -388,7 +391,7 @@ async function testCleanupOrphanImagesKeepsDraftAndPendingMutationAttachments() 
     },
   });
 
-  const result = await cleanupOrphanImagesRequest();
+  const result = await cleanupOrphanAttachments();
 
   assert.equal(result.deleted_count, 1);
   assert.deepEqual(result.deleted_files, ['orphan.png']);
@@ -433,8 +436,8 @@ async function testApplyBackupPayloadRebuildsAttachmentRefs() {
 
   const refs = await getAllAttachmentRefs();
   assert.deepEqual(
-    refs.map((item) => ({ filename: item.filename, scope: item.scope, note_id: item.note_id }))
-      .sort((a, b) => a.filename.localeCompare(b.filename)),
+    refs.map((item: AttachmentRefRecord) => ({ filename: item.filename, scope: item.scope, note_id: item.note_id }))
+      .sort((a: { filename: string }, b: { filename: string }) => a.filename.localeCompare(b.filename)),
     [
       { filename: 'cover.png', scope: 'active', note_id: 'note-1' },
       { filename: 'trash.png', scope: 'trash', note_id: 'note-2' },
@@ -577,7 +580,7 @@ async function testImportedFlomoNoteCanBeEditedWithoutLosingAttachmentRefs() {
   await importFlomoArchive(file);
 
   const imported = (await getCachedNotes())[0]!;
-  await updateLocalNote(imported.filename, {
+  await updateLocalNote(imported.note_id, {
     content: `${imported.content}\n\n补充一段编辑后的内容`,
     tags: [],
   });
@@ -620,16 +623,16 @@ async function testTrashRestoreAndPermanentDeleteHandleAttachmentRefsAndBlobs() 
     size: 3,
   });
 
-  await deleteLocalNote('2026-03-18/note-1.md');
+  await deleteLocalNote('note-1');
   let refs = await getAllAttachmentRefs();
-  assert.deepEqual(refs.map((item) => item.scope), ['trash']);
+  assert.deepEqual(refs.map((item: AttachmentRefRecord) => item.scope), ['trash']);
 
-  await restoreLocalTrashNote('2026-03-18/note-1.md');
+  await restoreLocalTrashNote('note-1');
   refs = await getAllAttachmentRefs();
-  assert.deepEqual(refs.map((item) => item.scope), ['active']);
+  assert.deepEqual(refs.map((item: AttachmentRefRecord) => item.scope), ['active']);
 
-  await deleteLocalNote('2026-03-18/note-1.md');
-  await permanentlyDeleteLocalTrashNote('2026-03-18/note-1.md');
+  await deleteLocalNote('note-1');
+  await permanentlyDeleteLocalTrashNote('note-1');
 
   assert.equal((await getAllAttachmentRefs()).length, 0);
   assert.equal(await getAttachmentBlob('cover.png'), null);
@@ -679,7 +682,7 @@ async function testClearAllLocalExperimentDataRemovesNotesAttachmentsAndSyncStat
     mimeType: 'image/png',
     size: 3,
   });
-  await enqueueChange({
+  await enqueueDeviceChange({
     target: 'server',
     entityId: 'note-1',
     type: 'note.create',

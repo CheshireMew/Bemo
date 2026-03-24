@@ -4,7 +4,7 @@ import {
   clearDraftAttachmentSession,
   createDraftAttachmentSessionKey,
   promoteDraftAttachmentsForContent,
-} from '../utils/localAttachments.js';
+} from '../domain/attachments/localAttachmentDrafts.js';
 
 export interface EditorSubmitPayload {
   content: string;

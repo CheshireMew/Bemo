@@ -1,4 +1,4 @@
-import { openIndexedDb } from '../../utils/indexedDb.js';
+import { openIndexedDb } from '../storage/indexedDb.js';
 
 export interface BlobIndexRecord {
   blob_hash: string;

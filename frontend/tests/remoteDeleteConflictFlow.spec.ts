@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 
 import { applyChangesLocally } from '../src/domain/sync/localSyncApply.js';
+import { createLocalNoteFromSync } from '../src/domain/notes/localNoteCreation.js';
+import { moveLocalNoteToTrashById } from '../src/domain/notes/localTrashMutations.js';
 import {
-  createLocalNoteFromSync,
   listLocalNotes,
   listLocalTrashNotes,
-  moveLocalNoteToTrashById,
-} from '../src/domain/notes/localNotesRepository.js';
+} from '../src/domain/notes/localNoteQueries.js';
 import { installMemoryIndexedDb } from './memoryIndexedDb.js';
 
 installMemoryIndexedDb();
@@ -42,8 +42,8 @@ async function testRemoteDeleteConflictCanBeAcceptedWithoutLosingConflictCopy() 
   assert.equal(result.conflicts.length, 1);
   assert.equal(result.conflicts[0]?.reason, 'revision_conflict');
   assert.deepEqual(result.conflicts[0]?.remote_snapshot, {
-    deleted: true,
-    revision: 4,
+    trashed: true,
+    revision: 6,
   });
 
   const activeBeforeAccept = await listLocalNotes();

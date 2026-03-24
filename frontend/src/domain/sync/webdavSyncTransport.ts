@@ -1,30 +1,43 @@
-import { getOrCreateDeviceId } from './db.js';
-import type { SyncTransport } from './serverTransport.js';
+import { getOrCreateDeviceId } from '../storage/deviceIdentity.js';
+import type { SyncTransport } from './syncTransport.js';
 import {
   deleteWebDavBlob,
   getWebDavBlob,
   hasWebDavBlob,
   listWebDavBlobHashes,
   putWebDavBlob,
-} from '../domain/sync/webdav/webdavBlobs.js';
-import { pullWebDavChanges, pushWebDavChanges } from '../domain/sync/webdav/webdavChanges.js';
-import { acquireWebDavLease, releaseWebDavLease } from '../domain/sync/webdav/webdavLease.js';
-import { readWebDavManifest, writeWebDavManifest } from '../domain/sync/webdav/webdavManifest.js';
-import { encodeBasicAuth, ensureWebDavLayout, normalizeWebDavBase } from '../domain/sync/webdav/webdavRequest.js';
+} from './webdav/webdavBlobs.js';
+import { pullWebDavChanges, pushWebDavChanges } from './webdav/webdavChanges.js';
+import { acquireWebDavLease, releaseWebDavLease } from './webdav/webdavLease.js';
+import { readWebDavManifest } from './webdav/webdavManifest.js';
+import { encodeBasicAuth, ensureWebDavLayout, normalizeWebDavBase } from './webdav/webdavRequest.js';
 import {
   applyChangesToSnapshotState,
   buildBootstrapChangesFromSnapshot,
-  buildSnapshotStateFromRemote,
   collectReferencedBlobHashes,
+} from './webdav/webdavSnapshotState.js';
+import {
+  buildSnapshotStateFromRemote,
   readWebDavSnapshot,
   writeWebDavSnapshot,
-} from '../domain/sync/webdav/webdavSnapshot.js';
+} from './webdav/webdavSnapshotStorage.js';
+import {
+  bootstrapWebDavRemoteState,
+  createWebDavBootstrapState,
+  inspectWebDavBootstrapState,
+  normalizeWebDavBootstrapState,
+  normalizeWebDavOperationId,
+  shouldPullWebDavSnapshot,
+  shouldTreatManifestSnapshotAsBootstrap,
+  writeWebDavSyncManifest,
+} from './webdav/webdavBootstrap.js';
 
 export function createWebDavTransport(config: {
   webdavUrl: string;
   username: string;
   password: string;
   basePath: string;
+  bootstrapFingerprint: string;
 }): SyncTransport {
   const baseUrl = normalizeWebDavBase(config.webdavUrl, config.basePath);
   const headers = {
@@ -35,7 +48,8 @@ export function createWebDavTransport(config: {
     async pull(cursor: string | null) {
       await ensureWebDavLayout(baseUrl, headers);
       const manifest = await readWebDavManifest(baseUrl, headers);
-      if (!cursor) {
+
+      if (shouldTreatManifestSnapshotAsBootstrap(manifest) && shouldPullWebDavSnapshot(cursor)) {
         const snapshot = await readWebDavSnapshot(baseUrl, headers, manifest);
         if (snapshot && snapshot.latest_cursor) {
           return {
@@ -53,6 +67,11 @@ export function createWebDavTransport(config: {
       );
 
       return { changes, latest_cursor: latestCursor };
+    },
+    async inspectBootstrap() {
+      await ensureWebDavLayout(baseUrl, headers);
+      const manifest = await readWebDavManifest(baseUrl, headers);
+      return inspectWebDavBootstrapState({ baseUrl, headers, manifest });
     },
     async push(changes: any[]) {
       if (!changes.length) {
@@ -74,12 +93,55 @@ export function createWebDavTransport(config: {
       try {
         const manifest = await readWebDavManifest(baseUrl, headers);
         const startingCursor = Number(manifest?.latest_cursor || '0');
-        const { accepted, latestCursor } = await pushWebDavChanges(baseUrl, headers, startingCursor, changes);
+        const bootstrap = normalizeWebDavBootstrapState(manifest);
+        const bootstrapAcceptedIds = new Set(
+          bootstrap.status === 'completed' ? bootstrap.operation_ids : [],
+        );
+        const alreadyAccepted = changes
+          .filter((change) => bootstrapAcceptedIds.has(normalizeWebDavOperationId(change)))
+          .map((change) => ({
+            operation_id: normalizeWebDavOperationId(change),
+            cursor: String(manifest?.latest_cursor || '0'),
+            change,
+            deduplicated: true,
+          }));
+        const pendingChanges = changes.filter((change) => !bootstrapAcceptedIds.has(normalizeWebDavOperationId(change)));
+
+        if (bootstrap.status !== 'completed' && startingCursor === 0 && pendingChanges.length > 0) {
+          await writeWebDavSyncManifest({
+            baseUrl,
+            headers,
+            latestCursor: '0',
+            latestSnapshot: null,
+            bootstrap: createWebDavBootstrapState(
+              config.bootstrapFingerprint,
+              'in_progress',
+              pendingChanges.map(normalizeWebDavOperationId).filter(Boolean),
+            ),
+          });
+
+          const bootstrapResult = await bootstrapWebDavRemoteState({
+            baseUrl,
+            headers,
+            bootstrapFingerprint: config.bootstrapFingerprint,
+            changes: pendingChanges,
+          });
+          return {
+            ...bootstrapResult,
+            accepted: [
+              ...alreadyAccepted,
+              ...bootstrapResult.accepted,
+            ],
+          };
+        }
+
+        const { accepted, latestCursor } = await pushWebDavChanges(baseUrl, headers, startingCursor, pendingChanges);
         const latestCursorString = String(latestCursor);
+        const allAccepted = [...alreadyAccepted, ...accepted];
         const writtenChanges = accepted.filter((item: { deduplicated?: boolean }) => !item.deduplicated);
 
         if (!writtenChanges.length) {
-          return { accepted, conflicts: [], latest_cursor: latestCursorString };
+          return { accepted: allAccepted, conflicts: [], latest_cursor: latestCursorString };
         }
 
         const previousNotes = await buildSnapshotStateFromRemote(baseUrl, headers, manifest);
@@ -89,14 +151,17 @@ export function createWebDavTransport(config: {
         );
         const latestSnapshot = await writeWebDavSnapshot(baseUrl, headers, latestCursorString, nextNotes);
 
-        await writeWebDavManifest(baseUrl, headers, {
-          format_version: 1,
-          latest_cursor: latestCursorString,
-          latest_snapshot: latestSnapshot,
-          updated_at: new Date().toISOString(),
+        await writeWebDavSyncManifest({
+          baseUrl,
+          headers,
+          latestCursor: latestCursorString,
+          latestSnapshot,
+          bootstrap: bootstrap.status === 'completed'
+            ? bootstrap
+            : createWebDavBootstrapState(config.bootstrapFingerprint, 'completed'),
         });
 
-        return { accepted, conflicts: [], latest_cursor: latestCursorString };
+        return { accepted: allAccepted, conflicts: [], latest_cursor: latestCursorString };
       } finally {
         await releaseWebDavLease(baseUrl, headers, lease);
       }

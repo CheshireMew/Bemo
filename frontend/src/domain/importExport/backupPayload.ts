@@ -3,14 +3,13 @@ import {
   putAttachmentBlob,
 } from '../../domain/attachments/blobStorage.js';
 import { getReferencedAttachmentFilenames, replaceNoteAttachmentRefsForScope } from '../../domain/attachments/attachmentRefStorage.js';
+import { extractAttachmentFilename, extractAttachmentUrlsFromContent } from '../../domain/attachments/attachmentLinks.js';
 import { getCachedNotes, setCachedNotes } from '../notes/notesStorage.js';
 import { getTrashNotes, setTrashNotes } from '../notes/trashStorage.js';
 import type { NoteMeta } from '../notes/notesTypes.js';
 import { clearConflicts } from '../sync/conflictStorage.js';
 import { clearMutationLog } from '../sync/mutationLogStorage.js';
-import { removeSyncStateValue } from '../sync/syncStateStorage.js';
-import { extractAttachmentFilename } from '../../utils/attachmentUrls.js';
-import { extractAttachmentUrlsFromContent } from '../../utils/syncAttachments.js';
+import { clearRemoteSyncProgressState } from '../sync/syncStateStorage.js';
 
 export type BackupAttachment = {
   filename: string;
@@ -106,10 +105,8 @@ export async function applyBackupPayload(payload: Partial<BackupPayload>) {
   await clearMutationLog();
   await clearConflicts();
   await Promise.all([
-    removeSyncStateValue('server_cursor'),
-    removeSyncStateValue('webdav_cursor'),
-    removeSyncStateValue('server_last_sync_at'),
-    removeSyncStateValue('webdav_last_sync_at'),
+    clearRemoteSyncProgressState('server'),
+    clearRemoteSyncProgressState('webdav'),
   ]);
 
   return {

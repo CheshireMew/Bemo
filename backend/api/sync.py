@@ -70,8 +70,6 @@ def sync_pull(cursor: str | None = None, limit: int = 200, authorization: str | 
 async def sync_webdav_request(payload: WebDavProxyRequest, authorization: str | None = Header(default=None)):
     _require_sync_auth(authorization)
     return await proxy_webdav_request(payload.model_dump())
-
-
 @router.head("/blobs/{blob_hash:path}")
 def sync_blob_head(blob_hash: str, authorization: str | None = Header(default=None)):
     _require_sync_auth(authorization)

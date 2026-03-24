@@ -1,6 +1,6 @@
 from typing import Any
 
-from services import local_sync_note_repository, sync_store_repository
+from services import sync_store_repository
 from services.service_errors import ValidationError
 
 
@@ -84,17 +84,3 @@ def put_blob(blob_hash: str, data: bytes) -> None:
 
 def get_blob(blob_hash: str) -> bytes:
     return sync_store_repository.get_blob_record(blob_hash)
-
-
-def apply_local_changes(changes: list[dict[str, Any]]) -> dict[str, Any]:
-    ensure_sync_store()
-    applied: list[dict[str, Any]] = []
-    conflicts: list[dict[str, Any]] = []
-
-    for change in changes:
-        result = local_sync_note_repository.apply_change(change)
-        if result["status"] == "conflict":
-            conflicts.append(result)
-        else:
-            applied.append(result)
-    return {"applied": applied, "conflicts": conflicts}

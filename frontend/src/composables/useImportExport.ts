@@ -1,8 +1,8 @@
 import { onMounted, ref } from 'vue';
 import { getAllAttachmentBlobRecords, getAllDraftAttachmentBlobRecords } from '../domain/attachments/blobStorage.js';
+import { cleanupOrphanAttachments } from '../domain/attachments/orphanAttachmentCleanup.js';
 import {
   clearAllLocalExperimentData,
-  cleanupOrphanImagesRequest,
   exportBackupArchive,
   exportFlomoCsv,
   exportMarkdownArchive,
@@ -13,6 +13,7 @@ import {
 } from '../domain/importExport/localImportExport';
 import { getAttachmentReferenceSummary } from '../domain/attachments/attachmentRefStorage.js';
 import { pushNotification } from '../store/notifications';
+import { requestSyncNow } from '../domain/sync/syncCoordinator.js';
 
 export function useImportExport(onSuccess?: () => void) {
   const isImporting = ref(false);
@@ -121,6 +122,9 @@ export function useImportExport(onSuccess?: () => void) {
     isImporting.value = true;
     try {
       const res = await importFlomoArchive(file);
+      if (res.sync_queued) {
+        requestSyncNow();
+      }
       const attachmentSuffix = res.imported_attachment_count
         ? `，并导入了 ${res.imported_attachment_count} 个附件`
         : '';
@@ -159,7 +163,7 @@ export function useImportExport(onSuccess?: () => void) {
     if (isCleaningOrphans.value) return;
     isCleaningOrphans.value = true;
     try {
-      const res = await cleanupOrphanImagesRequest();
+      const res = await cleanupOrphanAttachments();
       pushNotification(`清理完成，删除了 ${res.deleted_count} 个未被引用的附件文件。`, 'success');
       await refreshAttachmentSummary();
       if (onSuccess) onSuccess();

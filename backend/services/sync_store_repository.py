@@ -19,6 +19,7 @@ def ensure_sync_store() -> None:
                 title TEXT,
                 content TEXT NOT NULL,
                 tags_json TEXT NOT NULL,
+                attachments_json TEXT NOT NULL DEFAULT '[]',
                 pinned INTEGER NOT NULL,
                 revision INTEGER NOT NULL,
                 created_at TEXT NOT NULL,
@@ -44,6 +45,7 @@ def ensure_sync_store() -> None:
             );
             """
         )
+        _ensure_notes_current_schema(conn)
 
 
 def get_latest_cursor() -> int:
@@ -136,6 +138,17 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
+def _ensure_notes_current_schema(conn: sqlite3.Connection) -> None:
+    columns = {
+        str(row["name"])
+        for row in conn.execute("PRAGMA table_info(notes_current)").fetchall()
+    }
+    if "attachments_json" not in columns:
+        conn.execute(
+            "ALTER TABLE notes_current ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'"
+        )
+
+
 def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> dict[str, Any]:
     change_type = str(change.get("type") or "")
     note_id = str(change.get("entity_id") or "")
@@ -148,7 +161,8 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
         if current and not current["deleted_at"]:
             return {"status": "conflict", "operation_id": operation_id, "reason": "note_exists"}
         content = str(payload.get("content") or "")
-        tags = payload.get("tags") or []
+        tags = _normalize_tags(payload.get("tags"))
+        attachments = _normalize_attachments(payload.get("attachments"))
         pinned = bool(payload.get("pinned", False))
         created_at = str(payload.get("created_at") or _now_iso())
         title = _derive_title(content)
@@ -156,9 +170,9 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
         conn.execute(
             """
             INSERT OR REPLACE INTO notes_current (
-                note_id, filename, title, content, tags_json, pinned, revision,
+                note_id, filename, title, content, tags_json, attachments_json, pinned, revision,
                 created_at, updated_at, deleted_at, last_operation_id, last_device_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
             """,
             (
                 note_id,
@@ -166,6 +180,7 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
                 title,
                 content,
                 json.dumps(tags, ensure_ascii=False),
+                json.dumps(attachments, ensure_ascii=False),
                 1 if pinned else 0,
                 revision,
                 created_at,
@@ -175,7 +190,12 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
             ),
         )
         stored_change = dict(change)
-        stored_change["payload"] = {**payload, "revision": revision}
+        stored_change["payload"] = {
+            **payload,
+            "tags": tags,
+            "attachments": attachments,
+            "revision": revision,
+        }
         return {"status": "applied", "note_id": note_id, "revision": revision, "change": stored_change}
 
     if change_type not in {"note.trash", "note.delete", "note.restore", "note.purge"} and (not current or current["deleted_at"]):
@@ -186,7 +206,16 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
 
     if change_type == "note.update":
         content = str(payload.get("content") or "")
-        if base_revision is not None and base_revision != current_revision and content != str(current["content"]):
+        current_tags = _current_tags(current)
+        next_tags = _normalize_tags(payload.get("tags")) if payload.get("tags") is not None else current_tags
+        if (
+            base_revision is not None
+            and base_revision != current_revision
+            and (
+                content != str(current["content"])
+                or next_tags != current_tags
+            )
+        ):
             return {
                 "status": "conflict",
                 "operation_id": operation_id,
@@ -195,18 +224,35 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
                 "current_revision": current_revision,
             }
         next_revision = current_revision + 1
-        tags = payload.get("tags")
-        tags_json = json.dumps(tags if tags is not None else json.loads(current["tags_json"]), ensure_ascii=False)
+        attachments = (
+            _normalize_attachments(payload.get("attachments"))
+            if payload.get("attachments") is not None
+            else _current_attachments(current)
+        )
         conn.execute(
             """
             UPDATE notes_current
-            SET content = ?, tags_json = ?, revision = ?, updated_at = ?, last_operation_id = ?, last_device_id = ?
+            SET content = ?, tags_json = ?, attachments_json = ?, revision = ?, updated_at = ?, last_operation_id = ?, last_device_id = ?
             WHERE note_id = ?
             """,
-            (content, tags_json, next_revision, _now_iso(), operation_id, device_id, note_id),
+            (
+                content,
+                json.dumps(next_tags, ensure_ascii=False),
+                json.dumps(attachments, ensure_ascii=False),
+                next_revision,
+                _now_iso(),
+                operation_id,
+                device_id,
+                note_id,
+            ),
         )
         stored_change = dict(change)
-        stored_change["payload"] = {**payload, "revision": next_revision}
+        stored_change["payload"] = {
+            **payload,
+            "tags": next_tags,
+            "attachments": attachments,
+            "revision": next_revision,
+        }
         return {"status": "applied", "note_id": note_id, "revision": next_revision, "change": stored_change}
 
     if change_type == "note.patch":
@@ -236,18 +282,31 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
         return {"status": "applied", "note_id": note_id, "revision": next_revision, "change": stored_change}
 
     if change_type in {"note.trash", "note.delete"}:
+        if current and base_revision is not None and current_revision > base_revision:
+            return {
+                "status": "conflict",
+                "operation_id": operation_id,
+                "reason": "revision_conflict",
+                "note_id": note_id,
+                "current_revision": current_revision,
+            }
         next_revision = (int(current["revision"] or 0) + 1) if current else max(1, int(payload.get("revision") or 1))
         content = str(payload.get("content") or (current["content"] if current else ""))
-        tags = payload.get("tags") if payload.get("tags") is not None else (json.loads(current["tags_json"]) if current else [])
+        tags = _normalize_tags(payload.get("tags")) if payload.get("tags") is not None else _current_tags(current)
+        attachments = (
+            _normalize_attachments(payload.get("attachments"))
+            if payload.get("attachments") is not None
+            else _current_attachments(current)
+        )
         pinned = bool(payload.get("pinned", current["pinned"] if current else False))
         created_at = str(payload.get("created_at") or (current["created_at"] if current else _now_iso()))
         title = _derive_title(content)
         conn.execute(
             """
             INSERT OR REPLACE INTO notes_current (
-                note_id, filename, title, content, tags_json, pinned, revision,
+                note_id, filename, title, content, tags_json, attachments_json, pinned, revision,
                 created_at, updated_at, deleted_at, last_operation_id, last_device_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 note_id,
@@ -255,6 +314,7 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
                 title,
                 content,
                 json.dumps(tags, ensure_ascii=False),
+                json.dumps(attachments, ensure_ascii=False),
                 1 if pinned else 0,
                 next_revision,
                 created_at,
@@ -270,6 +330,7 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
             **payload,
             "content": content,
             "tags": tags,
+            "attachments": attachments,
             "pinned": pinned,
             "created_at": created_at,
             "revision": next_revision,
@@ -279,16 +340,21 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
     if change_type == "note.restore":
         next_revision = (int(current["revision"] or 0) + 1) if current else max(1, int(payload.get("revision") or 1))
         content = str(payload.get("content") or (current["content"] if current else ""))
-        tags = payload.get("tags") if payload.get("tags") is not None else (json.loads(current["tags_json"]) if current else [])
+        tags = _normalize_tags(payload.get("tags")) if payload.get("tags") is not None else _current_tags(current)
+        attachments = (
+            _normalize_attachments(payload.get("attachments"))
+            if payload.get("attachments") is not None
+            else _current_attachments(current)
+        )
         pinned = bool(payload.get("pinned", current["pinned"] if current else False))
         created_at = str(payload.get("created_at") or (current["created_at"] if current else _now_iso()))
         title = _derive_title(content)
         conn.execute(
             """
             INSERT OR REPLACE INTO notes_current (
-                note_id, filename, title, content, tags_json, pinned, revision,
+                note_id, filename, title, content, tags_json, attachments_json, pinned, revision,
                 created_at, updated_at, deleted_at, last_operation_id, last_device_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
             """,
             (
                 note_id,
@@ -296,6 +362,7 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
                 title,
                 content,
                 json.dumps(tags, ensure_ascii=False),
+                json.dumps(attachments, ensure_ascii=False),
                 1 if pinned else 0,
                 next_revision,
                 created_at,
@@ -309,6 +376,7 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
             **payload,
             "content": content,
             "tags": tags,
+            "attachments": attachments,
             "pinned": pinned,
             "created_at": created_at,
             "revision": next_revision,
@@ -333,6 +401,42 @@ def _derive_title(content: str) -> str:
     if first_line.startswith("#"):
         first_line = first_line.lstrip("#").strip()
     return first_line or "untitled"
+
+
+def _normalize_tags(value: Any) -> list[str]:
+    return [str(tag) for tag in value] if isinstance(value, list) else []
+
+
+def _normalize_attachments(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    attachments: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        filename = str(item.get("filename") or "").strip()
+        blob_hash = str(item.get("blob_hash") or "").strip()
+        mime_type = str(item.get("mime_type") or "application/octet-stream").strip() or "application/octet-stream"
+        if not filename or not blob_hash:
+            continue
+        attachments.append({
+            "filename": filename,
+            "blob_hash": blob_hash,
+            "mime_type": mime_type,
+        })
+    return attachments
+
+
+def _current_tags(current: sqlite3.Row | None) -> list[str]:
+    if not current:
+        return []
+    return _normalize_tags(json.loads(current["tags_json"] or "[]"))
+
+
+def _current_attachments(current: sqlite3.Row | None) -> list[dict[str, str]]:
+    if not current:
+        return []
+    return _normalize_attachments(json.loads(current["attachments_json"] or "[]"))
 
 
 def _has_patch_conflict(current: sqlite3.Row, base_revision: int | None, payload: dict[str, Any]) -> bool:

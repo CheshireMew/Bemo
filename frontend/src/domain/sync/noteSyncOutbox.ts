@@ -1,9 +1,7 @@
-import { enqueueChange } from '../sync/mutationLogStorage.js';
-import { getOrCreateDeviceId } from '../../utils/db.js';
-import { requestSyncNow } from '../../utils/sync.js';
-import { settings } from '../../store/settings.js';
-import { listLocalNotes, listLocalTrashNotes } from './localNotesRepository.js';
-import type { SyncTarget } from '../sync/mutationLogStorage.js';
+import { listLocalNotes, listLocalTrashNotes } from '../notes/localNoteQueries.js';
+import type { SyncTarget } from './mutationLogStorage.js';
+import { enqueueDeviceChange } from './mutationLogRuntime.js';
+import { readSyncConfigSnapshot } from './syncConfig.js';
 
 type QueuedNoteChangeType =
   | 'note.create'
@@ -18,19 +16,18 @@ export async function enqueueRemoteNoteChange(input: {
   type: QueuedNoteChangeType;
   baseRevision: number;
   payload: Record<string, unknown>;
-}): Promise<void> {
-  if (settings.sync.mode === 'local') return;
-
-  const deviceId = await getOrCreateDeviceId();
-  await enqueueChange({
-    target: settings.sync.mode,
-    deviceId,
+}): Promise<boolean> {
+  const syncConfig = readSyncConfigSnapshot();
+  if (syncConfig.mode === 'local') return false;
+  await enqueueDeviceChange({
+    target: syncConfig.mode,
     entityId: input.entityId,
     type: input.type,
     baseRevision: input.baseRevision,
     payload: input.payload,
   });
-  requestSyncNow();
+
+  return true;
 }
 
 export async function enqueueExistingLocalNotesForSync(
@@ -43,16 +40,14 @@ export async function enqueueExistingLocalNotesForSync(
   ]);
   if (!notes.length && !trash.length) return 0;
 
-  const deviceId = await getOrCreateDeviceId();
   const queuedNoteIds = new Set<string>();
 
   for (const note of notes) {
     if (queuedNoteIds.has(note.note_id) || existingNoteIds.has(note.note_id)) continue;
     queuedNoteIds.add(note.note_id);
 
-    await enqueueChange({
+    await enqueueDeviceChange({
       target,
-      deviceId,
       entityId: note.note_id,
       type: 'note.create',
       baseRevision: 0,
@@ -71,9 +66,8 @@ export async function enqueueExistingLocalNotesForSync(
     if (queuedNoteIds.has(note.note_id) || existingNoteIds.has(note.note_id)) continue;
     queuedNoteIds.add(note.note_id);
 
-    await enqueueChange({
+    await enqueueDeviceChange({
       target,
-      deviceId,
       entityId: note.note_id,
       type: 'note.trash',
       baseRevision: note.revision,

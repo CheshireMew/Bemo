@@ -1,7 +1,15 @@
+export type WebDavBootstrapState = {
+  status: 'not_started' | 'in_progress' | 'completed';
+  fingerprint: string | null;
+  operation_ids: string[];
+  updated_at: string;
+};
+
 export type ManifestRecord = {
   format_version: number;
   latest_cursor: string;
   latest_snapshot: string | null;
+  bootstrap: WebDavBootstrapState;
   updated_at: string;
 };
 
@@ -27,9 +35,4 @@ export type SnapshotRecord = {
   latest_cursor: string;
   generated_at: string;
   notes: Record<string, WebDavSnapshotNote>;
-};
-
-export type WebDavContext = {
-  baseUrl: string;
-  headers: HeadersInit;
 };

@@ -1,4 +1,4 @@
-import { openIndexedDb } from '../../utils/indexedDb.js';
+import { openIndexedDb } from '../storage/indexedDb.js';
 import type { SyncTarget } from './mutationLogStorage.js';
 
 export interface SyncConflictRecord {

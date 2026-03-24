@@ -1,7 +1,7 @@
-import { settings } from '../../store/settings.js';
 import { claimLegacyMutationTargets, getMutationLog, getPendingCountsByTarget } from './mutationLogStorage.js';
-import { getSyncStateValue } from './syncStateStorage.js';
+import { getSyncLastSyncStateKey, getSyncStateValue } from './syncStateStorage.js';
 import type { SyncListener, SyncState, SyncStatus } from './syncTypes.js';
+import { readSyncConfigSnapshot } from './syncConfig.js';
 
 let listeners: SyncListener[] = [];
 let currentState: SyncState = {
@@ -34,8 +34,9 @@ export function notifySyncListeners(pendingCount = currentState.pendingCount) {
 }
 
 export async function refreshSyncPendingCounts(currentPendingCount = currentState.pendingCount) {
-  if (settings.sync.mode === 'server' || settings.sync.mode === 'webdav') {
-    await claimLegacyMutationTargets(settings.sync.mode);
+  const syncConfig = readSyncConfigSnapshot();
+  if (syncConfig.mode === 'server' || syncConfig.mode === 'webdav') {
+    await claimLegacyMutationTargets(syncConfig.mode);
   }
   const pendingCounts = await getPendingCountsByTarget();
   currentState = {
@@ -48,14 +49,15 @@ export async function refreshSyncPendingCounts(currentPendingCount = currentStat
 }
 
 export async function initializeSyncState(target: string) {
-  if (settings.sync.mode === 'server' || settings.sync.mode === 'webdav') {
-    await claimLegacyMutationTargets(settings.sync.mode);
+  const syncConfig = readSyncConfigSnapshot();
+  if (syncConfig.mode === 'server' || syncConfig.mode === 'webdav') {
+    await claimLegacyMutationTargets(syncConfig.mode);
   }
   const [queue, pendingCounts, serverLastSyncAt, webdavLastSyncAt] = await Promise.all([
     getMutationLog(),
     getPendingCountsByTarget(),
-    getSyncStateValue('server_last_sync_at'),
-    getSyncStateValue('webdav_last_sync_at'),
+    getSyncStateValue(getSyncLastSyncStateKey('server')),
+    getSyncStateValue(getSyncLastSyncStateKey('webdav')),
   ]);
 
   currentState = {

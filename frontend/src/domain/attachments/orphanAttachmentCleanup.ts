@@ -5,12 +5,12 @@ import {
   getAllAttachmentBlobRecords,
   getAllBlobIndexRecords,
   getAllDraftAttachmentBlobRecords,
-} from '../attachments/blobStorage.js';
-import { getReferencedAttachmentFilenames } from '../attachments/attachmentRefStorage.js';
+} from './blobStorage.js';
+import { getReferencedAttachmentFilenames } from './attachmentRefStorage.js';
+import { clearAttachmentUrlCache } from './attachmentUrlResolver.js';
+import { extractAttachmentFilename, extractAttachmentUrlsFromContent } from './attachmentLinks.js';
 import { getCachedNotes } from '../notes/notesStorage.js';
 import { getTrashNotes } from '../notes/trashStorage.js';
-import { clearAttachmentUrlCache, extractAttachmentFilename } from '../../utils/attachmentUrls.js';
-import { extractAttachmentUrlsFromContent } from '../../utils/syncAttachments.js';
 import { getMutationLog } from '../sync/mutationLogStorage.js';
 
 const EDITOR_DRAFT_STORAGE_PREFIX = 'bemo.editor.draft:';
@@ -24,7 +24,7 @@ function collectReferencedAttachmentsFromContent(content: string | undefined | n
   }
 }
 
-export async function cleanupOrphanImagesRequest() {
+export async function cleanupOrphanAttachments() {
   const [notes, trash, attachments, draftAttachments, blobIndex, mutationLog, refFilenames] = await Promise.all([
     getCachedNotes(),
     getTrashNotes(),

@@ -11,12 +11,12 @@
     
     <NoteCard 
       v-for="note in trashNotes" 
-      :key="note.filename" 
+      :key="note.note_id" 
       :note="note"
       isTrash
       class="trash-card"
-      @restore="restoreNote(note.filename)"
-      @permanentDelete="permanentDelete(note.filename)"
+      @restore="restoreNote(note.note_id)"
+      @permanentDelete="permanentDelete(note.note_id)"
     />
   </div>
 </template>

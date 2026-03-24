@@ -1,13 +1,5 @@
 import axios from 'axios';
-
-export interface SyncTransport {
-  pull(cursor: string | null): Promise<{ changes: any[]; latest_cursor: string }>;
-  push(changes: any[]): Promise<{ accepted: any[]; conflicts: any[]; latest_cursor: string }>;
-  hasBlob(blobHash: string): Promise<boolean>;
-  putBlob(blobHash: string, data: Uint8Array, mimeType?: string): Promise<void>;
-  getBlob(blobHash: string): Promise<Uint8Array>;
-  cleanupUnusedBlobs?(): Promise<{ deleted: number; retained: number }>;
-}
+import type { SyncTransport } from './syncTransport.js';
 
 export function createServerTransport(serverUrl: string, accessToken: string): SyncTransport {
   const api = axios.create({

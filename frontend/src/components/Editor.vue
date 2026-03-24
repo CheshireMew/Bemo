@@ -101,8 +101,8 @@ import { useEditorLifecycle } from '../composables/useEditorLifecycle';
 import { useEditorRichText } from '../composables/useEditorRichText';
 import { useEditorSelection } from '../composables/useEditorSelection';
 import { useEditorSubmit, type EditorSubmitPayload } from '../composables/useEditorSubmit';
-import { resolveAttachmentUrl } from '../utils/attachmentUrls';
-import { clearDraftAttachmentSession, createDraftAttachmentSessionKey } from '../utils/localAttachments.js';
+import { resolveAttachmentUrl } from '../domain/attachments/attachmentUrlResolver';
+import { clearDraftAttachmentSession, createDraftAttachmentSessionKey } from '../domain/attachments/localAttachmentDrafts.js';
 import {
   extractEditorAttachments,
   replaceEditorAttachmentsWithMarkers,

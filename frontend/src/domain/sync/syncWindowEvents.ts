@@ -1,6 +1,6 @@
 import type { ChangeRecord, SyncTarget } from './mutationLogStorage.js';
 import { getMutationLog } from './mutationLogStorage.js';
-import { getSyncMode, getSyncTargetLabel } from './syncTransportBuilder.js';
+import { getSyncTargetLabel, readSyncConfigSnapshot } from './syncConfig.js';
 import { refreshSyncPendingCounts, setSyncState } from './syncStatusBus.js';
 import {
   clearScheduledSync,
@@ -20,9 +20,10 @@ export function registerSyncWindowEvents(input: {
   hasRegisteredWindowEvents = true;
 
   window.addEventListener('online', () => {
+    const syncConfig = readSyncConfigSnapshot();
     setSyncState({
       status: 'online',
-      target: getSyncTargetLabel(),
+      target: getSyncTargetLabel(syncConfig),
     });
     resetRetryDelay();
     scheduleNextSync(input.requestSyncNow);
@@ -30,12 +31,13 @@ export function registerSyncWindowEvents(input: {
   });
 
   window.addEventListener('offline', () => {
+    const syncConfig = readSyncConfigSnapshot();
     setSyncState({
       status: 'offline',
-      target: getSyncTargetLabel(),
+      target: getSyncTargetLabel(syncConfig),
     });
     clearScheduledSync();
-    const syncMode = getSyncMode();
+    const syncMode = syncConfig.mode;
     const queueTarget = syncMode === 'local' ? undefined : syncMode as SyncTarget;
     void getMutationLog(queueTarget).then((queue: ChangeRecord[]) => refreshSyncPendingCounts(queue.length));
   });

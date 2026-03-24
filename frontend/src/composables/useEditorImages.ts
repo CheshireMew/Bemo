@@ -3,7 +3,7 @@ import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import { settings } from '../store/settings';
 import { removeEditorAttachment } from '../utils/editorAttachments';
-import { saveLocalAttachmentFile } from '../utils/localAttachments.js';
+import { saveLocalAttachmentFile } from '../domain/attachments/localAttachmentDrafts.js';
 
 type UseEditorImagesOptions = {
   attachmentSessionKey: Ref<string>;

@@ -1,4 +1,4 @@
-import { openIndexedDb } from '../../utils/indexedDb.js';
+import { openIndexedDb } from '../storage/indexedDb.js';
 
 export type NoteMutationType =
   | 'note.create'

@@ -68,7 +68,7 @@ import { initSync } from './store/sync';
 import { loadAiSettings } from './domain/ai/localAiSettings';
 import { initSettings } from './services/localSettings';
 import { useViewport } from './composables/useViewport';
-import { probeLegacyMarkdownLibrary, importLegacyMarkdownLibrary, type LegacyMigrationPreview } from './domain/notes/legacyMigration';
+import { probeLegacyMarkdownLibrary, importLegacyMarkdownLibrary, type LegacyMigrationPreview } from './domain/importExport/legacyMarkdownMigration';
 import { pushNotification } from './store/notifications';
 import { settings } from './store/settings';
 import { saveSettings } from './services/localSettings';

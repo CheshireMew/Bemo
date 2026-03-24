@@ -15,6 +15,7 @@ import {
   restoreTrashNoteCommand,
 } from '../domain/notes/trashCommands';
 import { setView } from './ui';
+import { requestSyncNow } from '../domain/sync/syncCoordinator.js';
 
 export type { NoteMeta } from '../domain/notes/notesTypes';
 
@@ -91,11 +92,12 @@ export async function fetchNotes() {
   }
 }
 
-export async function deleteNote(filename: string) {
+export async function deleteNote(noteId: string) {
   try {
-    const note = notes.value.find((item) => item.filename === filename);
+    const note = notes.value.find((item) => item.note_id === noteId);
     if (!note) return;
-    await deleteNoteCommand(note);
+    const queued = await deleteNoteCommand(note);
+    if (queued) requestSyncNow();
     await fetchNotes();
   } catch (e) {
     console.error('Error deleting note:', e);
@@ -104,7 +106,8 @@ export async function deleteNote(filename: string) {
 
 export async function togglePin(note: NoteMeta) {
   try {
-    await togglePinCommand(note);
+    const queued = await togglePinCommand(note);
+    if (queued) requestSyncNow();
     await fetchNotes();
   } catch (e) {
     console.error('Error pinning note:', e);
@@ -112,12 +115,14 @@ export async function togglePin(note: NoteMeta) {
 }
 
 export async function updateNoteContent(note: NoteMeta, payload: { content: string; tags: string[] }) {
-  await updateNoteContentCommand(note, payload);
+  const queued = await updateNoteContentCommand(note, payload);
+  if (queued) requestSyncNow();
   await fetchNotes();
 }
 
 export async function createNoteContent(payload: { content: string; tags: string[] }) {
   const created = await createNoteContentCommand(payload);
+  if (created.syncQueued) requestSyncNow();
   await fetchNotes();
   return created;
 }
@@ -131,9 +136,10 @@ export async function fetchTrash() {
   }
 }
 
-export async function restoreNote(filename: string) {
+export async function restoreNote(noteId: string) {
   try {
-    await restoreTrashNoteCommand(filename);
+    const queued = await restoreTrashNoteCommand(noteId);
+    if (queued) requestSyncNow();
     await fetchTrash();
     await fetchNotes();
   } catch (e) {
@@ -141,10 +147,11 @@ export async function restoreNote(filename: string) {
   }
 }
 
-export async function permanentDelete(filename: string) {
+export async function permanentDelete(noteId: string) {
   if (!confirm('永久删除后无法恢复，确定吗？')) return;
   try {
-    await permanentlyDeleteTrashNoteCommand(filename);
+    const queued = await permanentlyDeleteTrashNoteCommand(noteId);
+    if (queued) requestSyncNow();
     await fetchTrash();
   } catch (e) {
     console.error(e);
@@ -154,7 +161,8 @@ export async function permanentDelete(filename: string) {
 export async function emptyTrash() {
   if (!confirm('清空回收站后无法恢复，确定吗？')) return;
   try {
-    await emptyTrashCommand();
+    const queued = await emptyTrashCommand();
+    if (queued) requestSyncNow();
     trashNotes.value = [];
   } catch (e) {
     console.error(e);

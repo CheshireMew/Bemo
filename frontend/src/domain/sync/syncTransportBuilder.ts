@@ -1,35 +1,30 @@
-import { settings } from '../../store/settings.js';
 import {
   hasWebDavBackendProxyAccess,
   hasWebDavBackendProxyConfig,
   shouldProxyWebDavThroughBackend,
 } from './webdav/webdavHttp.js';
-import { createServerTransport } from '../../utils/serverTransport.js';
-import { createWebDavTransport } from '../../utils/webdavTransport.js';
+import { createServerTransport } from './serverSyncTransport.js';
+import { createWebDavTransport } from './webdavSyncTransport.js';
+import {
+  getSyncTargetSeedFingerprint,
+  readSyncConfigSnapshot,
+  type SyncConfigSnapshot,
+} from './syncConfig.js';
 
-export function getSyncMode() {
-  return settings.sync.mode;
-}
-
-export function getSyncTargetLabel() {
-  if (settings.sync.mode === 'server') return '自部署服务器';
-  if (settings.sync.mode === 'webdav') return 'WebDAV';
-  return '本地';
-}
-
-export function buildSyncTransport() {
-  if (settings.sync.mode === 'server' && settings.sync.serverUrl && settings.sync.accessToken) {
-    return createServerTransport(settings.sync.serverUrl, settings.sync.accessToken);
+export function buildSyncTransport(config: SyncConfigSnapshot = readSyncConfigSnapshot()) {
+  if (config.mode === 'server' && config.serverUrl && config.accessToken) {
+    return createServerTransport(config.serverUrl, config.accessToken);
   }
-  if (settings.sync.mode === 'webdav' && settings.sync.webdavUrl && settings.sync.username && settings.sync.password) {
+  if (config.mode === 'webdav' && config.webdavUrl && config.username && config.password) {
     if (shouldProxyWebDavThroughBackend() && (!hasWebDavBackendProxyConfig() || !hasWebDavBackendProxyAccess())) {
       return null;
     }
     return createWebDavTransport({
-      webdavUrl: settings.sync.webdavUrl,
-      username: settings.sync.username,
-      password: settings.sync.password,
-      basePath: settings.sync.basePath,
+      webdavUrl: config.webdavUrl,
+      username: config.username,
+      password: config.password,
+      basePath: config.basePath,
+      bootstrapFingerprint: getSyncTargetSeedFingerprint('webdav', config),
     });
   }
   return null;

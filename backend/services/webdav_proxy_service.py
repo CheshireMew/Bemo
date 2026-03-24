@@ -20,7 +20,7 @@ def _decode_body(body: str | None, body_encoding: str | None) -> bytes | None:
     if encoding == BODY_ENCODING_BASE64:
         try:
             return base64.b64decode(body, validate=True)
-        except Exception as exc:  # pragma: no cover - fast path handled in API behavior
+        except Exception as exc:  # pragma: no cover
             raise HTTPException(status_code=400, detail=f"Invalid base64 request body: {exc}") from exc
     raise HTTPException(status_code=400, detail=f"Unsupported body encoding: {encoding}")
 

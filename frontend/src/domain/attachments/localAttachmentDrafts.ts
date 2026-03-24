@@ -3,27 +3,9 @@ import {
   getDraftAttachmentBlobRecordsForSession,
   putAttachmentBlob,
   putDraftAttachmentBlob,
-} from './db.js';
-import { extractAttachmentUrlsFromContent } from './syncAttachments.js';
-
-function sanitizeFilename(filename: string) {
-  const trimmed = filename.trim();
-  const normalized = trimmed.normalize('NFKC').replace(/[\\/:*?"<>|]/g, '-');
-  return normalized || 'attachment.bin';
-}
-
-export function buildLocalAttachmentPath(filename: string) {
-  return `/images/${encodeURIComponent(filename)}`;
-}
-
-export function createLocalAttachmentFilename(filename: string) {
-  const dotIndex = filename.lastIndexOf('.');
-  const hasExtension = dotIndex > 0 && dotIndex < filename.length - 1;
-  const base = hasExtension ? filename.slice(0, dotIndex) : filename;
-  const extension = hasExtension ? filename.slice(dotIndex) : '';
-  const safeBase = sanitizeFilename(base || 'attachment');
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeBase}${extension}`;
-}
+} from './blobStorage.js';
+import { extractAttachmentUrlsFromContent } from './attachmentLinks.js';
+import { buildLocalAttachmentPath, createLocalAttachmentFilename } from './localAttachmentPaths.js';
 
 export function createDraftAttachmentSessionKey() {
   return `draft_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -51,12 +33,16 @@ export async function saveLocalAttachmentFile(file: File, options?: { draftSessi
   };
 }
 
-export async function promoteDraftAttachmentsForContent(sessionKey: string, content: string) {
-  const referencedFilenames = new Set(
+function collectReferencedDraftAttachmentFilenames(content: string) {
+  return new Set(
     extractAttachmentUrlsFromContent(content)
       .filter((url) => url.startsWith('/images/'))
       .map((url) => decodeURIComponent(url.replace(/^\/images\//, ''))),
   );
+}
+
+export async function promoteDraftAttachmentsForContent(sessionKey: string, content: string) {
+  const referencedFilenames = collectReferencedDraftAttachmentFilenames(content);
   const draftAttachments = await getDraftAttachmentBlobRecordsForSession(sessionKey);
 
   for (const attachment of draftAttachments) {
@@ -73,11 +59,7 @@ export async function promoteDraftAttachmentsForContent(sessionKey: string, cont
 }
 
 export async function pruneDraftAttachmentsForContent(sessionKey: string, content: string) {
-  const referencedFilenames = new Set(
-    extractAttachmentUrlsFromContent(content)
-      .filter((url) => url.startsWith('/images/'))
-      .map((url) => decodeURIComponent(url.replace(/^\/images\//, ''))),
-  );
+  const referencedFilenames = collectReferencedDraftAttachmentFilenames(content);
   const draftAttachments = await getDraftAttachmentBlobRecordsForSession(sessionKey);
 
   await Promise.all(draftAttachments.map(async (attachment) => {

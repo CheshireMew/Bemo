@@ -1,4 +1,4 @@
-import { enqueueRemoteNoteChange } from '../notes/notesSync.js';
+import { enqueueRemoteNoteChange } from '../sync/noteSyncOutbox.js';
 import type { NoteMeta } from '../notes/notesTypes.js';
 
 export type ImportedNoteRecord = {
@@ -23,8 +23,9 @@ export function downloadBlob(data: BlobPart, fileName: string, type = 'applicati
 }
 
 export async function enqueueImportedNotes(importedNoteRecords: ImportedNoteRecord[]) {
+  let queuedAny = false;
   for (const note of importedNoteRecords) {
-    await enqueueRemoteNoteChange({
+    queuedAny = await enqueueRemoteNoteChange({
       entityId: note.note_id,
       type: 'note.create',
       baseRevision: 0,
@@ -36,8 +37,9 @@ export async function enqueueImportedNotes(importedNoteRecords: ImportedNoteReco
         created_at: note.created_at,
         revision: note.revision,
       },
-    });
+    }) || queuedAny;
   }
+  return queuedAny;
 }
 
 export function toImportedNoteRecord(note: NoteMeta): ImportedNoteRecord {

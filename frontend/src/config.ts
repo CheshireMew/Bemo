@@ -34,7 +34,9 @@ function resolveApiBase() {
   return web || shared || '';
 }
 
-function resolveSyncProxyToken() {
+export const API_BASE = resolveApiBase();
+export const API_ORIGIN = API_BASE ? API_BASE.replace(/\/api\/?$/, '') : '';
+export const SYNC_PROXY_TOKEN = (() => {
   const env = getEnv();
   const shared = normalizeEnvValue(env.VITE_SYNC_PROXY_TOKEN);
   const web = normalizeEnvValue(env.VITE_WEB_SYNC_PROXY_TOKEN);
@@ -52,11 +54,7 @@ function resolveSyncProxyToken() {
   }
 
   return web || shared || '';
-}
-
-export const API_BASE = resolveApiBase();
-export const API_ORIGIN = API_BASE ? API_BASE.replace(/\/api\/?$/, '') : '';
-export const SYNC_PROXY_TOKEN = resolveSyncProxyToken();
+})();
 
 export function hasBackendOrigin() {
   return Boolean(API_ORIGIN);

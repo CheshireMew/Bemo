@@ -1,4 +1,4 @@
-import { getOrCreateDeviceId } from '../../utils/db.js';
+import { getOrCreateDeviceId } from '../storage/deviceIdentity.js';
 import { addConflict } from './conflictStorage.js';
 import {
   claimLegacyMutationTargets,
@@ -6,7 +6,11 @@ import {
   removeMutation,
   type SyncTarget,
 } from './mutationLogStorage.js';
-import { getSyncStateValue, setSyncStateValue } from './syncStateStorage.js';
+import {
+  getSyncCursorStateKey,
+  getSyncLastSyncStateKey,
+  setSyncStateValue,
+} from './syncStateStorage.js';
 import { applyChangesLocally } from './localSyncApply.js';
 import {
   initializeSyncState,
@@ -17,29 +21,16 @@ import {
 } from './syncStatusBus.js';
 import { prepareOutboundChanges, hydrateInboundAttachments } from './syncAttachmentRuntime.js';
 import { handleSyncFailure, handleSyncSuccess, clearScheduledSync } from './syncScheduler.js';
-import { buildSyncTransport, getSyncMode, getSyncTargetLabel } from './syncTransportBuilder.js';
+import { buildSyncTransport } from './syncTransportBuilder.js';
+import { getSyncTargetLabel, readSyncConfigSnapshot } from './syncConfig.js';
 import type { SyncListener } from './syncTypes.js';
 import { registerSyncWindowEvents as registerSyncBrowserEvents } from './syncWindowEvents.js';
-import { enqueueExistingLocalNotesForSync } from '../notes/notesSync.js';
+import { pullAllRemoteChanges, seedLocalHistoryIfNeeded } from './syncBootstrap.js';
 
 let flushInFlight: Promise<void> | null = null;
 
-function collectRemoteNoteIds(changes: Array<{ entity_id?: string; type?: string }>) {
-  const remoteNoteIds = new Set<string>();
-  for (const change of changes) {
-    const noteId = String(change.entity_id || '');
-    if (!noteId) continue;
-    if (change.type === 'note.purge') {
-      remoteNoteIds.delete(noteId);
-      continue;
-    }
-    remoteNoteIds.add(noteId);
-  }
-  return remoteNoteIds;
-}
-
 export function onSyncStatusChange(fn: SyncListener): () => void {
-  void initializeSyncState(getSyncTargetLabel());
+  void initializeSyncState(getSyncTargetLabel(readSyncConfigSnapshot()));
   return subscribeToSyncState(fn);
 }
 
@@ -47,14 +38,15 @@ export async function flushPendingQueue(): Promise<void> {
   if (flushInFlight) return flushInFlight;
 
   flushInFlight = (async () => {
-    const syncMode = getSyncMode();
+    const syncConfig = readSyncConfigSnapshot();
+    const syncMode = syncConfig.mode;
     const queueTarget = syncMode === 'local' ? undefined : syncMode as SyncTarget;
-    const cursorKey = syncMode === 'server' ? 'server_cursor' : syncMode === 'webdav' ? 'webdav_cursor' : '';
+    const lastSyncKey = queueTarget ? getSyncLastSyncStateKey(queueTarget) : '';
     if (queueTarget) {
       await claimLegacyMutationTargets(queueTarget);
     }
     let queue = await getMutationLog(queueTarget);
-    setSyncState({ target: getSyncTargetLabel() });
+    setSyncState({ target: getSyncTargetLabel(syncConfig) });
 
     if (syncMode === 'local') {
       setSyncState({
@@ -66,7 +58,7 @@ export async function flushPendingQueue(): Promise<void> {
       return;
     }
 
-    const transport = buildSyncTransport();
+    const transport = buildSyncTransport(syncConfig);
     if (!transport) {
       setSyncState({
         status: 'offline',
@@ -76,16 +68,13 @@ export async function flushPendingQueue(): Promise<void> {
       clearScheduledSync();
       return;
     }
+    const activeTarget = queueTarget as SyncTarget;
+    const cursorKey = getSyncCursorStateKey(activeTarget);
 
-    if (queueTarget && queue.length === 0 && cursorKey) {
-      const previousCursor = await getSyncStateValue(cursorKey);
-      if (!previousCursor) {
-        const remoteState = await transport.pull(null);
-        const remoteNoteIds = collectRemoteNoteIds(remoteState.changes || []);
-        const bootstrappedCount = await enqueueExistingLocalNotesForSync(queueTarget, remoteNoteIds);
-        if (bootstrappedCount > 0) {
-          queue = await getMutationLog(queueTarget);
-        }
+    if (queue.length === 0) {
+      const bootstrappedCount = await seedLocalHistoryIfNeeded(activeTarget, transport, syncConfig);
+      if (bootstrappedCount > 0) {
+        queue = await getMutationLog(activeTarget);
       }
     }
 
@@ -124,8 +113,7 @@ export async function flushPendingQueue(): Promise<void> {
         });
       }
 
-      const previousCursor = await getSyncStateValue(cursorKey);
-      const pullResult = await transport.pull(previousCursor);
+      const pullResult = await pullAllRemoteChanges(transport, activeTarget);
       const deviceId = await getOrCreateDeviceId();
       const inboundChanges = (pullResult.changes || []).filter((change: any) => {
         if (localOperationIds.has(change.operation_id)) return false;
@@ -150,10 +138,10 @@ export async function flushPendingQueue(): Promise<void> {
 
       const nowIso = new Date().toISOString();
       if (syncMode === 'server') {
-        await setSyncStateValue('server_last_sync_at', nowIso);
+        await setSyncStateValue(lastSyncKey, nowIso);
         setSyncState({ serverLastSyncAt: nowIso });
       } else {
-        await setSyncStateValue('webdav_last_sync_at', nowIso);
+        await setSyncStateValue(lastSyncKey, nowIso);
         setSyncState({ webdavLastSyncAt: nowIso });
       }
 
@@ -175,10 +163,6 @@ export async function flushPendingQueue(): Promise<void> {
   } finally {
     flushInFlight = null;
   }
-}
-
-export function isOnline(): boolean {
-  return navigator.onLine;
 }
 
 export function requestSyncNow(): void {

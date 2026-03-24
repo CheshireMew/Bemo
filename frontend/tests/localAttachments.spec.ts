@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 
-import { getAttachmentBlob, getDraftAttachmentBlob, getAllAttachmentRefs } from '../src/utils/db.js';
+import { getAttachmentBlob, getDraftAttachmentBlob } from '../src/domain/attachments/blobStorage.js';
+import { getAllAttachmentRefs } from '../src/domain/attachments/attachmentRefStorage.js';
+import { buildLocalAttachmentPath, createLocalAttachmentFilename } from '../src/domain/attachments/localAttachmentPaths.js';
 import {
-  buildLocalAttachmentPath,
   clearDraftAttachmentSession,
   createDraftAttachmentSessionKey,
-  createLocalAttachmentFilename,
   promoteDraftAttachmentsForContent,
   pruneDraftAttachmentsForContent,
   saveLocalAttachmentFile,
-} from '../src/utils/localAttachments.js';
+} from '../src/domain/attachments/localAttachmentDrafts.js';
 import { installMemoryIndexedDb } from './memoryIndexedDb.js';
 
 installMemoryIndexedDb();

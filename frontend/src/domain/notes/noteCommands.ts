@@ -1,20 +1,17 @@
 import { loadCachedNotes, storeCachedNotes } from './notesCache.js';
+import { createLocalNote } from './localNoteCreation.js';
+import { deleteLocalNote } from './localTrashMutations.js';
+import { patchLocalNote, updateLocalNote } from './localNoteMutations.js';
 import {
-  createLocalNote,
-  deleteLocalNote,
   listLocalNotes,
-  patchLocalNote,
   searchLocalNotes,
-  updateLocalNote,
-} from './localNotesRepository.js';
-import { enqueueRemoteNoteChange } from './notesSync.js';
+} from './localNoteQueries.js';
+import { enqueueRemoteNoteChange } from '../sync/noteSyncOutbox.js';
 import type { NoteMeta } from './notesTypes.js';
-import { setSyncStateValue } from '../sync/syncStateStorage.js';
 
 export async function loadNotesForDisplay(): Promise<NoteMeta[]> {
   try {
     const notes = await listLocalNotes();
-    await setSyncStateValue('local_notes_initialized', '1');
     storeCachedNotes(notes).catch(() => {});
     return notes;
   } catch (error) {
@@ -31,9 +28,9 @@ export async function loadNotesForDisplay(): Promise<NoteMeta[]> {
   }
 }
 
-export async function deleteNoteCommand(note: NoteMeta): Promise<void> {
-  await deleteLocalNote(note.filename);
-  await enqueueRemoteNoteChange({
+export async function deleteNoteCommand(note: NoteMeta): Promise<boolean> {
+  await deleteLocalNote(note.note_id);
+  return enqueueRemoteNoteChange({
     entityId: note.note_id,
     type: 'note.trash',
     baseRevision: note.revision,
@@ -48,10 +45,10 @@ export async function deleteNoteCommand(note: NoteMeta): Promise<void> {
   });
 }
 
-export async function togglePinCommand(note: NoteMeta): Promise<void> {
+export async function togglePinCommand(note: NoteMeta): Promise<boolean> {
   const nextPinned = !note.pinned;
-  await patchLocalNote(note.filename, { pinned: nextPinned });
-  await enqueueRemoteNoteChange({
+  await patchLocalNote(note.note_id, { pinned: nextPinned });
+  return enqueueRemoteNoteChange({
     entityId: note.note_id,
     type: 'note.patch',
     baseRevision: note.revision,
@@ -65,9 +62,9 @@ export async function togglePinCommand(note: NoteMeta): Promise<void> {
 export async function updateNoteContentCommand(
   note: NoteMeta,
   payload: { content: string; tags: string[] },
-): Promise<void> {
-  await updateLocalNote(note.filename, payload);
-  await enqueueRemoteNoteChange({
+): Promise<boolean> {
+  await updateLocalNote(note.note_id, payload);
+  return enqueueRemoteNoteChange({
     entityId: note.note_id,
     type: 'note.update',
     baseRevision: note.revision,
@@ -81,7 +78,7 @@ export async function updateNoteContentCommand(
 
 export async function createNoteContentCommand(payload: { content: string; tags: string[] }) {
   const created = await createLocalNote(payload);
-  await enqueueRemoteNoteChange({
+  const queued = await enqueueRemoteNoteChange({
     entityId: created.note_id,
     type: 'note.create',
     baseRevision: 0,
@@ -94,7 +91,7 @@ export async function createNoteContentCommand(payload: { content: string; tags:
       revision: 1,
     },
   });
-  return created;
+  return { ...created, syncQueued: queued };
 }
 
 export async function searchNotesCommand(query: string): Promise<NoteMeta[]> {

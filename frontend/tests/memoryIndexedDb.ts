@@ -1,4 +1,8 @@
 type StoreMap = Map<any, any>;
+type FakeIndexDefinition = {
+  keyPath: string;
+  unique: boolean;
+};
 
 class FakeIdbRequest<T> {
   result!: T;
@@ -10,22 +14,53 @@ class FakeIdbRequest<T> {
 
 class FakeObjectStore {
   constructor(
-    private readonly data: StoreMap,
-    private readonly keyPath: string,
-    private readonly autoIncrement: boolean,
+    private readonly definition: FakeStoreDefinition,
     private readonly transaction: FakeTransaction,
   ) {}
 
+  indexNames = {
+    contains: (name: string) => this.definition.indexes.has(name),
+  };
+
   private nextKey() {
-    return this.data.size + 1;
+    return this.definition.data.size + 1;
+  }
+
+  createIndex(name: string, keyPath: string, options?: { unique?: boolean }) {
+    this.definition.indexes.set(name, {
+      keyPath,
+      unique: Boolean(options?.unique),
+    });
+    return {
+      name,
+      keyPath,
+    };
+  }
+
+  index(name: string) {
+    const definition = this.definition.indexes.get(name);
+    if (!definition) {
+      throw new Error(`Missing index: ${name}`);
+    }
+    return {
+      get: (value: any) => {
+        const request = new FakeIdbRequest<any>();
+        queueMicrotask(() => {
+          request.result = Array.from(this.definition.data.values())
+            .find((item) => item[definition.keyPath] === value);
+          request.onsuccess?.call(request, new Event('success'));
+        });
+        return request;
+      },
+    };
   }
 
   add(value: any) {
     const request = new FakeIdbRequest<number>();
     this.transaction.start();
     queueMicrotask(() => {
-      const key = this.autoIncrement ? this.nextKey() : value[this.keyPath];
-      this.data.set(key, { ...value, [this.keyPath]: key });
+      const key = this.definition.autoIncrement ? this.nextKey() : value[this.definition.keyPath];
+      this.definition.data.set(key, { ...value, [this.definition.keyPath]: key });
       request.result = key;
       request.onsuccess?.call(request, new Event('success'));
       this.transaction.finish();
@@ -37,10 +72,10 @@ class FakeObjectStore {
     const request = new FakeIdbRequest<any>();
     this.transaction.start();
     queueMicrotask(() => {
-      const key = this.autoIncrement
-        ? (value[this.keyPath] ?? this.nextKey())
-        : value[this.keyPath];
-      this.data.set(key, { ...value, [this.keyPath]: key });
+      const key = this.definition.autoIncrement
+        ? (value[this.definition.keyPath] ?? this.nextKey())
+        : value[this.definition.keyPath];
+      this.definition.data.set(key, { ...value, [this.definition.keyPath]: key });
       request.result = key;
       request.onsuccess?.call(request, new Event('success'));
       this.transaction.finish();
@@ -51,7 +86,7 @@ class FakeObjectStore {
   get(key: any) {
     const request = new FakeIdbRequest<any>();
     queueMicrotask(() => {
-      request.result = this.data.get(key);
+      request.result = this.definition.data.get(key);
       request.onsuccess?.call(request, new Event('success'));
     });
     return request;
@@ -60,7 +95,7 @@ class FakeObjectStore {
   getAll() {
     const request = new FakeIdbRequest<any[]>();
     queueMicrotask(() => {
-      request.result = Array.from(this.data.values()).map((value) => ({ ...value }));
+      request.result = Array.from(this.definition.data.values()).map((value) => ({ ...value }));
       request.onsuccess?.call(request, new Event('success'));
     });
     return request;
@@ -69,7 +104,7 @@ class FakeObjectStore {
   delete(key: any) {
     this.transaction.start();
     queueMicrotask(() => {
-      this.data.delete(key);
+      this.definition.data.delete(key);
       this.transaction.finish();
     });
   }
@@ -77,7 +112,7 @@ class FakeObjectStore {
   clear() {
     this.transaction.start();
     queueMicrotask(() => {
-      this.data.clear();
+      this.definition.data.clear();
       this.transaction.finish();
     });
   }
@@ -95,7 +130,7 @@ class FakeTransaction {
     if (!definition) {
       throw new Error(`Missing object store: ${name}`);
     }
-    return new FakeObjectStore(definition.data, definition.keyPath, definition.autoIncrement, this);
+    return new FakeObjectStore(definition, this);
   }
 
   start() {
@@ -114,6 +149,7 @@ type FakeStoreDefinition = {
   keyPath: string;
   autoIncrement: boolean;
   data: StoreMap;
+  indexes: Map<string, FakeIndexDefinition>;
 };
 
 class FakeDatabase {
@@ -128,9 +164,10 @@ class FakeDatabase {
       keyPath: options.keyPath,
       autoIncrement: Boolean(options.autoIncrement),
       data: new Map(),
+      indexes: new Map(),
     };
     this.stores.set(name, definition);
-    return definition;
+    return new FakeObjectStore(definition, new FakeTransaction(new Map([[name, definition]])));
   }
 
   deleteObjectStore(name: string) {

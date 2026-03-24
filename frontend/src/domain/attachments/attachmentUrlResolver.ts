@@ -1,5 +1,6 @@
-import { resolveBackendUrl } from '../config.js';
-import { getAttachmentBlobRecord, getDraftAttachmentBlobRecord } from './db.js';
+import { resolveBackendUrl } from '../../config.js';
+import { extractAttachmentFilename } from './attachmentLinks.js';
+import { getAttachmentBlobRecord, getDraftAttachmentBlobRecord } from './blobStorage.js';
 
 type CachedAttachmentUrl = {
   objectUrl: string;
@@ -10,11 +11,6 @@ const objectUrlCache = new Map<string, CachedAttachmentUrl>();
 
 function isDirectUrl(url: string) {
   return /^(https?:)?\/\//i.test(url) || url.startsWith('data:') || url.startsWith('blob:');
-}
-
-export function extractAttachmentFilename(url: string) {
-  if (!url.startsWith('/images/')) return '';
-  return decodeURIComponent(url.replace(/^\/images\//, ''));
 }
 
 function revokeObjectUrl(url: string) {

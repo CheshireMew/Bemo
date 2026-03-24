@@ -7,9 +7,10 @@ import {
   initializeWebDavTarget,
   testWebDavConnection,
 } from '../domain/sync/webdav/webdavRequest.js';
+import { getSyncTargetSeedFingerprint } from '../domain/sync/syncConfig.js';
+import { createWebDavTransport } from '../domain/sync/webdavSyncTransport.js';
 import { pushNotification } from '../store/notifications.js';
-import { flushPendingQueue } from '../utils/sync.js';
-import { createWebDavTransport } from '../utils/webdavTransport.js';
+import { flushPendingQueue } from '../domain/sync/syncCoordinator.js';
 
 export function useSyncOperations(options: {
   syncSettings: {
@@ -129,6 +130,16 @@ export function useSyncOperations(options: {
         username: options.syncSettings.username.trim(),
         password: options.syncSettings.password,
         basePath: options.syncSettings.basePath.trim(),
+        bootstrapFingerprint: getSyncTargetSeedFingerprint('webdav', {
+          mode: 'webdav',
+          deviceName: '',
+          serverUrl: '',
+          accessToken: '',
+          webdavUrl: options.syncSettings.webdavUrl.trim(),
+          username: options.syncSettings.username.trim(),
+          password: options.syncSettings.password,
+          basePath: options.syncSettings.basePath.trim(),
+        }),
       });
       const result = await transport.cleanupUnusedBlobs?.();
       if (!result) {

@@ -1,7 +1,8 @@
 import { onBeforeUnmount, watch, type Ref } from 'vue';
 import { settings } from '../store/settings';
-import { deleteAttachmentRefsForOwner, extractAttachmentFilenames, replaceAttachmentRefsForOwner } from '../domain/attachments/attachmentRefStorage.js';
-import { clearDraftAttachmentSession, pruneDraftAttachmentsForContent } from '../utils/localAttachments.js';
+import { deleteAttachmentRefsForOwner, replaceAttachmentRefsForOwner } from '../domain/attachments/attachmentRefStorage.js';
+import { extractAttachmentFilenames } from '../domain/attachments/attachmentRefParser.js';
+import { clearDraftAttachmentSession, pruneDraftAttachmentsForContent } from '../domain/attachments/localAttachmentDrafts.js';
 
 type UseEditorDraftOptions = {
   attachmentSessionKey: Ref<string>;

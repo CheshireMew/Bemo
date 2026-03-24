@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   applyChangesToSnapshotState,
   buildBootstrapChangesFromSnapshot,
-} from '../src/domain/sync/webdav/webdavSnapshot.js';
+} from '../src/domain/sync/webdav/webdavSnapshotState.js';
 
 function testSnapshotStateTracksLatestNoteState() {
   const notes = applyChangesToSnapshotState({}, [
@@ -44,6 +44,7 @@ function testSnapshotStateTracksLatestNoteState() {
 
   assert.deepEqual(notes['note-1'], {
     note_id: 'note-1',
+    scope: 'active',
     revision: 3,
     filename: 'a.md',
     content: 'hello world',
@@ -59,6 +60,7 @@ function testSnapshotDeleteRemovesNote() {
   const notes = applyChangesToSnapshotState({
     'note-1': {
       note_id: 'note-1',
+      scope: 'active',
       revision: 2,
       filename: 'a.md',
       content: 'bye',
@@ -77,7 +79,18 @@ function testSnapshotDeleteRemovesNote() {
     },
   ]);
 
-  assert.equal(notes['note-1'], undefined);
+  assert.deepEqual(notes['note-1'], {
+    note_id: 'note-1',
+    scope: 'trash',
+    revision: 2,
+    filename: 'a.md',
+    content: 'bye',
+    tags: [],
+    pinned: false,
+    created_at: '2026-03-18T00:00:00.000Z',
+    updated_at: '2026-03-18T00:03:00.000Z',
+    attachments: [],
+  });
 }
 
 function testBootstrapChangesRecreateSnapshotNotes() {
@@ -88,6 +101,7 @@ function testBootstrapChangesRecreateSnapshotNotes() {
     notes: {
       'note-1': {
         note_id: 'note-1',
+        scope: 'active',
         revision: 2,
         filename: 'a.md',
         content: 'first',
@@ -103,6 +117,7 @@ function testBootstrapChangesRecreateSnapshotNotes() {
       },
       'note-2': {
         note_id: 'note-2',
+        scope: 'active',
         revision: 1,
         filename: 'b.md',
         content: 'second',

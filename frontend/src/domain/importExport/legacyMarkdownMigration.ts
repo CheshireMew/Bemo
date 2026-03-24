@@ -1,14 +1,14 @@
+import { ensureLocalAttachment } from '../attachments/attachmentBlobRuntime.js';
+import { extractAttachmentFilename, extractAttachmentUrlsFromContent } from '../attachments/attachmentLinks.js';
+import { replaceNoteAttachmentRefsForScope } from '../attachments/attachmentRefStorage.js';
+import { normalizeLegacyNoteRecord } from '../notes/noteContract.js';
+import { getCachedNotes, setCachedNotes } from '../notes/notesStorage.js';
+import type { NoteMeta } from '../notes/notesTypes.js';
+import { getTrashNotes, setTrashNotes } from '../notes/trashStorage.js';
 import { clearConflicts } from '../sync/conflictStorage.js';
 import { clearMutationLog } from '../sync/mutationLogStorage.js';
-import { removeSyncStateValue } from '../sync/syncStateStorage.js';
-import { replaceNoteAttachmentRefsForScope } from '../attachments/attachmentRefStorage.js';
-import { getCachedNotes, setCachedNotes } from './notesStorage.js';
-import type { NoteMeta } from './notesTypes.js';
-import { getTrashNotes, setTrashNotes } from './trashStorage.js';
-import { ensureLocalAttachment } from '../../utils/syncAttachments.js';
-import { extractAttachmentFilename } from '../../utils/attachmentUrls.js';
-import { extractAttachmentUrlsFromContent } from '../../utils/syncAttachments.js';
-import { hasBackendOrigin, resolveBackendUrl } from '../../config.js';
+import { clearRemoteSyncProgressState } from '../sync/syncStateStorage.js';
+import { resolveBackendUrl } from '../../config.js';
 
 export type LegacyMigrationPreview = {
   available: boolean;
@@ -25,39 +25,8 @@ export type LegacyMigrationResult = {
   importedAttachments: number;
 };
 
-function normalizeLegacyNote(input: unknown): NoteMeta | null {
-  if (!input || typeof input !== 'object') {
-    return null;
-  }
-
-  const note = input as Record<string, unknown>;
-  const filename = typeof note.filename === 'string' ? note.filename : '';
-  const noteId = typeof note.note_id === 'string' && note.note_id ? note.note_id : '';
-  if (!filename || !noteId) {
-    return null;
-  }
-
-  const createdAt = Number(note.created_at);
-  const updatedAt = Number(note.updated_at);
-
-  return {
-    note_id: noteId,
-    revision: Math.max(1, Number(note.revision) || 1),
-    filename,
-    title: typeof note.title === 'string' && note.title ? note.title : filename.replace(/\.md$/i, ''),
-    created_at: Number.isFinite(createdAt) ? Math.floor(createdAt) : Math.floor(Date.now() / 1000),
-    updated_at: Number.isFinite(updatedAt) ? Math.floor(updatedAt) : Math.floor(Date.now() / 1000),
-    content: typeof note.content === 'string' ? note.content : '',
-    tags: Array.isArray(note.tags) ? note.tags.map((tag) => String(tag)) : [],
-    pinned: Boolean(note.pinned),
-  };
-}
-
 async function fetchLegacyNotes(path: string): Promise<NoteMeta[] | null> {
-  const fetchUrl = resolveBackendUrl(path);
-  if (!fetchUrl) {
-    return null;
-  }
+  const fetchUrl = resolveBackendUrl(path) || path;
 
   const response = await fetch(fetchUrl, {
     headers: {
@@ -79,7 +48,7 @@ async function fetchLegacyNotes(path: string): Promise<NoteMeta[] | null> {
   }
 
   return payload.flatMap((item) => {
-    const normalized = normalizeLegacyNote(item);
+    const normalized = normalizeLegacyNoteRecord(item);
     return normalized ? [normalized] : [];
   });
 }
@@ -121,17 +90,6 @@ async function importLegacyAttachments(notes: NoteMeta[]) {
 }
 
 export async function probeLegacyMarkdownLibrary(): Promise<LegacyMigrationPreview> {
-  if (!hasBackendOrigin()) {
-    return {
-      available: false,
-      notes: [],
-      trash: [],
-      noteCount: 0,
-      trashCount: 0,
-      attachmentCount: 0,
-    };
-  }
-
   const [existingNotes, existingTrash] = await Promise.all([
     getCachedNotes(),
     getTrashNotes(),
@@ -198,10 +156,8 @@ export async function importLegacyMarkdownLibrary(preview: LegacyMigrationPrevie
   await clearMutationLog();
   await clearConflicts();
   await Promise.all([
-    removeSyncStateValue('server_cursor'),
-    removeSyncStateValue('webdav_cursor'),
-    removeSyncStateValue('server_last_sync_at'),
-    removeSyncStateValue('webdav_last_sync_at'),
+    clearRemoteSyncProgressState('server'),
+    clearRemoteSyncProgressState('webdav'),
   ]);
 
   return {
