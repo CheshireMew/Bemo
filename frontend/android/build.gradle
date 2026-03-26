@@ -24,6 +24,16 @@ allprojects {
     }
 }
 
+subprojects {
+    if (name == 'capawesome-capacitor-file-picker') {
+        tasks.withType(JavaCompile).configureEach {
+            options.warnings = false
+            options.deprecation = false
+            options.compilerArgs += ['-Xlint:-deprecation']
+        }
+    }
+}
+
 task clean(type: Delete) {
     delete rootProject.buildDir
 }

@@ -1,5 +1,5 @@
 import { getCachedNotes, setCachedNotes } from './notesStorage.js';
-import type { NoteMeta } from './notesTypes';
+import type { NoteMeta } from './notesTypes.js';
 
 export async function loadCachedNotes(): Promise<NoteMeta[]> {
   return getCachedNotes();

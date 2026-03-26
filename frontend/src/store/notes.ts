@@ -1,19 +1,17 @@
 import { ref, computed } from 'vue';
 import {
-  createNoteContentCommand,
-  deleteNoteCommand,
-  loadNotesForDisplay,
-  searchNotesCommand,
-  togglePinCommand,
-  updateNoteContentCommand,
-} from '../domain/notes/noteCommands';
+  clearTrash,
+  createNote,
+  listDisplayNotes,
+  listDisplayTrash,
+  moveNoteToTrash,
+  purgeTrashNote,
+  restoreTrashNote,
+  searchDisplayNotes,
+  togglePinned,
+  updateNote,
+} from '../domain/appStore/notesAdapter';
 import type { NoteMeta } from '../domain/notes/notesTypes';
-import {
-  emptyTrashCommand,
-  loadTrashForDisplay,
-  permanentlyDeleteTrashNoteCommand,
-  restoreTrashNoteCommand,
-} from '../domain/notes/trashCommands';
 import { setView } from './ui';
 import { requestSyncNow } from '../domain/sync/syncCoordinator.js';
 
@@ -86,7 +84,7 @@ export const displayedNotes = computed(() => {
 
 export async function fetchNotes() {
   try {
-    notes.value = await loadNotesForDisplay();
+    notes.value = await listDisplayNotes();
   } catch (error) {
     console.error(error);
   }
@@ -96,7 +94,7 @@ export async function deleteNote(noteId: string) {
   try {
     const note = notes.value.find((item) => item.note_id === noteId);
     if (!note) return;
-    const queued = await deleteNoteCommand(note);
+    const queued = await moveNoteToTrash(note);
     if (queued) requestSyncNow();
     await fetchNotes();
   } catch (e) {
@@ -106,7 +104,7 @@ export async function deleteNote(noteId: string) {
 
 export async function togglePin(note: NoteMeta) {
   try {
-    const queued = await togglePinCommand(note);
+    const queued = await togglePinned(note);
     if (queued) requestSyncNow();
     await fetchNotes();
   } catch (e) {
@@ -115,13 +113,13 @@ export async function togglePin(note: NoteMeta) {
 }
 
 export async function updateNoteContent(note: NoteMeta, payload: { content: string; tags: string[] }) {
-  const queued = await updateNoteContentCommand(note, payload);
+  const queued = await updateNote(note, payload);
   if (queued) requestSyncNow();
   await fetchNotes();
 }
 
 export async function createNoteContent(payload: { content: string; tags: string[] }) {
-  const created = await createNoteContentCommand(payload);
+  const created = await createNote(payload);
   if (created.syncQueued) requestSyncNow();
   await fetchNotes();
   return created;
@@ -130,7 +128,7 @@ export async function createNoteContent(payload: { content: string; tags: string
 // 回收站相关
 export async function fetchTrash() {
   try {
-    trashNotes.value = await loadTrashForDisplay();
+    trashNotes.value = await listDisplayTrash();
   } catch (e) {
     console.error(e);
   }
@@ -138,7 +136,7 @@ export async function fetchTrash() {
 
 export async function restoreNote(noteId: string) {
   try {
-    const queued = await restoreTrashNoteCommand(noteId);
+    const queued = await restoreTrashNote(noteId);
     if (queued) requestSyncNow();
     await fetchTrash();
     await fetchNotes();
@@ -150,7 +148,7 @@ export async function restoreNote(noteId: string) {
 export async function permanentDelete(noteId: string) {
   if (!confirm('永久删除后无法恢复，确定吗？')) return;
   try {
-    const queued = await permanentlyDeleteTrashNoteCommand(noteId);
+    const queued = await purgeTrashNote(noteId);
     if (queued) requestSyncNow();
     await fetchTrash();
   } catch (e) {
@@ -161,7 +159,7 @@ export async function permanentDelete(noteId: string) {
 export async function emptyTrash() {
   if (!confirm('清空回收站后无法恢复，确定吗？')) return;
   try {
-    const queued = await emptyTrashCommand();
+    const queued = await clearTrash();
     if (queued) requestSyncNow();
     trashNotes.value = [];
   } catch (e) {
@@ -199,7 +197,7 @@ export function performSearch(q: string) {
   }
   searchTimer = setTimeout(async () => {
     try {
-      searchResults.value = await searchNotesCommand(q);
+      searchResults.value = await searchDisplayNotes(q);
     } catch (e) {
       console.error(e);
     }

@@ -71,7 +71,7 @@ export function normalizeNoteContentPayload(
   };
 }
 
-export function normalizeLegacyNoteRecord(input: unknown): NoteMeta | null {
+export function normalizeAppNoteRecord(input: unknown): NoteMeta | null {
   if (!input || typeof input !== 'object') {
     return null;
   }
@@ -90,11 +90,17 @@ export function normalizeLegacyNoteRecord(input: unknown): NoteMeta | null {
     note_id: noteId,
     revision: normalizeNoteRevision(note.revision, 1),
     filename,
-    title: typeof note.title === 'string' && note.title ? note.title : filename.replace(/\.md$/i, ''),
+    title: typeof note.title === 'string' && note.title
+      ? note.title
+      : deriveNoteTitle(typeof note.content === 'string' ? note.content : '', filename.replace(/\.md$/i, '')),
     created_at: createdAt,
     updated_at: updatedAt,
     content: typeof note.content === 'string' ? note.content : '',
     tags: normalizeNoteTags(note.tags),
     pinned: Boolean(note.pinned),
   };
+}
+
+export function normalizeLegacyNoteRecord(input: unknown): NoteMeta | null {
+  return normalizeAppNoteRecord(input);
 }

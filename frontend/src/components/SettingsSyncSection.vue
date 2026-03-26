@@ -204,6 +204,12 @@
 
     </article>
 
+    <SettingsWebDavDiagnosticsPanel
+      v-if="syncSettings.mode === 'webdav'"
+      :sync-settings="syncSettings"
+      :flush-sync-settings="flushPersist"
+    />
+
     <article class="settings-card form-card">
       <div class="section-inline-header">
         <div>
@@ -254,6 +260,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
+import SettingsWebDavDiagnosticsPanel from './SettingsWebDavDiagnosticsPanel.vue';
 import { useSyncOperations } from '../composables/useSyncOperations';
 import { useSyncSettings } from '../composables/useSyncSettings';
 import {

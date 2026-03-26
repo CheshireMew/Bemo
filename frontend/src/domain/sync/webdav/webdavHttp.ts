@@ -131,7 +131,7 @@ function decodeBytesAsText(bytes: Uint8Array) {
   return new TextDecoder().decode(bytes);
 }
 
-function encodeBytesToBase64(bytes: Uint8Array) {
+export function encodeBytesToBase64(bytes: Uint8Array) {
   let binary = '';
   const chunkSize = 0x8000;
   for (let index = 0; index < bytes.length; index += chunkSize) {

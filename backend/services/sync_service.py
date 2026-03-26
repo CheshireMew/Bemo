@@ -1,5 +1,6 @@
 from typing import Any
 
+from services import sync_change_apply
 from services import sync_store_repository
 from services.service_errors import ValidationError
 
@@ -13,6 +14,15 @@ def get_sync_info() -> dict[str, Any]:
         "format_version": 1,
         "latest_cursor": str(sync_store_repository.get_latest_cursor()),
         "blob_prefix": "/api/sync/blobs",
+    }
+
+
+def get_sync_state() -> dict[str, Any]:
+    ensure_sync_store()
+    return {
+        "status": "completed",
+        "fingerprint": None,
+        "remoteNotes": sync_store_repository.list_current_note_states(),
     }
 
 
@@ -36,7 +46,7 @@ def push_changes(changes: list[dict[str, Any]]) -> dict[str, Any]:
             })
             continue
 
-        result = sync_store_repository.apply_remote_change(change)
+        result = sync_change_apply.apply_remote_change(change)
         if result["status"] == "conflict":
             conflicts.append(result)
             continue

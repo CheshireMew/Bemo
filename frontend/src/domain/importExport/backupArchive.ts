@@ -1,11 +1,6 @@
 import JSZip from 'jszip';
 
-import { getReferencedAttachmentFilenames } from '../../domain/attachments/attachmentRefStorage.js';
-import { getAllAttachmentBlobRecords } from '../../domain/attachments/blobStorage.js';
-import { extractAttachmentFilename, extractAttachmentUrlsFromContent } from '../../domain/attachments/attachmentLinks.js';
-import { getCachedNotes } from '../notes/notesStorage.js';
-import { getTrashNotes } from '../notes/trashStorage.js';
-import type { BackupAttachment, BackupPayload } from './backupPayload.js';
+import { buildBackupPayload, type BackupAttachment, type BackupPayload } from './backupPayload.js';
 
 type BackupArchiveManifest = Omit<BackupPayload, 'attachments'> & {
   version: 3;
@@ -17,23 +12,10 @@ type BackupArchiveManifest = Omit<BackupPayload, 'attachments'> & {
 };
 
 export async function buildBackupArchiveBlob() {
-  const [notes, trash, attachments] = await Promise.all([
-    getCachedNotes(),
-    getTrashNotes(),
-    getAllAttachmentBlobRecords(),
-  ]);
-  const fallbackFilenames = new Set<string>();
-  for (const note of [...notes, ...trash]) {
-    for (const url of extractAttachmentUrlsFromContent(note.content || '')) {
-      const filename = extractAttachmentFilename(url);
-      if (filename) {
-        fallbackFilenames.add(filename);
-      }
-    }
-  }
-  const referenced = await getReferencedAttachmentFilenames(['active', 'trash']);
-  const allowed = new Set<string>([...referenced, ...fallbackFilenames]);
-  const archiveAttachments = attachments.filter((attachment) => allowed.has(attachment.filename));
+  const payload = await buildBackupPayload();
+  const notes = Array.isArray(payload.notes) ? payload.notes : [];
+  const trash = Array.isArray(payload.trash) ? payload.trash : [];
+  const archiveAttachments = Array.isArray(payload.attachments) ? payload.attachments : [];
 
   const zip = new JSZip();
   const manifest: BackupArchiveManifest = {
@@ -52,7 +34,7 @@ export async function buildBackupArchiveBlob() {
   zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 
   for (const attachment of archiveAttachments) {
-    zip.file(`attachments/${attachment.filename}`, await attachment.blob.arrayBuffer());
+    zip.file(`attachments/${attachment.filename}`, Uint8Array.from(attachment.data));
   }
 
   return zip.generateAsync({ type: 'blob' });

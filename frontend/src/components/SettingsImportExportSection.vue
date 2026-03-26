@@ -43,6 +43,13 @@
         </div>
       </article>
 
+      <article class="settings-card">
+        <h4>坚果云同步目录</h4>
+        <p>直接读取 `C:\Users\Dylan\Nutstore\1\bemo-sync` 中的最新同步快照，并覆盖恢复到当前本机数据库。</p>
+        <div class="button-row">
+          <button type="button" class="secondary-btn" @click="importNutstoreSyncBackup">从坚果云同步目录恢复</button>
+        </div>
+      </article>
       <article class="settings-card danger-card">
         <h4>清空工作区</h4>
         <p>一次性删去本地所有笔记、附件及同步记录，为您保留各种界面预设配置。</p>
@@ -86,6 +93,7 @@ const {
   handleFlomoImport,
   triggerMarkdownArchiveImport,
   handleMarkdownArchiveImport,
+  importNutstoreSyncBackup,
   clearAllExperimentData,
   resetToFirstInstallState,
 } = useImportExport(() => {

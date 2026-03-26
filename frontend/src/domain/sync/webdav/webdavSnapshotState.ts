@@ -1,4 +1,5 @@
 import { normalizeNoteRevision, normalizeNoteTags } from '../../notes/noteContract.js';
+import type { SyncRemoteNoteState } from '../syncTransport.js';
 import type { SnapshotRecord, WebDavSnapshotNote } from './webdavTypes.js';
 
 type SyncChange = {
@@ -98,6 +99,20 @@ function toSnapshotNote(change: SyncChange, existing?: WebDavSnapshotNote): WebD
   return existing ?? null;
 }
 
+function toRemoteNoteState(change: SyncChange, existing?: SyncRemoteNoteState): SyncRemoteNoteState | null {
+  const noteId = String(change.entity_id || existing?.note_id || '');
+  if (!noteId) return null;
+  if (change.type === 'note.purge') return null;
+
+  const payload = change.payload || {};
+  const revision = normalizeNoteRevision(payload.revision, existing?.revision ?? 1);
+  return {
+    note_id: noteId,
+    scope: change.type === 'note.trash' || change.type === 'note.delete' ? 'trash' : 'active',
+    revision,
+  };
+}
+
 export function applyChangesToSnapshotState(
   currentNotes: Record<string, WebDavSnapshotNote>,
   changes: SyncChange[],
@@ -123,7 +138,7 @@ export function applyChangesToSnapshotState(
 }
 
 export function buildBootstrapChangesFromSnapshot(snapshot: SnapshotRecord) {
-  return Object.values(snapshot.notes)
+  return Object.values(snapshot.notes || {})
     .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''))
     .map((note, index) => ({
       operation_id: `snapshot_${snapshot.latest_cursor}_${String(index + 1).padStart(6, '0')}_${note.note_id}`,
@@ -143,6 +158,40 @@ export function buildBootstrapChangesFromSnapshot(snapshot: SnapshotRecord) {
         attachments: note.attachments,
       },
     }));
+}
+
+export function buildRemoteNoteStatesFromSnapshot(snapshot: SnapshotRecord) {
+  return Object.fromEntries(
+    Object.values(snapshot.notes || {}).map((note) => [note.note_id, {
+      note_id: note.note_id,
+      scope: note.scope,
+      revision: note.revision,
+    } satisfies SyncRemoteNoteState] as const),
+  );
+}
+
+export function applyChangesToRemoteNoteStates(
+  currentNotes: Record<string, SyncRemoteNoteState>,
+  changes: SyncChange[],
+): Record<string, SyncRemoteNoteState> {
+  const next = { ...currentNotes };
+
+  for (const change of changes) {
+    const noteId = String(change.entity_id || '');
+    if (!noteId) continue;
+
+    if (change.type === 'note.purge') {
+      delete next[noteId];
+      continue;
+    }
+
+    const remoteNote = toRemoteNoteState(change, next[noteId]);
+    if (remoteNote) {
+      next[noteId] = remoteNote;
+    }
+  }
+
+  return next;
 }
 
 export function collectReferencedBlobHashes(notes: Record<string, WebDavSnapshotNote>) {

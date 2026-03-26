@@ -1,20 +1,10 @@
 import JSZip from 'jszip';
 
-import { getReferencedAttachmentFilenames } from '../attachments/attachmentRefStorage.js';
-import { getAllAttachmentBlobRecords, putAttachmentBlob } from '../attachments/blobStorage.js';
-import { getCachedNotes } from '../notes/notesStorage.js';
 import type { NoteMeta } from '../notes/notesTypes.js';
-import { getTrashNotes } from '../notes/trashStorage.js';
-import { replaceNoteAttachmentRefsForScope } from '../attachments/attachmentRefStorage.js';
-import { setCachedNotes } from '../notes/notesStorage.js';
-import { setTrashNotes } from '../notes/trashStorage.js';
-import { clearConflicts } from '../sync/conflictStorage.js';
-import { clearMutationLog } from '../sync/mutationLogStorage.js';
-import { clearRemoteSyncProgressState } from '../sync/syncStateStorage.js';
+import { applyBackupPayload, buildBackupPayload } from './backupPayload.js';
 import {
   buildArchiveNotePath,
   buildMarkdownArchiveDocument,
-  collectReferencedAttachmentFilenames,
   guessArchiveMimeType,
   parseMarkdownArchiveDocument,
   sortArchiveNotes,
@@ -30,17 +20,13 @@ type ArchiveManifest = {
 };
 
 export async function buildMarkdownArchiveBlob() {
-  const [notes, trash, attachments] = await Promise.all([
-    getCachedNotes(),
-    getTrashNotes(),
-    getAllAttachmentBlobRecords(),
-  ]);
+  const payload = await buildBackupPayload();
+  const notes = Array.isArray(payload.notes) ? payload.notes : [];
+  const trash = Array.isArray(payload.trash) ? payload.trash : [];
+  const attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
 
   const zip = new JSZip();
-  const referencedFilenames = new Set<string>([
-    ...await getReferencedAttachmentFilenames(['active', 'trash']),
-    ...collectReferencedAttachmentFilenames([...notes, ...trash]),
-  ]);
+  const referencedFilenames = new Set<string>(attachments.map((attachment) => attachment.filename));
 
   sortArchiveNotes(notes).forEach((note) => {
     const archivePath = buildArchiveNotePath('notes', note);
@@ -55,8 +41,7 @@ export async function buildMarkdownArchiveBlob() {
   let archivedAttachmentCount = 0;
   for (const attachment of attachments) {
     if (!referencedFilenames.has(attachment.filename)) continue;
-    const arrayBuffer = await attachment.blob.arrayBuffer();
-    zip.file(`attachments/${attachment.filename}`, arrayBuffer);
+    zip.file(`attachments/${attachment.filename}`, Uint8Array.from(attachment.data));
     archivedAttachmentCount += 1;
   }
 
@@ -116,32 +101,16 @@ export async function parseMarkdownArchive(file: File) {
 
 export async function importMarkdownArchive(file: File) {
   const { notes, trash, attachments } = await parseMarkdownArchive(file);
-
-  await setCachedNotes(notes);
-  await setTrashNotes(trash);
-  await Promise.all([
-    replaceNoteAttachmentRefsForScope('active', notes),
-    replaceNoteAttachmentRefsForScope('trash', trash),
-  ]);
-
-  for (const attachment of attachments) {
-    await putAttachmentBlob({
+  return applyBackupPayload({
+    format: 'bemo-backup',
+    version: 3,
+    exported_at: new Date().toISOString(),
+    notes,
+    trash,
+    attachments: attachments.map((attachment) => ({
       filename: attachment.filename,
-      blob: new Blob([Uint8Array.from(attachment.data)], { type: attachment.mime_type || 'application/octet-stream' }),
-      mimeType: attachment.mime_type || 'application/octet-stream',
-    });
-  }
-
-  await clearMutationLog();
-  await clearConflicts();
-  await Promise.all([
-    clearRemoteSyncProgressState('server'),
-    clearRemoteSyncProgressState('webdav'),
-  ]);
-
-  return {
-    imported_notes: notes.length + trash.length,
-    imported_images: attachments.length,
-    imported_note_records: [],
-  };
+      mime_type: attachment.mime_type || 'application/octet-stream',
+      data: Array.from(attachment.data),
+    })),
+  });
 }

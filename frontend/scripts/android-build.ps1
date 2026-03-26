@@ -13,6 +13,45 @@ function Run-Step([string]$FilePath, [string[]]$Arguments, [string]$WorkingDirec
     }
 }
 
+function Normalize-AndroidGradleFiles([string]$AndroidRoot) {
+    $cordovaGradlePath = Join-Path $AndroidRoot "capacitor-cordova-android-plugins/build.gradle"
+    if (-not (Test-Path $cordovaGradlePath)) {
+        return
+    }
+
+    $lines = Get-Content -Path $cordovaGradlePath
+    $normalizedLines = New-Object System.Collections.Generic.List[string]
+    $skipFlatDirBlock = $false
+
+    foreach ($line in $lines) {
+        $trimmed = $line.Trim()
+
+        if ($skipFlatDirBlock) {
+            if ($trimmed -eq "}") {
+                $skipFlatDirBlock = $false
+            }
+            continue
+        }
+
+        if ($trimmed -eq "flatDir{" -or $trimmed -eq "flatDir {") {
+            $skipFlatDirBlock = $true
+            continue
+        }
+
+        if ($trimmed -eq "implementation fileTree(dir: 'src/main/libs', include: ['*.jar'])") {
+            continue
+        }
+
+        $normalizedLines.Add($line)
+    }
+
+    $normalized = ($normalizedLines -join "`r`n") + "`r`n"
+    $content = Get-Content -Path $cordovaGradlePath -Raw
+    if ($normalized -ne $content) {
+        [System.IO.File]::WriteAllText($cordovaGradlePath, $normalized, [System.Text.UTF8Encoding]::new($false))
+    }
+}
+
 $frontendRoot = Split-Path -Parent $PSScriptRoot
 $androidRoot = Join-Path $frontendRoot "android"
 $checkScriptPath = Join-Path $PSScriptRoot "check-android-env.ps1"
@@ -32,6 +71,7 @@ if ($Task -eq "open") {
 
 Run-Step -FilePath "npm.cmd" -Arguments @("run", "build:android") -WorkingDirectory $frontendRoot
 Run-Step -FilePath "npx.cmd" -Arguments @("cap", "sync", "android") -WorkingDirectory $frontendRoot
+Normalize-AndroidGradleFiles -AndroidRoot $androidRoot
 
 switch ($Task) {
     "debug" {

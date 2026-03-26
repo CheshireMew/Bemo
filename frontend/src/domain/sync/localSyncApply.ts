@@ -11,7 +11,8 @@ import {
   findLocalNoteById,
   findLocalTrashNoteById,
 } from '../notes/localNoteQueries.js';
-import { normalizeNoteTags } from '../notes/noteContract.js';
+import type { NoteMeta } from '../notes/notesTypes.js';
+import { normalizeNoteContentPayload, normalizeNoteTags } from '../notes/noteContract.js';
 import {
   applyRemoteActiveState,
   applyRemoteTrashState,
@@ -36,6 +37,41 @@ function toNumber(value: unknown, fallback: number) {
   return Number.isFinite(next) ? next : fallback;
 }
 
+function tagsEqual(left: string[], right: string[]) {
+  return left.length === right.length && left.every((tag, index) => tag === right[index]);
+}
+
+function hasAppliedActiveState(note: NoteMeta, payload: Record<string, unknown>) {
+  const remote = normalizeNoteContentPayload(payload, note.revision);
+  return note.revision >= remote.revision
+    && note.content === remote.content
+    && tagsEqual(note.tags, remote.tags)
+    && note.pinned === Boolean(remote.pinned ?? note.pinned);
+}
+
+function hasAppliedPatchState(note: NoteMeta, payload: Record<string, unknown>) {
+  const remoteRevision = toNumber(payload.revision, note.revision);
+  if (note.revision < remoteRevision) return false;
+  if (payload.pinned !== undefined && note.pinned !== Boolean(payload.pinned)) {
+    return false;
+  }
+  if (Array.isArray(payload.tags) && !tagsEqual(note.tags, normalizeNoteTags(payload.tags))) {
+    return false;
+  }
+  return true;
+}
+
+function hasAppliedTrashState(note: NoteMeta, payload: Record<string, unknown>, type: string) {
+  if (type === 'note.delete' && Object.keys(payload).length === 0) {
+    return true;
+  }
+  const remote = normalizeNoteContentPayload(payload, note.revision);
+  return note.revision >= remote.revision
+    && note.content === remote.content
+    && tagsEqual(note.tags, remote.tags)
+    && note.pinned === Boolean(remote.pinned ?? note.pinned);
+}
+
 export async function applyChangesLocally(changes: SyncChange[]) {
   const applied: Array<Record<string, unknown>> = [];
   const conflicts: Array<Record<string, unknown>> = [];
@@ -50,6 +86,10 @@ export async function applyChangesLocally(changes: SyncChange[]) {
     if (type === 'note.create') {
       const existing = await findLocalNoteById(noteId);
       if (existing) {
+        if (hasAppliedActiveState(existing, payload)) {
+          applied.push({ status: 'applied', note_id: noteId, filename: existing.filename, deduplicated: true });
+          continue;
+        }
         if (change.device_id === 'snapshot') {
           const updated = await applyRemoteActiveState(noteId, payload, existing);
           applied.push({ status: 'applied', note_id: noteId, filename: updated.filename });
@@ -97,6 +137,11 @@ export async function applyChangesLocally(changes: SyncChange[]) {
             created_at: typeof payload.created_at === 'string' ? payload.created_at : '',
           },
         });
+        continue;
+      }
+
+      if (hasAppliedActiveState(local, payload)) {
+        applied.push({ status: 'applied', note_id: noteId, filename: local.filename, deduplicated: true });
         continue;
       }
 
@@ -152,6 +197,11 @@ export async function applyChangesLocally(changes: SyncChange[]) {
         continue;
       }
 
+      if (hasAppliedPatchState(local, payload)) {
+        applied.push({ status: 'applied', note_id: noteId, filename: local.filename, deduplicated: true });
+        continue;
+      }
+
       if (hasConcurrentPatchConflict(local, baseRevision, payload)) {
         const conflictCopy = await createLocalConflictCopy(local);
         const updated = await updateLocalNoteById(noteId, (current) => ({
@@ -200,6 +250,11 @@ export async function applyChangesLocally(changes: SyncChange[]) {
     }
 
     if (type === 'note.trash' || type === 'note.delete') {
+      if (localTrash && hasAppliedTrashState(localTrash, payload, type)) {
+        applied.push({ status: 'applied', note_id: noteId, filename: localTrash.filename, deduplicated: true });
+        continue;
+      }
+
       if (local) {
         if (shouldKeepDeleteAsConflict(local.revision, baseRevision)) {
           const conflictCopy = await createLocalConflictCopy(local);
@@ -265,6 +320,11 @@ export async function applyChangesLocally(changes: SyncChange[]) {
     }
 
     if (type === 'note.restore') {
+      if (local && hasAppliedActiveState(local, payload)) {
+        applied.push({ status: 'applied', note_id: noteId, filename: local.filename, deduplicated: true });
+        continue;
+      }
+
       if (localTrash) {
         const restored = await restoreLocalTrashNote(localTrash.note_id);
         const updated = await applyRemoteActiveState(noteId, payload, restored);

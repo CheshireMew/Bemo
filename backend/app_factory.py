@@ -4,17 +4,20 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from api import app_storage, attachment_assets, notes_app
 from api import sync
 from services.service_errors import ServiceError, to_status_code
 
-LEGACY_PATH_PREFIXES = (
-    "/api/notes",
-    "/api/uploads",
-    "/api/settings",
-    "/api/ai",
-    "/api/sync/local",
-    "/images",
-)
+APP_MODES = {"app", "server", "desktop"}
+
+
+def _normalize_app_mode(app_mode: str | None) -> str:
+    mode = (app_mode or os.getenv("BEMO_APP_MODE", "app")).strip().lower() or "app"
+    if mode == "desktop":
+        return "app"
+    if mode not in APP_MODES:
+        raise RuntimeError(f"Unsupported BEMO_APP_MODE: {mode}")
+    return mode
 
 
 def _get_cors_origins(app_mode: str) -> list[str]:
@@ -29,13 +32,14 @@ def _get_cors_origins(app_mode: str) -> list[str]:
 def create_app(app_mode: str | None = None) -> FastAPI:
     from core.paths import ensure_data_directories, has_configured_sync_token
 
-    mode = (app_mode or os.getenv("BEMO_APP_MODE", "desktop")).strip().lower() or "desktop"
+    mode = _normalize_app_mode(app_mode)
+    is_app_mode = mode == "app"
     is_server_mode = mode == "server"
 
     if is_server_mode and not has_configured_sync_token():
         raise RuntimeError("BEMO_SYNC_TOKEN must be set to a non-default value for sync-server mode")
 
-    app = FastAPI(title="Bemo Sync Server API" if is_server_mode else "Bemo Notes API")
+    app = FastAPI(title="Bemo Sync Server API" if is_server_mode else "Bemo App API")
 
     @app.exception_handler(ServiceError)
     async def handle_service_error(_request, exc: ServiceError):
@@ -54,34 +58,10 @@ def create_app(app_mode: str | None = None) -> FastAPI:
     ensure_data_directories()
 
     app.include_router(sync.router, prefix="/api/sync", tags=["sync"])
-    if not is_server_mode:
-        from fastapi.staticfiles import StaticFiles
-        from _archive_legacy.api import (
-            ai_legacy as ai,
-            notes_legacy as notes,
-            settings_legacy as settings,
-            sync_local_legacy as sync_local,
-            uploads_legacy as uploads,
-        )
-        from core.paths import IMAGES_DIR
-
-        @app.middleware("http")
-        async def add_legacy_api_headers(request, call_next):
-            response = await call_next(request)
-            path = request.url.path
-            if path.startswith(LEGACY_PATH_PREFIXES):
-                response.headers["X-Bemo-Legacy-API"] = "deprecated"
-                response.headers["Warning"] = (
-                    '299 Bemo "Legacy backend API; frontend-owned path preferred."'
-                )
-            return response
-
-        app.mount("/images", StaticFiles(directory=IMAGES_DIR), name="images")
-        app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
-        app.include_router(uploads.router, prefix="/api/uploads", tags=["uploads"])
-        app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
-        app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
-        app.include_router(sync_local.router, prefix="/api/sync/local", tags=["sync-local"])
+    if is_app_mode:
+        app.include_router(attachment_assets.router, tags=["app-attachments"])
+        app.include_router(notes_app.router, prefix="/api/app/notes", tags=["app-notes"])
+        app.include_router(app_storage.router, prefix="/api/app", tags=["app-storage"])
 
     @app.get("/")
     def read_root():

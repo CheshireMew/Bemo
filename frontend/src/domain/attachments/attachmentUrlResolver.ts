@@ -1,4 +1,4 @@
-import { resolveBackendUrl } from '../../config.js';
+import { resolveAttachmentSourceUrl } from '../appStore/attachmentUrlAdapter.js';
 import { extractAttachmentFilename } from './attachmentLinks.js';
 import { getAttachmentBlobRecord, getDraftAttachmentBlobRecord } from './blobStorage.js';
 
@@ -40,7 +40,7 @@ export async function resolveAttachmentUrl(url: string): Promise<string> {
 
   const filename = extractAttachmentFilename(url);
   if (!filename) {
-    return resolveBackendUrl(url);
+    return resolveAttachmentSourceUrl(url);
   }
 
   const record = await getAttachmentBlobRecord(filename);
@@ -52,7 +52,7 @@ export async function resolveAttachmentUrl(url: string): Promise<string> {
       revokeObjectUrl(cached.objectUrl);
       objectUrlCache.delete(filename);
     }
-    return resolveBackendUrl(url);
+    return resolveAttachmentSourceUrl(url);
   }
 
   if (cached?.updatedAt === resolvedRecord.updatedAt) {

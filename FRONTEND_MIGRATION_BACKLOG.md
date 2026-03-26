@@ -1,5 +1,11 @@
 # Frontend Migration Backlog
 
+> Historical note:
+> This file reflects an older target where backend would shrink to a pure sync-server.
+> That is not the current runtime architecture anymore.
+> Today, Web / Desktop still use backend app storage, while Android keeps a local database path.
+> Read [README.md](E:/Work/Code/Bemo/README.md), [LOCAL_FIRST_ARCHITECTURE.md](E:/Work/Code/Bemo/LOCAL_FIRST_ARCHITECTURE.md), and [backend/README.md](E:/Work/Code/Bemo/backend/README.md) first, and treat the rest of this file as historical planning context unless it is explicitly updated.
+
 ## Goal
 
 Repository target state:

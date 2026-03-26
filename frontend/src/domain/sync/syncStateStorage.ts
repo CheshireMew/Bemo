@@ -15,10 +15,6 @@ export function getSyncLastSyncStateKey(target: RemoteSyncTarget) {
   return `${target}_last_sync_at`;
 }
 
-export function getSyncLocalSeedStateKey(target: RemoteSyncTarget) {
-  return `${target}_local_seed_fingerprint`;
-}
-
 export async function setSyncStateValue(key: string, value: string): Promise<void> {
   const db = await openIndexedDb();
   const tx = db.transaction('syncState', 'readwrite');
@@ -46,6 +42,5 @@ export async function clearRemoteSyncProgressState(target: RemoteSyncTarget): Pr
   await Promise.all([
     removeSyncStateValue(getSyncCursorStateKey(target)),
     removeSyncStateValue(getSyncLastSyncStateKey(target)),
-    removeSyncStateValue(getSyncLocalSeedStateKey(target)),
   ]);
 }

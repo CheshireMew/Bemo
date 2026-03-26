@@ -1,3 +1,3 @@
 from app_factory import create_app
 
-app = create_app("server")
+app = create_app("app")

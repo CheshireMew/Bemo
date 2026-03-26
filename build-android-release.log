@@ -1,0 +1,11 @@
+[INFO] VITE_ANDROID_API_BASE_URL is not set. Building with current defaults.
+[INFO] Frontend directory: E:\Work\Code\Bemo\frontend
+==> powershell.exe -ExecutionPolicy Bypass -File E:\Work\Code\Bemo\frontend\scripts\check-android-env.ps1 -RequireKeystore
+Android packaging environment check passed.
+JAVA_HOME=D:\Software\Code\JDK 17\
+Java major version=17
+==> npm.cmd run build:android
+
+> frontend@0.1.0 build:android
+> vue-tsc -b && vite build --mode android
+

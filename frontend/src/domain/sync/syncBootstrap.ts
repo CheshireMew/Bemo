@@ -1,73 +1,75 @@
+import { listLocalNotes, listLocalTrashNotes } from '../notes/localNoteQueries.js';
 import { enqueueExistingLocalNotesForSync } from './noteSyncOutbox.js';
 import type { SyncTarget } from './mutationLogStorage.js';
-import {
-  getSyncCursorStateKey,
-  getSyncLocalSeedStateKey,
-  getSyncStateValue,
-  setSyncStateValue,
-} from './syncStateStorage.js';
-import {
-  getSyncTargetSeedFingerprint,
-  type SyncConfigSnapshot,
-} from './syncConfig.js';
-import type { SyncTransport } from './syncTransport.js';
+import { getSyncCursorStateKey, getSyncStateValue, setSyncStateValue } from './syncStateStorage.js';
+import type { SyncChange, SyncRemoteNoteState, SyncTransport } from './syncTransport.js';
 
-function collectRemoteNoteIds(changes: Array<{ entity_id?: string; type?: string }>) {
-  const remoteNoteIds = new Set<string>();
+function collectRemoteNoteIds(changes: SyncChange[]) {
+  const remoteNotes = new Map<string, SyncRemoteNoteState>();
   for (const change of changes) {
     const noteId = String(change.entity_id || '');
     if (!noteId) continue;
+    const revision = Number(change.payload?.revision);
     if (change.type === 'note.purge') {
-      remoteNoteIds.delete(noteId);
+      remoteNotes.delete(noteId);
       continue;
     }
-    remoteNoteIds.add(noteId);
+    remoteNotes.set(noteId, {
+      note_id: noteId,
+      scope: change.type === 'note.trash' ? 'trash' : 'active',
+      revision: Number.isFinite(revision) ? revision : 1,
+    });
   }
-  return remoteNoteIds;
+  return remoteNotes;
 }
 
-export async function seedLocalHistoryIfNeeded(
+async function collectLocalNoteIds() {
+  const [activeNotes, trashNotes] = await Promise.all([
+    listLocalNotes(),
+    listLocalTrashNotes(),
+  ]);
+  return new Set([
+    ...activeNotes.map((note) => note.note_id),
+    ...trashNotes.map((note) => note.note_id),
+  ]);
+}
+
+export async function inspectRemoteSyncState(
   target: SyncTarget,
   transport: SyncTransport,
-  syncConfig: SyncConfigSnapshot,
+  queuedNoteIds: ReadonlySet<string> = new Set(),
 ) {
-  if (target === 'webdav' && transport.inspectBootstrap) {
+  const localNoteIds = await collectLocalNoteIds();
+  if (transport.inspectBootstrap) {
     const bootstrap = await transport.inspectBootstrap();
-    const currentFingerprint = getSyncTargetSeedFingerprint(target, syncConfig);
-    if (
-      bootstrap.status === 'completed'
-      && bootstrap.fingerprint === currentFingerprint
-    ) {
-      return 0;
-    }
-
-    const remoteNoteIds = new Set(bootstrap.remoteNoteIds);
-    return enqueueExistingLocalNotesForSync(target, remoteNoteIds);
-  }
-
-  const seedKey = getSyncLocalSeedStateKey(target);
-  const currentFingerprint = getSyncTargetSeedFingerprint(target, syncConfig);
-  const seededFingerprint = await getSyncStateValue(seedKey);
-  if (seededFingerprint === currentFingerprint) {
-    return 0;
+    const remoteNotes = new Map(bootstrap.remoteNotes.map((note) => [note.note_id, note] as const));
+    return {
+      seededCount: await enqueueExistingLocalNotesForSync(target, remoteNotes, queuedNoteIds),
+      missingLocalNoteIds: bootstrap.remoteNotes
+        .map((note) => note.note_id)
+        .filter((noteId) => noteId && !localNoteIds.has(noteId)),
+    };
   }
 
   const remoteState = await transport.pull(null);
-  const remoteNoteIds = collectRemoteNoteIds(remoteState.changes || []);
-  const bootstrappedCount = await enqueueExistingLocalNotesForSync(target, remoteNoteIds);
-
-  await setSyncStateValue(seedKey, currentFingerprint);
-
-  return bootstrappedCount;
+  const remoteNotes = collectRemoteNoteIds(remoteState.changes || []);
+  return {
+    seededCount: await enqueueExistingLocalNotesForSync(target, remoteNotes, queuedNoteIds),
+    missingLocalNoteIds: Array.from(remoteNotes.keys()).filter((noteId) => !localNoteIds.has(noteId)),
+  };
 }
 
 export async function pullAllRemoteChanges(
   transport: SyncTransport,
   target: SyncTarget,
+  options: {
+    cursorOverride?: string | null;
+  } = {},
 ) {
-  const changes: any[] = [];
+  const changes: SyncChange[] = [];
   const cursorKey = getSyncCursorStateKey(target);
-  let cursor = await getSyncStateValue(cursorKey);
+  const hasCursorOverride = Object.prototype.hasOwnProperty.call(options, 'cursorOverride');
+  let cursor = hasCursorOverride ? options.cursorOverride ?? null : await getSyncStateValue(cursorKey);
   let latestCursor = cursor || '0';
 
   while (true) {
@@ -91,6 +93,47 @@ export async function pullAllRemoteChanges(
 
   return {
     changes,
+    latest_cursor: latestCursor,
+  };
+}
+
+export async function consumeRemoteChanges(
+  transport: SyncTransport,
+  target: SyncTarget,
+  options: {
+    cursorOverride?: string | null;
+    onBatch: (changes: SyncChange[], meta: { cursor: string | null; nextCursor: string }) => Promise<void>;
+  },
+) {
+  const cursorKey = getSyncCursorStateKey(target);
+  const hasCursorOverride = Object.prototype.hasOwnProperty.call(options, 'cursorOverride');
+  let cursor = hasCursorOverride ? options.cursorOverride ?? null : await getSyncStateValue(cursorKey);
+  let latestCursor = cursor || '0';
+
+  while (true) {
+    const pullResult = await transport.pull(cursor);
+    const batchChanges = pullResult.changes || [];
+    const nextCursor = String(pullResult.latest_cursor || cursor || '0');
+
+    if (batchChanges.length === 0) {
+      latestCursor = nextCursor;
+      if (nextCursor && nextCursor !== cursor) {
+        await setSyncStateValue(cursorKey, nextCursor);
+      }
+      break;
+    }
+
+    if (nextCursor === cursor) {
+      throw new Error('同步拉取游标未推进，已停止以避免死循环');
+    }
+
+    await options.onBatch(batchChanges, { cursor, nextCursor });
+    latestCursor = nextCursor;
+    await setSyncStateValue(cursorKey, nextCursor);
+    cursor = nextCursor;
+  }
+
+  return {
     latest_cursor: latestCursor,
   };
 }

@@ -3,7 +3,6 @@ import type { AppSettings } from './settingsTypes.js';
 export const defaultSettings: AppSettings = {
   importExport: {
     lastSection: 'export',
-    legacyMigrationCompletedAt: '',
   },
   aiPrompts: {
     presets: [],

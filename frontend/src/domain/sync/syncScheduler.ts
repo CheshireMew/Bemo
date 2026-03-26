@@ -7,6 +7,14 @@ let scheduledSyncTimer: number | null = null;
 let lastForegroundSyncAt = 0;
 let retryDelayMs = SYNC_RETRY_BASE_MS;
 
+function readRetryAfterMs(error: unknown) {
+  if (!error || typeof error !== 'object' || !('retryAfterMs' in error)) return null;
+  const retryAfterMs = (error as { retryAfterMs?: unknown }).retryAfterMs;
+  return typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs) && retryAfterMs > 0
+    ? Math.min(retryAfterMs, SYNC_RETRY_MAX_MS)
+    : null;
+}
+
 export function clearScheduledSync() {
   if (!scheduledSyncTimer) return;
   clearTimeout(scheduledSyncTimer);
@@ -25,10 +33,6 @@ export function resetRetryDelay() {
   retryDelayMs = SYNC_RETRY_BASE_MS;
 }
 
-export function increaseRetryDelay() {
-  retryDelayMs = Math.min(retryDelayMs * 2, SYNC_RETRY_MAX_MS);
-}
-
 export function shouldPauseBackgroundSync() {
   if (typeof document === 'undefined') return false;
   return document.visibilityState === 'hidden';
@@ -43,10 +47,12 @@ export function handleSyncSuccess(requestSyncNow: () => void) {
   }
 }
 
-export function handleSyncFailure(requestSyncNow: () => void) {
+export function handleSyncFailure(requestSyncNow: () => void, error?: unknown) {
   if (navigator.onLine && !shouldPauseBackgroundSync()) {
-    scheduleNextSync(requestSyncNow, retryDelayMs);
-    increaseRetryDelay();
+    const retryAfterMs = readRetryAfterMs(error);
+    const delayMs = retryAfterMs !== null ? Math.max(retryDelayMs, retryAfterMs) : retryDelayMs;
+    scheduleNextSync(requestSyncNow, delayMs);
+    retryDelayMs = Math.min(delayMs * 2, SYNC_RETRY_MAX_MS);
   } else {
     clearScheduledSync();
   }

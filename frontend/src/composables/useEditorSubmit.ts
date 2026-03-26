@@ -1,9 +1,9 @@
 import { ref, type Ref } from 'vue';
 import { createNoteContent } from '../store/notes.js';
+import { finalizeDraftAttachments } from '../domain/appStore/attachmentsAdapter.js';
 import {
   clearDraftAttachmentSession,
   createDraftAttachmentSessionKey,
-  promoteDraftAttachmentsForContent,
 } from '../domain/attachments/localAttachmentDrafts.js';
 
 export interface EditorSubmitPayload {
@@ -40,7 +40,7 @@ export function useEditorSubmit(options: {
 
     isSaving.value = true;
     try {
-      await promoteDraftAttachmentsForContent(options.attachmentSessionKey.value, options.content.value);
+      await finalizeDraftAttachments(options.attachmentSessionKey.value, options.content.value);
       if (options.submitAction) {
         await options.submitAction({
           content: options.content.value,

@@ -12,7 +12,6 @@ export type AiPromptPreset = {
 export interface AppSettings {
   importExport: {
     lastSection: 'export' | 'import';
-    legacyMigrationCompletedAt: string;
   };
   aiPrompts: {
     presets: AiPromptPreset[];

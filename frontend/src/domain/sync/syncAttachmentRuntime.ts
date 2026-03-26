@@ -1,6 +1,7 @@
 import { collectSyncAttachments, ensureBlobIndexValid, ensureLocalAttachment } from '../attachments/attachmentBlobRuntime.js';
 import type { ChangeRecord } from './mutationLogStorage.js';
 import { buildSyncTransport } from './syncTransportBuilder.js';
+import type { SyncChange } from './syncTransport.js';
 
 function changeToRemoteShape(change: ChangeRecord) {
   return {
@@ -59,7 +60,7 @@ export async function prepareOutboundChanges(
 }
 
 export async function hydrateInboundAttachments(
-  changes: any[],
+  changes: SyncChange[],
   transport: ReturnType<typeof buildSyncTransport>,
 ) {
   if (!transport) return;

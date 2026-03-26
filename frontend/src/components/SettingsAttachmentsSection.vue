@@ -3,15 +3,15 @@
     <div class="section-header">
       <div>
         <h3>附件</h3>
-        <p>查看本地附件状态，并清理没有任何引用关系的文件。</p>
+        <p>查看当前数据源的附件状态，并清理没有任何引用关系的文件。</p>
       </div>
     </div>
 
     <div class="card-grid three-up">
       <article class="settings-card">
-        <h4>本地附件</h4>
+        <h4>已存附件</h4>
         <p class="stat-value">{{ attachmentSummary.storedAttachments }}</p>
-        <p>正式附件库中的文件总数。</p>
+        <p>当前主存储里的正式附件总数。</p>
       </article>
 
       <article class="settings-card">

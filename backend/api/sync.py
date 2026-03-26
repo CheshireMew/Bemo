@@ -3,10 +3,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from core.paths import MAX_SYNC_BLOB_BYTES, SYNC_TOKEN
+from services.sync_directory_backup_service import build_backup_payload_from_sync_directory
 from services.sync_service import (
     ensure_sync_store,
     get_blob,
     get_sync_info,
+    get_sync_state,
     has_blob,
     pull_changes,
     push_changes,
@@ -39,6 +41,10 @@ class WebDavProxyRequest(BaseModel):
     bodyEncoding: str | None = None
 
 
+class SyncDirectoryImportRequest(BaseModel):
+    path: str | None = None
+
+
 def _require_sync_auth(authorization: str | None) -> None:
     expected = f"Bearer {SYNC_TOKEN}".strip()
     if not authorization or authorization.strip() != expected:
@@ -50,6 +56,13 @@ def sync_info(authorization: str | None = Header(default=None)):
     _require_sync_auth(authorization)
     ensure_sync_store()
     return get_sync_info()
+
+
+@router.get("/state")
+def sync_state(authorization: str | None = Header(default=None)):
+    _require_sync_auth(authorization)
+    ensure_sync_store()
+    return get_sync_state()
 
 
 @router.post("/push")
@@ -70,6 +83,22 @@ def sync_pull(cursor: str | None = None, limit: int = 200, authorization: str | 
 async def sync_webdav_request(payload: WebDavProxyRequest, authorization: str | None = Header(default=None)):
     _require_sync_auth(authorization)
     return await proxy_webdav_request(payload.model_dump())
+
+
+@router.post("/webdav/local-backup")
+def sync_webdav_local_backup(
+    payload: SyncDirectoryImportRequest,
+    authorization: str | None = Header(default=None),
+):
+    _require_sync_auth(authorization)
+    try:
+        return build_backup_payload_from_sync_directory(payload.path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @router.head("/blobs/{blob_hash:path}")
 def sync_blob_head(blob_hash: str, authorization: str | None = Header(default=None)):
     _require_sync_auth(authorization)

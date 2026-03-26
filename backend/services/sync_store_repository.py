@@ -1,11 +1,11 @@
 import json
 import os
 import sqlite3
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from core.paths import SYNC_BLOBS_DIR, SYNC_DB_PATH, TZ
+from core.paths import SYNC_BLOBS_DIR, SYNC_DB_PATH
+from services.note_contract import now_iso
 
 
 def ensure_sync_store() -> None:
@@ -42,6 +42,13 @@ def ensure_sync_store() -> None:
                 operation_id TEXT PRIMARY KEY,
                 cursor INTEGER,
                 applied_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS attachment_files (
+                filename TEXT PRIMARY KEY,
+                blob_hash TEXT NOT NULL,
+                mime_type TEXT NOT NULL,
+                size INTEGER NOT NULL,
+                updated_at TEXT NOT NULL
             );
             """
         )
@@ -86,10 +93,29 @@ def list_changes_after(cursor: int, limit: int) -> list[dict[str, Any]]:
     return changes
 
 
-def apply_remote_change(change: dict[str, Any]) -> dict[str, Any]:
+def list_current_note_states() -> list[dict[str, Any]]:
     ensure_sync_store()
     with connect() as conn:
-        return _apply_remote_change(conn, change)
+        rows = conn.execute(
+            """
+            SELECT note_id, revision, deleted_at
+            FROM notes_current
+            ORDER BY datetime(updated_at) DESC, note_id ASC
+            """
+        ).fetchall()
+    states: list[dict[str, Any]] = []
+    for row in rows:
+        note_id = str(row["note_id"] or "")
+        if not note_id:
+            continue
+        states.append(
+            {
+                "note_id": note_id,
+                "scope": "trash" if row["deleted_at"] else "active",
+                "revision": int(row["revision"] or 1),
+            }
+        )
+    return states
 
 
 def persist_applied_change(change: dict[str, Any], result: dict[str, Any]) -> int:
@@ -108,12 +134,12 @@ def persist_applied_change(change: dict[str, Any], result: dict[str, Any]) -> in
                 str(change.get("type") or ""),
                 _int_or_none(change.get("base_revision")),
                 json.dumps(result["change"], ensure_ascii=False),
-                _now_iso(),
+                now_iso(),
             ),
         ).lastrowid
         conn.execute(
             "INSERT INTO applied_operations (operation_id, cursor, applied_at) VALUES (?, ?, ?)",
-            (str(change.get("operation_id") or ""), cursor, _now_iso()),
+            (str(change.get("operation_id") or ""), cursor, now_iso()),
         )
         return int(cursor)
 
@@ -130,6 +156,96 @@ def put_blob_record(blob_hash: str, data: bytes) -> None:
 
 def get_blob_record(blob_hash: str) -> bytes:
     return _blob_path(blob_hash).read_bytes()
+
+
+def delete_blob_record(blob_hash: str) -> None:
+    path = _blob_path(blob_hash)
+    if path.exists():
+        path.unlink()
+
+
+def upsert_attachment_record(
+    filename: str,
+    blob_hash: str,
+    mime_type: str,
+    size: int,
+) -> None:
+    ensure_sync_store()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO attachment_files (filename, blob_hash, mime_type, size, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(filename) DO UPDATE SET
+                blob_hash = excluded.blob_hash,
+                mime_type = excluded.mime_type,
+                size = excluded.size,
+                updated_at = excluded.updated_at
+            """,
+            (
+                str(filename or ""),
+                str(blob_hash or ""),
+                str(mime_type or "application/octet-stream"),
+                max(0, int(size or 0)),
+                now_iso(),
+            ),
+        )
+
+
+def get_attachment_record(filename: str) -> dict[str, Any] | None:
+    ensure_sync_store()
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT filename, blob_hash, mime_type, size, updated_at
+            FROM attachment_files
+            WHERE filename = ?
+            """,
+            (str(filename or ""),),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "filename": str(row["filename"] or ""),
+        "blob_hash": str(row["blob_hash"] or ""),
+        "mime_type": str(row["mime_type"] or "application/octet-stream"),
+        "size": int(row["size"] or 0),
+        "updated_at": str(row["updated_at"] or ""),
+    }
+
+
+def list_attachment_records() -> list[dict[str, Any]]:
+    ensure_sync_store()
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT filename, blob_hash, mime_type, size, updated_at
+            FROM attachment_files
+            ORDER BY datetime(updated_at) DESC, filename ASC
+            """
+        ).fetchall()
+    return [
+        {
+            "filename": str(row["filename"] or ""),
+            "blob_hash": str(row["blob_hash"] or ""),
+            "mime_type": str(row["mime_type"] or "application/octet-stream"),
+            "size": int(row["size"] or 0),
+            "updated_at": str(row["updated_at"] or ""),
+        }
+        for row in rows
+    ]
+
+
+def delete_attachment_record(filename: str) -> None:
+    ensure_sync_store()
+    with connect() as conn:
+        conn.execute("DELETE FROM attachment_files WHERE filename = ?", (str(filename or ""),))
+
+
+def clear_attachment_records() -> None:
+    ensure_sync_store()
+    with connect() as conn:
+        conn.execute("DELETE FROM attachment_files")
 
 
 def connect() -> sqlite3.Connection:
@@ -149,323 +265,11 @@ def _ensure_notes_current_schema(conn: sqlite3.Connection) -> None:
         )
 
 
-def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> dict[str, Any]:
-    change_type = str(change.get("type") or "")
-    note_id = str(change.get("entity_id") or "")
-    device_id = str(change.get("device_id") or "unknown-device")
-    operation_id = str(change.get("operation_id") or "")
-    payload = change.get("payload") or {}
-    current = conn.execute("SELECT * FROM notes_current WHERE note_id = ?", (note_id,)).fetchone()
-
-    if change_type == "note.create":
-        if current and not current["deleted_at"]:
-            return {"status": "conflict", "operation_id": operation_id, "reason": "note_exists"}
-        content = str(payload.get("content") or "")
-        tags = _normalize_tags(payload.get("tags"))
-        attachments = _normalize_attachments(payload.get("attachments"))
-        pinned = bool(payload.get("pinned", False))
-        created_at = str(payload.get("created_at") or _now_iso())
-        title = _derive_title(content)
-        revision = max(1, int(payload.get("revision") or 1))
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO notes_current (
-                note_id, filename, title, content, tags_json, attachments_json, pinned, revision,
-                created_at, updated_at, deleted_at, last_operation_id, last_device_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-            """,
-            (
-                note_id,
-                str(payload.get("filename") or ""),
-                title,
-                content,
-                json.dumps(tags, ensure_ascii=False),
-                json.dumps(attachments, ensure_ascii=False),
-                1 if pinned else 0,
-                revision,
-                created_at,
-                _now_iso(),
-                operation_id,
-                device_id,
-            ),
-        )
-        stored_change = dict(change)
-        stored_change["payload"] = {
-            **payload,
-            "tags": tags,
-            "attachments": attachments,
-            "revision": revision,
-        }
-        return {"status": "applied", "note_id": note_id, "revision": revision, "change": stored_change}
-
-    if change_type not in {"note.trash", "note.delete", "note.restore", "note.purge"} and (not current or current["deleted_at"]):
-        return {"status": "conflict", "operation_id": operation_id, "reason": "note_not_found"}
-
-    current_revision = int(current["revision"] or 1) if current else 0
-    base_revision = _int_or_none(change.get("base_revision"))
-
-    if change_type == "note.update":
-        content = str(payload.get("content") or "")
-        current_tags = _current_tags(current)
-        next_tags = _normalize_tags(payload.get("tags")) if payload.get("tags") is not None else current_tags
-        if (
-            base_revision is not None
-            and base_revision != current_revision
-            and (
-                content != str(current["content"])
-                or next_tags != current_tags
-            )
-        ):
-            return {
-                "status": "conflict",
-                "operation_id": operation_id,
-                "reason": "revision_conflict",
-                "note_id": note_id,
-                "current_revision": current_revision,
-            }
-        next_revision = current_revision + 1
-        attachments = (
-            _normalize_attachments(payload.get("attachments"))
-            if payload.get("attachments") is not None
-            else _current_attachments(current)
-        )
-        conn.execute(
-            """
-            UPDATE notes_current
-            SET content = ?, tags_json = ?, attachments_json = ?, revision = ?, updated_at = ?, last_operation_id = ?, last_device_id = ?
-            WHERE note_id = ?
-            """,
-            (
-                content,
-                json.dumps(next_tags, ensure_ascii=False),
-                json.dumps(attachments, ensure_ascii=False),
-                next_revision,
-                _now_iso(),
-                operation_id,
-                device_id,
-                note_id,
-            ),
-        )
-        stored_change = dict(change)
-        stored_change["payload"] = {
-            **payload,
-            "tags": next_tags,
-            "attachments": attachments,
-            "revision": next_revision,
-        }
-        return {"status": "applied", "note_id": note_id, "revision": next_revision, "change": stored_change}
-
-    if change_type == "note.patch":
-        if _has_patch_conflict(current, base_revision, payload):
-            return {
-                "status": "conflict",
-                "operation_id": operation_id,
-                "reason": "revision_conflict",
-                "note_id": note_id,
-                "current_revision": current_revision,
-            }
-        next_revision = current_revision + 1
-        pinned = payload.get("pinned")
-        tags = payload.get("tags")
-        next_pinned = int(bool(pinned)) if pinned is not None else int(current["pinned"] or 0)
-        next_tags_json = json.dumps(tags if tags is not None else json.loads(current["tags_json"]), ensure_ascii=False)
-        conn.execute(
-            """
-            UPDATE notes_current
-            SET pinned = ?, tags_json = ?, revision = ?, updated_at = ?, last_operation_id = ?, last_device_id = ?
-            WHERE note_id = ?
-            """,
-            (next_pinned, next_tags_json, next_revision, _now_iso(), operation_id, device_id, note_id),
-        )
-        stored_change = dict(change)
-        stored_change["payload"] = {**payload, "revision": next_revision}
-        return {"status": "applied", "note_id": note_id, "revision": next_revision, "change": stored_change}
-
-    if change_type in {"note.trash", "note.delete"}:
-        if current and base_revision is not None and current_revision > base_revision:
-            return {
-                "status": "conflict",
-                "operation_id": operation_id,
-                "reason": "revision_conflict",
-                "note_id": note_id,
-                "current_revision": current_revision,
-            }
-        next_revision = (int(current["revision"] or 0) + 1) if current else max(1, int(payload.get("revision") or 1))
-        content = str(payload.get("content") or (current["content"] if current else ""))
-        tags = _normalize_tags(payload.get("tags")) if payload.get("tags") is not None else _current_tags(current)
-        attachments = (
-            _normalize_attachments(payload.get("attachments"))
-            if payload.get("attachments") is not None
-            else _current_attachments(current)
-        )
-        pinned = bool(payload.get("pinned", current["pinned"] if current else False))
-        created_at = str(payload.get("created_at") or (current["created_at"] if current else _now_iso()))
-        title = _derive_title(content)
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO notes_current (
-                note_id, filename, title, content, tags_json, attachments_json, pinned, revision,
-                created_at, updated_at, deleted_at, last_operation_id, last_device_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                note_id,
-                str(payload.get("filename") or (current["filename"] if current else "")),
-                title,
-                content,
-                json.dumps(tags, ensure_ascii=False),
-                json.dumps(attachments, ensure_ascii=False),
-                1 if pinned else 0,
-                next_revision,
-                created_at,
-                _now_iso(),
-                _now_iso(),
-                operation_id,
-                device_id,
-            ),
-        )
-        stored_change = dict(change)
-        stored_change["type"] = "note.trash"
-        stored_change["payload"] = {
-            **payload,
-            "content": content,
-            "tags": tags,
-            "attachments": attachments,
-            "pinned": pinned,
-            "created_at": created_at,
-            "revision": next_revision,
-        }
-        return {"status": "applied", "note_id": note_id, "revision": next_revision, "change": stored_change}
-
-    if change_type == "note.restore":
-        next_revision = (int(current["revision"] or 0) + 1) if current else max(1, int(payload.get("revision") or 1))
-        content = str(payload.get("content") or (current["content"] if current else ""))
-        tags = _normalize_tags(payload.get("tags")) if payload.get("tags") is not None else _current_tags(current)
-        attachments = (
-            _normalize_attachments(payload.get("attachments"))
-            if payload.get("attachments") is not None
-            else _current_attachments(current)
-        )
-        pinned = bool(payload.get("pinned", current["pinned"] if current else False))
-        created_at = str(payload.get("created_at") or (current["created_at"] if current else _now_iso()))
-        title = _derive_title(content)
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO notes_current (
-                note_id, filename, title, content, tags_json, attachments_json, pinned, revision,
-                created_at, updated_at, deleted_at, last_operation_id, last_device_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-            """,
-            (
-                note_id,
-                str(payload.get("filename") or (current["filename"] if current else "")),
-                title,
-                content,
-                json.dumps(tags, ensure_ascii=False),
-                json.dumps(attachments, ensure_ascii=False),
-                1 if pinned else 0,
-                next_revision,
-                created_at,
-                _now_iso(),
-                operation_id,
-                device_id,
-            ),
-        )
-        stored_change = dict(change)
-        stored_change["payload"] = {
-            **payload,
-            "content": content,
-            "tags": tags,
-            "attachments": attachments,
-            "pinned": pinned,
-            "created_at": created_at,
-            "revision": next_revision,
-        }
-        return {"status": "applied", "note_id": note_id, "revision": next_revision, "change": stored_change}
-
-    if change_type == "note.purge":
-        if current:
-            next_revision = int(current["revision"] or 1) + 1
-            conn.execute("DELETE FROM notes_current WHERE note_id = ?", (note_id,))
-        else:
-            next_revision = max(1, int(payload.get("revision") or 1))
-        stored_change = dict(change)
-        stored_change["payload"] = {**payload, "revision": next_revision}
-        return {"status": "applied", "note_id": note_id, "revision": next_revision, "change": stored_change}
-
-    return {"status": "conflict", "operation_id": operation_id, "reason": "unsupported_change_type"}
-
-
-def _derive_title(content: str) -> str:
-    first_line = (content or "").strip().split("\n")[0][:20].strip()
-    if first_line.startswith("#"):
-        first_line = first_line.lstrip("#").strip()
-    return first_line or "untitled"
-
-
-def _normalize_tags(value: Any) -> list[str]:
-    return [str(tag) for tag in value] if isinstance(value, list) else []
-
-
-def _normalize_attachments(value: Any) -> list[dict[str, str]]:
-    if not isinstance(value, list):
-        return []
-    attachments: list[dict[str, str]] = []
-    for item in value:
-        if not isinstance(item, dict):
-            continue
-        filename = str(item.get("filename") or "").strip()
-        blob_hash = str(item.get("blob_hash") or "").strip()
-        mime_type = str(item.get("mime_type") or "application/octet-stream").strip() or "application/octet-stream"
-        if not filename or not blob_hash:
-            continue
-        attachments.append({
-            "filename": filename,
-            "blob_hash": blob_hash,
-            "mime_type": mime_type,
-        })
-    return attachments
-
-
-def _current_tags(current: sqlite3.Row | None) -> list[str]:
-    if not current:
-        return []
-    return _normalize_tags(json.loads(current["tags_json"] or "[]"))
-
-
-def _current_attachments(current: sqlite3.Row | None) -> list[dict[str, str]]:
-    if not current:
-        return []
-    return _normalize_attachments(json.loads(current["attachments_json"] or "[]"))
-
-
-def _has_patch_conflict(current: sqlite3.Row, base_revision: int | None, payload: dict[str, Any]) -> bool:
-    if base_revision is None or base_revision == int(current["revision"] or 1):
-        return False
-
-    if "pinned" in payload and bool(payload.get("pinned")) != bool(current["pinned"]):
-        return True
-
-    if "tags" in payload:
-        next_tags = payload.get("tags")
-        current_tags = json.loads(current["tags_json"])
-        if next_tags != current_tags:
-            return True
-
-    return False
-
-
 def _blob_path(blob_hash: str) -> Path:
     clean = blob_hash.replace("sha256:", "")
     if len(clean) < 2:
         clean = clean.ljust(2, "_")
     return Path(SYNC_BLOBS_DIR) / clean[:2] / clean
-
-
-def _now_iso() -> str:
-    return datetime.now(TZ).isoformat()
-
-
 def _int_or_none(value: Any) -> int | None:
     try:
         return int(value) if value is not None else None

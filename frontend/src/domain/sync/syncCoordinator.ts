@@ -9,6 +9,7 @@ import {
 import {
   getSyncCursorStateKey,
   getSyncLastSyncStateKey,
+  getSyncStateValue,
   setSyncStateValue,
 } from './syncStateStorage.js';
 import { applyChangesLocally } from './localSyncApply.js';
@@ -25,9 +26,13 @@ import { buildSyncTransport } from './syncTransportBuilder.js';
 import { getSyncTargetLabel, readSyncConfigSnapshot } from './syncConfig.js';
 import type { SyncListener } from './syncTypes.js';
 import { registerSyncWindowEvents as registerSyncBrowserEvents } from './syncWindowEvents.js';
-import { pullAllRemoteChanges, seedLocalHistoryIfNeeded } from './syncBootstrap.js';
+import { consumeRemoteChanges, inspectRemoteSyncState } from './syncBootstrap.js';
 
 let flushInFlight: Promise<void> | null = null;
+
+function isBootstrapResumeCursor(cursor: string | null) {
+  return typeof cursor === 'string' && cursor.startsWith('snapshot-bootstrap:');
+}
 
 export function onSyncStatusChange(fn: SyncListener): () => void {
   void initializeSyncState(getSyncTargetLabel(readSyncConfigSnapshot()));
@@ -71,20 +76,24 @@ export async function flushPendingQueue(): Promise<void> {
     const activeTarget = queueTarget as SyncTarget;
     const cursorKey = getSyncCursorStateKey(activeTarget);
 
-    if (queue.length === 0) {
-      const bootstrappedCount = await seedLocalHistoryIfNeeded(activeTarget, transport, syncConfig);
-      if (bootstrappedCount > 0) {
+    try {
+      const storedCursor = await getSyncStateValue(cursorKey);
+      const queuedNoteIds = new Set(queue.map((item) => item.entity_id).filter(Boolean));
+      const remoteSyncState = await inspectRemoteSyncState(
+        activeTarget,
+        transport,
+        queuedNoteIds,
+      );
+      if (remoteSyncState.seededCount > 0) {
         queue = await getMutationLog(activeTarget);
       }
-    }
 
-    setSyncState({
-      status: queue.length > 0 ? 'syncing' : 'online',
-      error: '',
-    });
-    await refreshSyncPendingCounts(queue.length);
+      setSyncState({
+        status: queue.length > 0 ? 'syncing' : 'online',
+        error: '',
+      });
+      await refreshSyncPendingCounts(queue.length);
 
-    try {
       const localOperationIds = new Set(queue.map((item) => item.operation_id));
       const outboundChanges = await prepareOutboundChanges(queue, transport);
       const pushResult = await transport.push(outboundChanges);
@@ -113,24 +122,33 @@ export async function flushPendingQueue(): Promise<void> {
         });
       }
 
-      const pullResult = await pullAllRemoteChanges(transport, activeTarget);
+      const shouldBootstrapPull = remoteSyncState.missingLocalNoteIds.length > 0;
+      const postPushCursor = shouldBootstrapPull
+        ? (isBootstrapResumeCursor(storedCursor) ? storedCursor : null)
+        : String(pushResult.latest_cursor || await getSyncStateValue(cursorKey) || '').trim() || null;
       const deviceId = await getOrCreateDeviceId();
-      const inboundChanges = (pullResult.changes || []).filter((change: any) => {
-        if (localOperationIds.has(change.operation_id)) return false;
-        return change.device_id !== deviceId;
+      const pullResult = await consumeRemoteChanges(transport, activeTarget, {
+        cursorOverride: postPushCursor ?? undefined,
+        onBatch: async (changes) => {
+          const inboundChanges = (changes || []).filter((change: any) => {
+            if (localOperationIds.has(change.operation_id)) return false;
+            return change.device_id !== deviceId;
+          });
+          if (!inboundChanges.length) return;
+
+          await hydrateInboundAttachments(inboundChanges, transport);
+          const localApplyResult = await applyChangesLocally(inboundChanges);
+
+          for (const conflict of (localApplyResult.conflicts || [])) {
+            await addConflict(syncMode as 'server' | 'webdav', {
+              note_id: String(conflict.note_id || ''),
+              operation_id: String(conflict.operation_id || ''),
+              reason: String(conflict.reason || 'local_apply_conflict'),
+              ...conflict,
+            });
+          }
+        },
       });
-
-      await hydrateInboundAttachments(inboundChanges, transport);
-      const localApplyResult = await applyChangesLocally(inboundChanges);
-
-      for (const conflict of (localApplyResult.conflicts || [])) {
-        await addConflict(syncMode as 'server' | 'webdav', {
-          note_id: String(conflict.note_id || ''),
-          operation_id: String(conflict.operation_id || ''),
-          reason: String(conflict.reason || 'local_apply_conflict'),
-          ...conflict,
-        });
-      }
 
       if (pullResult.latest_cursor) {
         await setSyncStateValue(cursorKey, String(pullResult.latest_cursor));
@@ -154,7 +172,7 @@ export async function flushPendingQueue(): Promise<void> {
         error: error instanceof Error ? error.message : '同步失败',
       });
       await refreshSyncPendingCounts((await getMutationLog(queueTarget)).length);
-      handleSyncFailure(requestSyncNow);
+      handleSyncFailure(requestSyncNow, error);
     }
   })();
 

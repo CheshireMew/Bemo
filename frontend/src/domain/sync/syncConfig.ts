@@ -12,23 +12,6 @@ export type SyncConfigSnapshot = {
   basePath: string;
 };
 
-function normalizeUrl(value: string) {
-  return value.trim().replace(/\/+$/, '');
-}
-
-function normalizePath(value: string) {
-  return value.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-}
-
-function hashIdentity(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0');
-}
-
 export function readSyncConfigSnapshot(): SyncConfigSnapshot {
   return {
     mode: settings.sync.mode,
@@ -46,22 +29,4 @@ export function getSyncTargetLabel(config: SyncConfigSnapshot = readSyncConfigSn
   if (config.mode === 'server') return '自部署服务器';
   if (config.mode === 'webdav') return 'WebDAV';
   return '本地';
-}
-
-export function getSyncTargetSeedFingerprint(
-  target: 'server' | 'webdav',
-  config: SyncConfigSnapshot = readSyncConfigSnapshot(),
-) {
-  if (target === 'server') {
-    return `server:${hashIdentity(JSON.stringify({
-      serverUrl: normalizeUrl(config.serverUrl),
-      accessToken: config.accessToken,
-    }))}`;
-  }
-
-  return `webdav:${hashIdentity(JSON.stringify({
-    webdavUrl: normalizeUrl(config.webdavUrl),
-    basePath: normalizePath(config.basePath),
-    username: config.username,
-  }))}`;
 }

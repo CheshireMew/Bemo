@@ -6,7 +6,6 @@ import {
 import { createServerTransport } from './serverSyncTransport.js';
 import { createWebDavTransport } from './webdavSyncTransport.js';
 import {
-  getSyncTargetSeedFingerprint,
   readSyncConfigSnapshot,
   type SyncConfigSnapshot,
 } from './syncConfig.js';
@@ -24,7 +23,6 @@ export function buildSyncTransport(config: SyncConfigSnapshot = readSyncConfigSn
       username: config.username,
       password: config.password,
       basePath: config.basePath,
-      bootstrapFingerprint: getSyncTargetSeedFingerprint('webdav', config),
     });
   }
   return null;

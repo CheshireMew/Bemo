@@ -35,6 +35,8 @@ if ($startSyncServer) {
 
 Write-Host "Starting Vue frontend (in current window)..." -ForegroundColor Cyan
 Set-Location (Join-Path $PSScriptRoot "frontend")
+$env:VITE_WEB_APP_STORAGE_MODE = "backend"
+$env:VITE_APP_STORAGE_MODE = "backend"
 $env:VITE_WEB_API_BASE_URL = "http://127.0.0.1:8000/api"
 $env:VITE_API_BASE_URL = "http://127.0.0.1:8000/api"
 $env:VITE_WEB_SYNC_PROXY_TOKEN = "bemo-local-dev-sync-token"

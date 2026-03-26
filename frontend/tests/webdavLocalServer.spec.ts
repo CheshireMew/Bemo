@@ -2,18 +2,16 @@ import assert from 'node:assert/strict';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
 import { acquireWebDavLease, releaseWebDavLease } from '../src/domain/sync/webdav/webdavLease.js';
-import { hasWebDavBlob, getWebDavBlob, putWebDavBlob } from '../src/domain/sync/webdav/webdavBlobs.js';
-import { pullWebDavChanges, pushWebDavChanges } from '../src/domain/sync/webdav/webdavChanges.js';
-import { readWebDavManifest, writeWebDavManifest } from '../src/domain/sync/webdav/webdavManifest.js';
-import { ensureWebDavLayout, encodeBasicAuth } from '../src/domain/sync/webdav/webdavRequest.js';
-import {
-  applyChangesToSnapshotState,
-} from '../src/domain/sync/webdav/webdavSnapshotState.js';
 import {
   buildSnapshotStateFromRemote,
+  getWebDavBlob,
+  pullWebDavChanges,
+  pushWebDavBatch,
+  putWebDavBlob,
+  readWebDavManifest,
   readWebDavSnapshot,
-  writeWebDavSnapshot,
-} from '../src/domain/sync/webdav/webdavSnapshotStorage.js';
+} from '../src/domain/sync/webdav/webdavRemoteLayout.js';
+import { ensureWebDavLayout, encodeBasicAuth } from '../src/domain/sync/webdav/webdavRequest.js';
 
 class FakeDomParser {
   parseFromString(xml: string) {
@@ -120,16 +118,6 @@ async function withLocalWebDavServer<T>(run: (input: { baseUrl: string; headers:
       return;
     }
 
-    if (req.method === 'HEAD') {
-      if (files.has(path)) {
-        res.writeHead(200);
-      } else {
-        res.writeHead(404);
-      }
-      res.end();
-      return;
-    }
-
     if (req.method === 'DELETE') {
       files.delete(path);
       res.writeHead(204);
@@ -190,7 +178,6 @@ await withLocalWebDavServer(async ({ baseUrl, headers }) => {
   await releaseWebDavLease(baseUrl, headers, lease!);
 
   await putWebDavBlob(baseUrl, headers, 'sha256:abcdef', new Uint8Array([1, 2, 3]), 'application/octet-stream');
-  assert.equal(await hasWebDavBlob(baseUrl, headers, 'sha256:abcdef'), true);
   assert.deepEqual(Array.from(await getWebDavBlob(baseUrl, headers, 'sha256:abcdef')), [1, 2, 3]);
 
   const change = {
@@ -215,36 +202,23 @@ await withLocalWebDavServer(async ({ baseUrl, headers }) => {
     },
   };
 
-  const pushResult = await pushWebDavChanges(baseUrl, headers, 0, [change]);
-  assert.equal(pushResult.latestCursor, 1);
+  const pushResult = await pushWebDavBatch(baseUrl, headers, [change]);
+  assert.equal(pushResult.latestCursor, '1');
 
-  const snapshotState = applyChangesToSnapshotState({}, [change]);
-  const snapshotName = await writeWebDavSnapshot(baseUrl, headers, '1', snapshotState);
-  await writeWebDavManifest(baseUrl, headers, {
-    format_version: 1,
-    latest_cursor: '1',
-    latest_snapshot: snapshotName,
-    bootstrap: {
-      status: 'completed',
-      fingerprint: 'webdav:test',
-      operation_ids: [],
-      updated_at: '2026-03-18T00:00:00.000Z',
-    },
-    updated_at: '2026-03-18T00:00:00.000Z',
-  });
+  const nextManifest = await readWebDavManifest(baseUrl, headers);
+  assert.equal(nextManifest.latest_snapshot, 'snapshot_00000001.json');
+  assert.equal(nextManifest.batches.length, 1);
 
-  const manifest = await readWebDavManifest(baseUrl, headers);
-  assert.equal(manifest?.latest_snapshot, snapshotName);
-
-  const snapshot = await readWebDavSnapshot(baseUrl, headers, manifest);
+  const snapshot = await readWebDavSnapshot(baseUrl, headers, nextManifest);
   assert.equal(snapshot?.notes['note-1']?.attachments[0]?.blob_hash, 'sha256:abcdef');
 
-  const rebuiltState = await buildSnapshotStateFromRemote(baseUrl, headers, manifest);
+  const rebuiltState = await buildSnapshotStateFromRemote(baseUrl, headers, nextManifest);
   assert.equal(rebuiltState['note-1']?.content, 'hello local e2e');
 
-  const pullResult = await pullWebDavChanges(baseUrl, headers, '0', manifest?.latest_cursor || null);
+  const pullResult = await pullWebDavChanges(baseUrl, headers, '0', nextManifest);
   assert.equal(pullResult.latestCursor, '1');
-  assert.equal(pullResult.changes[0].payload.content, 'hello local e2e');
+  assert.equal(pullResult.changes[0].device_id, 'snapshot');
+  assert.equal((pullResult.changes[0].payload as { content?: string }).content, 'hello local e2e');
 });
 
 console.log('webdavLocalServer.spec passed');

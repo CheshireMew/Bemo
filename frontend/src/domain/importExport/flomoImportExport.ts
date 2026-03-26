@@ -1,7 +1,7 @@
-import { replaceNoteAttachmentRefsForScope } from '../attachments/attachmentRefStorage.js';
-import { getCachedNotes, setCachedNotes } from '../notes/notesStorage.js';
+import { cleanupOrphanedAttachments } from '../appStore/attachmentsAdapter.js';
+import { importExternalNotes, listActiveNotesSnapshot } from '../appStore/notesAdapter.js';
 import type { NoteMeta } from '../notes/notesTypes.js';
-import { downloadBlob, enqueueImportedNotes, toImportedNoteRecord } from './importExportShared.js';
+import { downloadBlob } from './importExportShared.js';
 import { parseFlomoCsv, parseFlomoZip } from './flomoArchiveParser.js';
 
 function escapeCsvField(value: string) {
@@ -19,7 +19,7 @@ function isZipFile(file: File) {
 }
 
 export async function exportFlomoCsv() {
-  const notes = await getCachedNotes();
+  const notes = await listActiveNotesSnapshot();
   const rows = [
     ['content', 'created_at'],
     ...notes.map((note) => [
@@ -28,7 +28,7 @@ export async function exportFlomoCsv() {
     ]),
   ];
   const csv = `\uFEFF${rows.map((row) => row.map(escapeCsvField).join(',')).join('\r\n')}`;
-  downloadBlob(csv, `bemo_flomo_${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv;charset=utf-8');
+  await downloadBlob(csv, `bemo_flomo_${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv;charset=utf-8');
 }
 
 export async function importFlomoArchive(file: File) {
@@ -47,18 +47,13 @@ export async function importFlomoArchive(file: File) {
     return { imported_count: 0, imported_attachment_count: importedAttachments, imported_note_records: [] };
   }
 
-  const existing = await getCachedNotes();
-  const mergedNotes = [...notes, ...existing];
-  await setCachedNotes(mergedNotes);
-  await replaceNoteAttachmentRefsForScope('active', mergedNotes);
-
-  const importedNoteRecords = notes.map(toImportedNoteRecord);
-  const syncQueued = await enqueueImportedNotes(importedNoteRecords);
+  const result = await importExternalNotes(notes);
+  await cleanupOrphanedAttachments();
 
   return {
-    imported_count: notes.length,
+    imported_count: result.imported_count,
     imported_attachment_count: importedAttachments,
-    imported_note_records: importedNoteRecords,
-    sync_queued: syncQueued,
+    imported_note_records: result.imported_note_records,
+    sync_queued: result.sync_queued,
   };
 }

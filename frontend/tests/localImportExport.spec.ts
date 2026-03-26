@@ -3,14 +3,18 @@ import JSZip from 'jszip';
 
 import {
   applyBackupPayload,
-  buildBackupArchiveBlob,
   buildBackupPayload,
-  clearAllLocalExperimentData,
-  cleanupOrphanAttachments,
-  importFlomoArchive,
+} from '../src/domain/importExport/backupPayload.js';
+import { buildBackupArchiveBlob } from '../src/domain/importExport/backupArchive.js';
+import { importFlomoArchive } from '../src/domain/importExport/flomoImportExport.js';
+import {
+  clearCurrentAppData,
+} from '../src/domain/appStore/dataAdapter.js';
+import { cleanupOrphanAttachments } from '../src/domain/attachments/orphanAttachmentCleanup.js';
+import {
   importBackupArchive,
-  resetAppToFirstInstallState,
-} from '../src/domain/importExport/localImportExport.js';
+  resetCurrentInstallState,
+} from '../src/domain/importExport/importExportCommands.js';
 import {
   updateLocalNote,
 } from '../src/domain/notes/localNoteMutations.js';
@@ -696,7 +700,7 @@ async function testClearAllLocalExperimentDataRemovesNotesAttachmentsAndSyncStat
     reason: 'revision_conflict',
   });
 
-  await clearAllLocalExperimentData();
+  await clearCurrentAppData();
 
   assert.equal((await getCachedNotes()).length, 0);
   assert.equal((await getAttachmentBlob('cover.png')), null);
@@ -716,7 +720,7 @@ async function testResetAppToFirstInstallStateRemovesSettingsAndAiConversations(
   localStorage.setItem('theme', 'dark');
   localStorage.setItem('external-key', 'keep');
 
-  await resetAppToFirstInstallState();
+  await resetCurrentInstallState();
 
   assert.equal(localStorage.getItem('bemo.settings'), null);
   assert.equal(localStorage.getItem('bemo.ai.conversations'), null);

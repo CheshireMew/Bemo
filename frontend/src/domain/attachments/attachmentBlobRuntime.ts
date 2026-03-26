@@ -1,4 +1,3 @@
-import { resolveBackendUrl } from '../../config.js';
 import {
   deleteBlobIndexRecord,
   getAttachmentBlob,
@@ -6,6 +5,7 @@ import {
   putAttachmentBlob,
   putBlobIndexRecord,
 } from './blobStorage.js';
+import { resolveBackendAttachmentAssetUrl } from './backendAttachmentsApi.js';
 import { getAttachmentRefFilenamesForNote } from './attachmentRefStorage.js';
 import { buildAttachmentUrlFromFilename, extractAttachmentFilename, extractAttachmentUrlsFromContent } from './attachmentLinks.js';
 
@@ -52,7 +52,9 @@ export async function collectSyncAttachments(
     if (localBlob) {
       data = new Uint8Array(await localBlob.arrayBuffer());
     } else {
-      const fallbackUrl = url.startsWith('/images/') ? (resolveBackendUrl(url) || url) : url;
+      const fallbackUrl = url.startsWith('/images/')
+        ? (resolveBackendAttachmentAssetUrl(url) || url)
+        : url;
       if (!fallbackUrl) continue;
       const response = await fetch(fallbackUrl);
       if (!response.ok) continue;

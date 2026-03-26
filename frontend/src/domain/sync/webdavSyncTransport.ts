@@ -1,89 +1,90 @@
 import { getOrCreateDeviceId } from '../storage/deviceIdentity.js';
-import type { SyncTransport } from './syncTransport.js';
+import type { SyncChange, SyncTransport } from './syncTransport.js';
+import {
+  buildSnapshotStateFromRemote,
+} from './webdav/webdavRemoteSnapshot.js';
 import {
   deleteWebDavBlob,
   getWebDavBlob,
+  getWebDavBlobCollectionUrls,
   hasWebDavBlob,
   listWebDavBlobHashes,
-  putWebDavBlob,
-} from './webdav/webdavBlobs.js';
-import { pullWebDavChanges, pushWebDavChanges } from './webdav/webdavChanges.js';
+  collectRemoteBlobHashes,
+} from './webdav/webdavRemoteBlobs.js';
+import {
+  inspectWebDavRemoteState,
+  pullWebDavChanges,
+  readWebDavRemoteState,
+} from './webdav/webdavRemoteState.js';
+import {
+  pushWebDavBatch,
+  verifyWebDavPushResult,
+} from './webdav/webdavRemoteMutation.js';
+import { putWebDavBlob } from './webdav/webdavRemoteBlobs.js';
 import { acquireWebDavLease, releaseWebDavLease } from './webdav/webdavLease.js';
-import { readWebDavManifest } from './webdav/webdavManifest.js';
-import { encodeBasicAuth, ensureWebDavLayout, normalizeWebDavBase } from './webdav/webdavRequest.js';
-import {
-  applyChangesToSnapshotState,
-  buildBootstrapChangesFromSnapshot,
-  collectReferencedBlobHashes,
-} from './webdav/webdavSnapshotState.js';
-import {
-  buildSnapshotStateFromRemote,
-  readWebDavSnapshot,
-  writeWebDavSnapshot,
-} from './webdav/webdavSnapshotStorage.js';
-import {
-  bootstrapWebDavRemoteState,
-  createWebDavBootstrapState,
-  inspectWebDavBootstrapState,
-  normalizeWebDavBootstrapState,
-  normalizeWebDavOperationId,
-  shouldPullWebDavSnapshot,
-  shouldTreatManifestSnapshotAsBootstrap,
-  writeWebDavSyncManifest,
-} from './webdav/webdavBootstrap.js';
+import { encodeBasicAuth, ensureCollection, ensureWebDavLayout, normalizeWebDavBase } from './webdav/webdavRequest.js';
 
 export function createWebDavTransport(config: {
   webdavUrl: string;
   username: string;
   password: string;
   basePath: string;
-  bootstrapFingerprint: string;
 }): SyncTransport {
   const baseUrl = normalizeWebDavBase(config.webdavUrl, config.basePath);
   const headers = {
     Authorization: encodeBasicAuth(config.username, config.password),
   };
+  let ensuredLayout: Promise<void> | null = null;
+  const knownBlobDirectories = new Set<string>();
+
+  async function ensureRemoteLayout() {
+    if (!ensuredLayout) {
+      ensuredLayout = ensureWebDavLayout(baseUrl, headers).catch((error) => {
+        ensuredLayout = null;
+        throw error;
+      });
+    }
+    await ensuredLayout;
+  }
+
+  async function readCurrentRemoteState() {
+    return readWebDavRemoteState(baseUrl, headers);
+  }
+
+  async function ensureBlobDirectories(blobHash: string) {
+    const { algorithmUrl, dirUrl } = getWebDavBlobCollectionUrls(baseUrl, blobHash);
+    if (!knownBlobDirectories.has(algorithmUrl)) {
+      await ensureCollection(algorithmUrl, headers);
+      knownBlobDirectories.add(algorithmUrl);
+    }
+    if (!knownBlobDirectories.has(dirUrl)) {
+      await ensureCollection(dirUrl, headers);
+      knownBlobDirectories.add(dirUrl);
+    }
+  }
 
   return {
     async pull(cursor: string | null) {
-      await ensureWebDavLayout(baseUrl, headers);
-      const manifest = await readWebDavManifest(baseUrl, headers);
-
-      if (shouldTreatManifestSnapshotAsBootstrap(manifest) && shouldPullWebDavSnapshot(cursor)) {
-        const snapshot = await readWebDavSnapshot(baseUrl, headers, manifest);
-        if (snapshot && snapshot.latest_cursor) {
-          return {
-            changes: buildBootstrapChangesFromSnapshot(snapshot),
-            latest_cursor: snapshot.latest_cursor,
-          };
-        }
-      }
-
-      const { changes, latestCursor } = await pullWebDavChanges(
-        baseUrl,
-        headers,
-        cursor,
-        manifest?.latest_cursor || null,
-      );
-
+      await ensureRemoteLayout();
+      const { manifest } = await readCurrentRemoteState();
+      const { changes, latestCursor } = await pullWebDavChanges(baseUrl, headers, cursor, manifest);
       return { changes, latest_cursor: latestCursor };
     },
     async inspectBootstrap() {
-      await ensureWebDavLayout(baseUrl, headers);
-      const manifest = await readWebDavManifest(baseUrl, headers);
-      return inspectWebDavBootstrapState({ baseUrl, headers, manifest });
+      await ensureRemoteLayout();
+      const remoteState = await readCurrentRemoteState();
+      return inspectWebDavRemoteState(baseUrl, headers, remoteState);
     },
-    async push(changes: any[]) {
+    async push(changes: SyncChange[]) {
+      await ensureRemoteLayout();
       if (!changes.length) {
-        const manifest = await readWebDavManifest(baseUrl, headers);
+        const { manifest } = await readCurrentRemoteState();
         return {
           accepted: [],
           conflicts: [],
-          latest_cursor: String(manifest?.latest_cursor || '0'),
+          latest_cursor: manifest.latest_cursor,
         };
       }
-
-      await ensureWebDavLayout(baseUrl, headers);
       const deviceId = await getOrCreateDeviceId();
       const lease = await acquireWebDavLease(baseUrl, headers, deviceId);
       if (!lease) {
@@ -91,98 +92,33 @@ export function createWebDavTransport(config: {
       }
 
       try {
-        const manifest = await readWebDavManifest(baseUrl, headers);
-        const startingCursor = Number(manifest?.latest_cursor || '0');
-        const bootstrap = normalizeWebDavBootstrapState(manifest);
-        const bootstrapAcceptedIds = new Set(
-          bootstrap.status === 'completed' ? bootstrap.operation_ids : [],
-        );
-        const alreadyAccepted = changes
-          .filter((change) => bootstrapAcceptedIds.has(normalizeWebDavOperationId(change)))
-          .map((change) => ({
-            operation_id: normalizeWebDavOperationId(change),
-            cursor: String(manifest?.latest_cursor || '0'),
-            change,
-            deduplicated: true,
-          }));
-        const pendingChanges = changes.filter((change) => !bootstrapAcceptedIds.has(normalizeWebDavOperationId(change)));
-
-        if (bootstrap.status !== 'completed' && startingCursor === 0 && pendingChanges.length > 0) {
-          await writeWebDavSyncManifest({
-            baseUrl,
-            headers,
-            latestCursor: '0',
-            latestSnapshot: null,
-            bootstrap: createWebDavBootstrapState(
-              config.bootstrapFingerprint,
-              'in_progress',
-              pendingChanges.map(normalizeWebDavOperationId).filter(Boolean),
-            ),
-          });
-
-          const bootstrapResult = await bootstrapWebDavRemoteState({
-            baseUrl,
-            headers,
-            bootstrapFingerprint: config.bootstrapFingerprint,
-            changes: pendingChanges,
-          });
-          return {
-            ...bootstrapResult,
-            accepted: [
-              ...alreadyAccepted,
-              ...bootstrapResult.accepted,
-            ],
-          };
-        }
-
-        const { accepted, latestCursor } = await pushWebDavChanges(baseUrl, headers, startingCursor, pendingChanges);
-        const latestCursorString = String(latestCursor);
-        const allAccepted = [...alreadyAccepted, ...accepted];
-        const writtenChanges = accepted.filter((item: { deduplicated?: boolean }) => !item.deduplicated);
-
-        if (!writtenChanges.length) {
-          return { accepted: allAccepted, conflicts: [], latest_cursor: latestCursorString };
-        }
-
-        const previousNotes = await buildSnapshotStateFromRemote(baseUrl, headers, manifest);
-        const nextNotes = applyChangesToSnapshotState(
-          previousNotes,
-          writtenChanges.map((item: { change: Record<string, unknown> }) => item.change),
-        );
-        const latestSnapshot = await writeWebDavSnapshot(baseUrl, headers, latestCursorString, nextNotes);
-
-        await writeWebDavSyncManifest({
-          baseUrl,
-          headers,
-          latestCursor: latestCursorString,
-          latestSnapshot,
-          bootstrap: bootstrap.status === 'completed'
-            ? bootstrap
-            : createWebDavBootstrapState(config.bootstrapFingerprint, 'completed'),
-        });
-
-        return { accepted: allAccepted, conflicts: [], latest_cursor: latestCursorString };
+        const { accepted, latestCursor } = await pushWebDavBatch(baseUrl, headers, changes);
+        await verifyWebDavPushResult(baseUrl, headers, accepted, latestCursor);
+        return { accepted, conflicts: [], latest_cursor: latestCursor };
       } finally {
         await releaseWebDavLease(baseUrl, headers, lease);
       }
     },
     async hasBlob(blobHash: string) {
-      await ensureWebDavLayout(baseUrl, headers);
+      await ensureRemoteLayout();
       return hasWebDavBlob(baseUrl, headers, blobHash);
     },
     async putBlob(blobHash: string, data: Uint8Array, mimeType = 'application/octet-stream') {
-      await ensureWebDavLayout(baseUrl, headers);
-      await putWebDavBlob(baseUrl, headers, blobHash, data, mimeType);
+      await ensureRemoteLayout();
+      await ensureBlobDirectories(blobHash);
+      await putWebDavBlob(baseUrl, headers, blobHash, data, mimeType, {
+        skipEnsureDirectories: true,
+      });
     },
     async getBlob(blobHash: string) {
-      await ensureWebDavLayout(baseUrl, headers);
+      await ensureRemoteLayout();
       return getWebDavBlob(baseUrl, headers, blobHash);
     },
     async cleanupUnusedBlobs() {
-      await ensureWebDavLayout(baseUrl, headers);
-      const manifest = await readWebDavManifest(baseUrl, headers);
+      await ensureRemoteLayout();
+      const { manifest } = await readCurrentRemoteState();
       const notes = await buildSnapshotStateFromRemote(baseUrl, headers, manifest);
-      const referenced = collectReferencedBlobHashes(notes);
+      const referenced = collectRemoteBlobHashes(notes);
       const remoteBlobHashes = await listWebDavBlobHashes(baseUrl, headers);
       let deleted = 0;
       let retained = 0;

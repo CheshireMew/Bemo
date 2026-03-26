@@ -24,7 +24,7 @@
     "src/domain/sync/pendingQueueSummary.ts",
     "src/domain/sync/webdav/webdavTypes.ts",
     "src/domain/sync/webdav/webdavSnapshot.ts",
-    "src/domain/sync/webdav/webdavChanges.ts",
+    "src/domain/sync/webdav/webdavRemoteLayout.ts",
     "src/domain/sync/webdav/webdavRequest.ts",
     "tests/**/*.ts"
   ]

@@ -113,7 +113,7 @@ async function testArchiveCanRoundTripBackIntoLocalStore() {
   });
   const result = await importMarkdownArchive(file);
 
-  assert.equal(result.imported_notes, 2);
+  assert.equal(result.imported_notes, 1);
   assert.equal(result.imported_images, 2);
 
   const notes = await getCachedNotes();

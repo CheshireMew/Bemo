@@ -1,5 +1,10 @@
 # Bemo Architecture Refactor Plan
 
+> Historical note:
+> Parts of this plan were written for an earlier goal where backend would be narrowed to sync-only responsibilities.
+> The current implementation is different: Web / Desktop still rely on backend app storage, and Android keeps the local database path.
+> Use this file only as refactor history, not as the current architecture source of truth.
+
 ## Current Direction
 
 The project already has the right high-level pieces:

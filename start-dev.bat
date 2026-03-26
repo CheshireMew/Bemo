@@ -19,10 +19,10 @@ if "%WITH_SYNC_SERVER%"=="1" (
 
 echo Starting Vue frontend in current window...
 cd /d "%~dp0frontend"
+set "VITE_WEB_APP_STORAGE_MODE=backend"
+set "VITE_APP_STORAGE_MODE=backend"
 set "VITE_WEB_API_BASE_URL=http://127.0.0.1:8000/api"
 set "VITE_API_BASE_URL=http://127.0.0.1:8000/api"
 set "VITE_WEB_SYNC_PROXY_TOKEN=bemo-local-dev-sync-token"
 set "VITE_SYNC_PROXY_TOKEN=bemo-local-dev-sync-token"
-echo Opening http://localhost:5173/ in your default browser...
-start "Bemo Browser Launcher" cmd /c "timeout /t 5 /nobreak >nul && start \"\" http://localhost:5173/"
 call npm run dev

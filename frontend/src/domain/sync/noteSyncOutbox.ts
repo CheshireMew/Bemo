@@ -2,6 +2,7 @@ import { listLocalNotes, listLocalTrashNotes } from '../notes/localNoteQueries.j
 import type { SyncTarget } from './mutationLogStorage.js';
 import { enqueueDeviceChange } from './mutationLogRuntime.js';
 import { readSyncConfigSnapshot } from './syncConfig.js';
+import type { SyncRemoteNoteState } from './syncTransport.js';
 
 type QueuedNoteChangeType =
   | 'note.create'
@@ -32,7 +33,8 @@ export async function enqueueRemoteNoteChange(input: {
 
 export async function enqueueExistingLocalNotesForSync(
   target: SyncTarget,
-  existingNoteIds: ReadonlySet<string> = new Set(),
+  remoteNotes: ReadonlyMap<string, SyncRemoteNoteState> = new Map(),
+  queuedNoteIds: ReadonlySet<string> = new Set(),
 ): Promise<number> {
   const [notes, trash] = await Promise.all([
     listLocalNotes(),
@@ -40,17 +42,21 @@ export async function enqueueExistingLocalNotesForSync(
   ]);
   if (!notes.length && !trash.length) return 0;
 
-  const queuedNoteIds = new Set<string>();
+  const seededNoteIds = new Set<string>(queuedNoteIds);
 
   for (const note of notes) {
-    if (queuedNoteIds.has(note.note_id) || existingNoteIds.has(note.note_id)) continue;
-    queuedNoteIds.add(note.note_id);
+    if (seededNoteIds.has(note.note_id)) continue;
+    const remote = remoteNotes.get(note.note_id);
+    if (remote && remote.scope === 'active' && remote.revision >= note.revision) continue;
+    seededNoteIds.add(note.note_id);
 
     await enqueueDeviceChange({
       target,
       entityId: note.note_id,
-      type: 'note.create',
-      baseRevision: 0,
+      type: remote
+        ? (remote.scope === 'trash' ? 'note.restore' : 'note.update')
+        : 'note.create',
+      baseRevision: remote ? remote.revision : 0,
       payload: {
         filename: note.filename,
         content: note.content,
@@ -63,14 +69,16 @@ export async function enqueueExistingLocalNotesForSync(
   }
 
   for (const note of trash) {
-    if (queuedNoteIds.has(note.note_id) || existingNoteIds.has(note.note_id)) continue;
-    queuedNoteIds.add(note.note_id);
+    if (seededNoteIds.has(note.note_id)) continue;
+    const remote = remoteNotes.get(note.note_id);
+    if (remote && remote.scope === 'trash' && remote.revision >= note.revision) continue;
+    seededNoteIds.add(note.note_id);
 
     await enqueueDeviceChange({
       target,
       entityId: note.note_id,
       type: 'note.trash',
-      baseRevision: note.revision,
+      baseRevision: remote ? remote.revision : 0,
       payload: {
         filename: note.filename,
         content: note.content,
@@ -82,5 +90,5 @@ export async function enqueueExistingLocalNotesForSync(
     });
   }
 
-  return queuedNoteIds.size;
+  return Math.max(0, seededNoteIds.size - queuedNoteIds.size);
 }

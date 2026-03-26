@@ -1,125 +1,80 @@
-# Sync Server
+# Backend
 
-## Run Tests
+这个目录现在不能再简单写成“只剩 sync-server”。
 
-This Python directory is now positioned as the optional Bemo `sync-server`.
+按当前实现，它同时承担两类职责：
 
-## Install Dependencies
+- Web / Desktop 当前的应用数据存储
+- 同步相关 API 与网页端代理能力
 
-Default install now targets the sync-server only:
+## 当前角色
+
+backend 现在负责的内容包括：
+
+- Web / Desktop 的笔记数据接口
+- Web / Desktop 的附件接口
+- 备份导入导出相关接口
+- sync `push / pull / blobs`
+- 网页端 WebDAV 代理
+
+所以它现在更接近“应用数据服务 + 同步服务”的组合，而不是一个纯远端同步目标。
+
+## 与 Android 的关系
+
+Android 是当前例外路径。
+
+由于打包和运行时约束，移动端仍然保留本地数据库作为主存储，所以不能用 Web / Desktop 的运行方式去理解它。
+
+这也意味着：
+
+- 不启动 backend，Web / Desktop 的主数据路径通常不完整
+- 不启动 backend，Android 单机本地路径仍然可以成立
+
+## 开发启动
+
+仓库根目录下的启动脚本已经按这个现实来组织：
+
+- [start-dev.ps1](E:/Work/Code/Bemo/start-dev.ps1) 默认会启动 backend 和 frontend
+- [start-dev.bat](E:/Work/Code/Bemo/start-dev.bat) 也默认会这样做
+- 只有显式传 `-FrontendOnly` 或 `--frontend-only` 时，才只启动前端
+
+如果你只想单独启动 backend：
 
 ```powershell
-pip install -r requirements.txt
+.\start-sync-server.ps1
 ```
 
-If you explicitly need to work on legacy compatibility APIs as well, install the extra set too:
+如果你要显式启动纯同步服务模式，而不是当前 Web / Desktop 使用的 app 模式：
 
 ```powershell
-pip install -r requirements.txt -r requirements-legacy.txt
+.\start-sync-server.ps1 -Mode server
 ```
 
-Use the unified test entrypoint from the `backend` directory:
+## 环境变量
 
-```powershell
-python run_tests.py
-```
-
-By default this now runs the `sync-server` coverage only.
-
-If you explicitly need the full legacy backend test set:
-
-```powershell
-python run_legacy_tests.py
-```
-
-The sync tests isolate data by setting `BEMO_DATA_DIR` to a per-test directory under `backend/tests/.tmp`, so they do not touch the real note data.
-
-## Role
-
-This service is no longer the default business backend required for normal note usage.
-
-Its intended role is:
-
-- optional self-hosted sync target
-- remote change/blob store for multi-device sync
-
-Its intended non-goals are:
-
-- normal note CRUD for the app
-- AI proxying by default
-- import/export ownership
-- editor feature ownership
-- WebDAV ownership
-- general product business logic
-
-If the user does not run this service, the frontend should still be able to work in local-first mode.
-
-## Scope Guard
-
-When changing code in `backend`, treat it as `sync-server` code unless there is a very explicit reason otherwise.
-
-New product capabilities should default to `frontend`, not `backend`.
-
-Legacy note CRUD, upload/import/export, AI proxying, and local sync bridge code now live under [backend/_archive_legacy](E:/Work/Code/Bemo/backend/_archive_legacy).
-
-Only shared sync primitives remain in [backend/services](E:/Work/Code/Bemo/backend/services).
-
-## Dev Startup
-
-The repository startup scripts now treat the sync-server as opt-in:
-
-- [start-dev.ps1](E:/Work/Code/Bemo/start-dev.ps1) starts only the frontend by default
-- use `.\start-dev.ps1 -WithSyncServer` if you want the optional Python sync-server too
-- [start-dev.bat](E:/Work/Code/Bemo/start-dev.bat) behaves the same way
-- use `start-dev.bat --with-sync-server` if you want the optional Python sync-server too
-
-## CI Scope
-
-Repository CI should treat the Python side as `sync-server` first:
-
-- default CI runs [run_tests.py](E:/Work/Code/Bemo/backend/run_tests.py) only
-- legacy compatibility coverage runs [run_legacy_tests.py](E:/Work/Code/Bemo/backend/run_legacy_tests.py) separately
-- legacy backend coverage should not block normal frontend or sync-server changes unless you explicitly choose to run it
-
-## Required Environment
-
-`sync-server` should now be treated as a small deployable service, not as a zero-config local helper.
-
-Required:
+当前最重要的变量仍然是：
 
 - `BEMO_SYNC_TOKEN`
-  - must be set to an explicit non-default value
-  - server mode now refuses to start if it is missing
-
-Optional but important:
-
 - `BEMO_CORS_ORIGINS`
-  - comma-separated allowlist such as `https://notes.example.com,https://app.example.com`
-  - if unset in `server` mode, CORS stays disabled
-  - that is secure by default, but a remote web frontend will fail cross-origin requests until you configure it
 - `BEMO_MAX_SYNC_BLOB_BYTES`
-  - maximum accepted blob upload size in bytes
-  - defaults to `26214400` (25 MiB)
 
-Example:
+即使 backend 现在不只是 sync-server，这几个变量依然控制同步和网页端代理行为。
 
-```powershell
-$env:BEMO_SYNC_TOKEN="replace-with-a-long-random-secret"
-$env:BEMO_CORS_ORIGINS="https://notes.example.com"
-$env:BEMO_MAX_SYNC_BLOB_BYTES="26214400"
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
+## 代码阅读建议
 
-## Web Client Note
+读 backend 时，先按职责分两块：
 
-If your frontend is served from a different origin than the sync-server, the browser will send CORS preflights.
+- `/api/app/*` 和对应 service：Web / Desktop 当前的应用存储接口
+- `/api/sync/*` 和对应 service：同步接口与远端传输能力
 
-If `BEMO_CORS_ORIGINS` is not configured, those requests will fail even when the token is correct. In practice this can look like a broken server, so set the CORS allowlist before testing remote web sync.
+不要再默认把 backend 里的所有东西都当成“历史兼容层”或者“只给 sync 用”。
 
-## Direct Command
+## 结论
 
-If you want the raw discovery command instead, this is equivalent:
+当前 backend 的准确定位是：
 
-```powershell
-python -m unittest discover -s tests
-```
+- Web / Desktop 的应用数据服务
+- 同步服务
+- 网页端代理桥接
+
+如果以后要把它重新收窄成纯 sync-server，需要先完成真实迁移，再改这份文档，而不是先沿用旧说法。
