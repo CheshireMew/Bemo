@@ -3,7 +3,7 @@ import { buildBackupArchiveBlob, parseBackupArchive } from './backupArchive.js';
 import { clearCurrentAppData, clearLocalReplicaState, usesRemoteAppData } from '../appStore/dataAdapter.js';
 import { downloadBlob } from './importExportShared.js';
 import { buildMarkdownArchiveBlob, importMarkdownArchive } from './markdownArchive.js';
-import { resolveBackendUrl, SYNC_PROXY_TOKEN } from '../../config.js';
+import { getSyncProxyToken, resolveBackendUrl } from '../../config.js';
 
 export async function exportBackupArchive() {
   const archive = await buildBackupArchiveBlob();
@@ -37,10 +37,11 @@ export async function importMarkdownArchiveZip(file: File) {
 
 export async function importBackupFromSyncDirectory(path: string) {
   const url = resolveBackendUrl('/api/sync/webdav/local-backup');
+  const syncProxyToken = getSyncProxyToken();
   if (!url) {
     throw new Error('当前没有可用的本机同步服务地址，无法读取同步目录。');
   }
-  if (!SYNC_PROXY_TOKEN) {
+  if (!syncProxyToken) {
     throw new Error('当前没有可用的同步服务 Token，无法读取同步目录。');
   }
 
@@ -48,7 +49,7 @@ export async function importBackupFromSyncDirectory(path: string) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${SYNC_PROXY_TOKEN}`,
+      Authorization: `Bearer ${syncProxyToken}`,
     },
     body: JSON.stringify({ path }),
   });

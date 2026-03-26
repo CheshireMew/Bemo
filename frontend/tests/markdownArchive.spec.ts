@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
 
+import { clearRuntimeConfigOverride, setRuntimeConfigOverride } from '../src/config.js';
 import { buildMarkdownArchiveBlob, importMarkdownArchive } from '../src/domain/importExport/markdownArchive.js';
 import { getAttachmentBlob, putAttachmentBlob } from '../src/domain/attachments/blobStorage.js';
 import { getCachedNotes, putCachedNote } from '../src/domain/notes/notesStorage.js';
 import { getTrashNotes, putTrashNote } from '../src/domain/notes/trashStorage.js';
 import { installMemoryIndexedDb } from './memoryIndexedDb.js';
+
+setRuntimeConfigOverride({
+  appStorageMode: 'local',
+  apiBase: '',
+  syncProxyToken: '',
+});
 
 installMemoryIndexedDb();
 
@@ -136,5 +143,7 @@ async function testArchiveCanRoundTripBackIntoLocalStore() {
 
 await testArchiveIncludesNotesTrashAttachmentsAndManifest();
 await testArchiveCanRoundTripBackIntoLocalStore();
+
+clearRuntimeConfigOverride();
 
 console.log('markdownArchive.spec passed');

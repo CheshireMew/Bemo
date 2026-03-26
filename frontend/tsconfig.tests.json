@@ -12,20 +12,14 @@
     "noUnusedParameters": true
   },
   "include": [
-    "src/utils/db.ts",
-    "src/utils/attachmentUrls.ts",
-    "src/utils/localAttachments.ts",
-    "src/utils/syncAttachments.ts",
-    "src/domain/notes/localNotesRepository.ts",
-    "src/utils/editorAttachments.ts",
-    "src/domain/notes/notesTypes.ts",
-    "src/domain/sync/conflictResolution.ts",
-    "src/domain/sync/localSyncApply.ts",
-    "src/domain/sync/pendingQueueSummary.ts",
-    "src/domain/sync/webdav/webdavTypes.ts",
-    "src/domain/sync/webdav/webdavSnapshot.ts",
-    "src/domain/sync/webdav/webdavRemoteLayout.ts",
-    "src/domain/sync/webdav/webdavRequest.ts",
+    "src/config.ts",
+    "src/domain/**/*.ts",
+    "src/utils/**/*.ts",
+    "src/types/**/*.d.ts",
     "tests/**/*.ts"
+  ],
+  "exclude": [
+    "src/domain/ai/**/*.ts",
+    "src/domain/settings/localSettingsStorage.ts"
   ]
 }

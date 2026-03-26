@@ -1,6 +1,18 @@
 import { Capacitor } from '@capacitor/core';
 
 export type AppStorageMode = 'local' | 'backend';
+type RuntimeConfigOverride = {
+  apiBase?: string;
+  appStorageMode?: AppStorageMode;
+  syncProxyToken?: string;
+};
+
+type ResolvedRuntimeConfig = {
+  apiBase: string;
+  apiOrigin: string;
+  appStorageMode: AppStorageMode;
+  syncProxyToken: string;
+};
 
 function normalizeApiBase(url: string | undefined) {
   return (url || '').trim().replace(/\/$/, '');
@@ -24,6 +36,13 @@ function getEnv() {
   }).env ?? {};
 }
 
+function getRuntimeConfigOverride(): RuntimeConfigOverride {
+  const runtime = globalThis as typeof globalThis & {
+    __BEMO_RUNTIME_CONFIG__?: RuntimeConfigOverride;
+  };
+  return runtime.__BEMO_RUNTIME_CONFIG__ || {};
+}
+
 function resolveApiBase() {
   const env = getEnv();
   const shared = normalizeApiBase(env.VITE_API_BASE_URL);
@@ -44,9 +63,7 @@ function resolveApiBase() {
   return web || shared || '';
 }
 
-export const API_BASE = resolveApiBase();
-export const API_ORIGIN = API_BASE ? API_BASE.replace(/\/api\/?$/, '') : '';
-export const APP_STORAGE_MODE = (() => {
+function resolveAppStorageMode(): AppStorageMode {
   const env = getEnv();
   const shared = normalizeAppStorageMode(env.VITE_APP_STORAGE_MODE);
   const web = normalizeAppStorageMode(env.VITE_WEB_APP_STORAGE_MODE);
@@ -60,12 +77,13 @@ export const APP_STORAGE_MODE = (() => {
   }
 
   if (!isNative) {
-    return web || shared || 'backend';
+    return (web || shared || 'backend') as AppStorageMode;
   }
 
-  return shared || 'backend';
-})();
-export const SYNC_PROXY_TOKEN = (() => {
+  return (shared || 'backend') as AppStorageMode;
+}
+
+function resolveSyncProxyToken() {
   const env = getEnv();
   const shared = normalizeEnvValue(env.VITE_SYNC_PROXY_TOKEN);
   const web = normalizeEnvValue(env.VITE_WEB_SYNC_PROXY_TOKEN);
@@ -83,18 +101,60 @@ export const SYNC_PROXY_TOKEN = (() => {
   }
 
   return web || shared || '';
-})();
+}
+
+export function readRuntimeConfig(): ResolvedRuntimeConfig {
+  const override = getRuntimeConfigOverride();
+  const apiBase = normalizeApiBase(override.apiBase) || resolveApiBase();
+  const appStorageMode = normalizeAppStorageMode(override.appStorageMode) || resolveAppStorageMode();
+  const syncProxyToken = normalizeEnvValue(override.syncProxyToken) || resolveSyncProxyToken();
+  return {
+    apiBase,
+    apiOrigin: apiBase ? apiBase.replace(/\/api\/?$/, '') : '',
+    appStorageMode,
+    syncProxyToken,
+  };
+}
+
+export const API_BASE = readRuntimeConfig().apiBase;
+export const API_ORIGIN = readRuntimeConfig().apiOrigin;
+export const APP_STORAGE_MODE = readRuntimeConfig().appStorageMode;
+export const SYNC_PROXY_TOKEN = readRuntimeConfig().syncProxyToken;
+
+export function setRuntimeConfigOverride(override: RuntimeConfigOverride) {
+  const runtime = globalThis as typeof globalThis & {
+    __BEMO_RUNTIME_CONFIG__?: RuntimeConfigOverride;
+  };
+  runtime.__BEMO_RUNTIME_CONFIG__ = {
+    ...runtime.__BEMO_RUNTIME_CONFIG__,
+    ...override,
+  };
+}
+
+export function clearRuntimeConfigOverride() {
+  delete (globalThis as typeof globalThis & {
+    __BEMO_RUNTIME_CONFIG__?: RuntimeConfigOverride;
+  }).__BEMO_RUNTIME_CONFIG__;
+}
+
+export function getAppStorageMode() {
+  return readRuntimeConfig().appStorageMode;
+}
+
+export function getSyncProxyToken() {
+  return readRuntimeConfig().syncProxyToken;
+}
 
 export function hasBackendOrigin() {
-  return Boolean(API_ORIGIN);
+  return Boolean(readRuntimeConfig().apiOrigin);
 }
 
 export function usesBackendAppStorage() {
-  return APP_STORAGE_MODE === 'backend';
+  return readRuntimeConfig().appStorageMode === 'backend';
 }
 
 export function hasSyncProxyToken() {
-  return Boolean(SYNC_PROXY_TOKEN);
+  return Boolean(readRuntimeConfig().syncProxyToken);
 }
 
 export function resolveBackendUrl(path: string) {
@@ -102,11 +162,12 @@ export function resolveBackendUrl(path: string) {
   if (/^(https?:)?\/\//i.test(path) || path.startsWith('data:') || path.startsWith('blob:')) {
     return path;
   }
-  if (!API_ORIGIN) {
+  const { apiOrigin } = readRuntimeConfig();
+  if (!apiOrigin) {
     return '';
   }
   if (path.startsWith('/')) {
-    return `${API_ORIGIN}${path}`;
+    return `${apiOrigin}${path}`;
   }
-  return `${API_ORIGIN}/${path}`;
+  return `${apiOrigin}/${path}`;
 }

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "build:android": "vue-tsc -b && vite build --mode android",
-    "test:unit": "tsc -p tsconfig.tests.json && node .test-dist/tests/editorAttachments.spec.js && node .test-dist/tests/webdavRequest.spec.js && node .test-dist/tests/webdavChanges.spec.js && node .test-dist/tests/conflictResolution.spec.js && node .test-dist/tests/syncIntegrity.spec.js && node .test-dist/tests/pendingQueueSummary.spec.js && node .test-dist/tests/localAttachments.spec.js && node .test-dist/tests/attachmentUrls.spec.js && node .test-dist/tests/localImportExport.spec.js && node .test-dist/tests/markdownArchive.spec.js && node .test-dist/tests/remoteDeleteConflictFlow.spec.js && node .test-dist/tests/webdavSnapshot.spec.js && node .test-dist/tests/webdavProtocol.spec.js && node .test-dist/tests/webdavLocalServer.spec.js && node .test-dist/tests/webdavRecovery.spec.js && node .test-dist/tests/syncCoordinator.spec.js",
+    "test:unit": "powershell -Command \"if (Test-Path .test-dist) { Remove-Item .test-dist -Recurse -Force }\" && tsc -p tsconfig.tests.json && node .test-dist/tests/runAll.js",
     "preview": "vite preview",
     "tauri": "tauri",
     "android:doctor": "powershell -ExecutionPolicy Bypass -File .\\scripts\\check-android-env.ps1",

@@ -4,11 +4,12 @@ import { acquireWebDavLease } from '../src/domain/sync/webdav/webdavLease.js';
 import {
   hasWebDavBlob,
   listWebDavBlobHashes,
-  pullWebDavChanges,
+} from '../src/domain/sync/webdav/webdavRemoteBlobs.js';
+import {
   pushWebDavBatch,
-  readWebDavRemoteState,
   verifyWebDavPushResult,
-} from '../src/domain/sync/webdav/webdavRemoteLayout.js';
+} from '../src/domain/sync/webdav/webdavRemoteMutation.js';
+import { pullWebDavChanges, readWebDavRemoteState } from '../src/domain/sync/webdav/webdavRemoteState.js';
 import { ensureWebDavLayout } from '../src/domain/sync/webdav/webdavRequest.js';
 import { createWebDavTransport } from '../src/domain/sync/webdavSyncTransport.js';
 

@@ -4,13 +4,14 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { acquireWebDavLease, releaseWebDavLease } from '../src/domain/sync/webdav/webdavLease.js';
 import {
   buildSnapshotStateFromRemote,
-  getWebDavBlob,
-  pullWebDavChanges,
-  pushWebDavBatch,
-  putWebDavBlob,
-  readWebDavManifest,
   readWebDavSnapshot,
-} from '../src/domain/sync/webdav/webdavRemoteLayout.js';
+} from '../src/domain/sync/webdav/webdavRemoteSnapshot.js';
+import {
+  getWebDavBlob,
+  putWebDavBlob,
+} from '../src/domain/sync/webdav/webdavRemoteBlobs.js';
+import { pushWebDavBatch } from '../src/domain/sync/webdav/webdavRemoteMutation.js';
+import { pullWebDavChanges, readWebDavManifest } from '../src/domain/sync/webdav/webdavRemoteState.js';
 import { ensureWebDavLayout, encodeBasicAuth } from '../src/domain/sync/webdav/webdavRequest.js';
 
 class FakeDomParser {

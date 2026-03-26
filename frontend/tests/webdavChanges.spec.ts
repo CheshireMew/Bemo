@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { normalizeWebDavManifest } from '../src/domain/sync/webdav/webdavRemoteLayout.js';
+import { normalizeWebDavManifest } from '../src/domain/sync/webdav/webdavRemoteContract.js';
 
 function testManifestDefaultsAreStable() {
   const manifest = normalizeWebDavManifest(null);

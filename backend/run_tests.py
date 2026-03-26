@@ -18,7 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.all:
         suite = unittest.defaultTestLoader.discover(str(tests_dir))
     else:
-        suite = unittest.defaultTestLoader.discover(str(tests_dir), pattern="test_api_sync.py")
+        suite = unittest.defaultTestLoader.discover(str(tests_dir), pattern="test_api_*.py")
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
     return 0 if result.wasSuccessful() else 1

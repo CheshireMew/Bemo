@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import JSZip from 'jszip';
 
+import { clearRuntimeConfigOverride, setRuntimeConfigOverride } from '../src/config.js';
 import {
   applyBackupPayload,
   buildBackupPayload,
@@ -38,6 +39,12 @@ import {
   type AttachmentRefRecord,
 } from '../src/domain/attachments/attachmentRefStorage.js';
 import { getCachedNotes, putCachedNote } from '../src/domain/notes/notesStorage.js';
+
+setRuntimeConfigOverride({
+  appStorageMode: 'local',
+  apiBase: '',
+  syncProxyToken: '',
+});
 import { setTrashNotes } from '../src/domain/notes/trashStorage.js';
 import { getConflicts } from '../src/domain/sync/conflictStorage.js';
 import { getMutationLog } from '../src/domain/sync/mutationLogStorage.js';
@@ -743,5 +750,7 @@ await testImportedFlomoNoteCanBeEditedWithoutLosingAttachmentRefs();
 await testTrashRestoreAndPermanentDeleteHandleAttachmentRefsAndBlobs();
 await testClearAllLocalExperimentDataRemovesNotesAttachmentsAndSyncState();
 await testResetAppToFirstInstallStateRemovesSettingsAndAiConversations();
+
+clearRuntimeConfigOverride();
 
 console.log('localImportExport.spec passed');

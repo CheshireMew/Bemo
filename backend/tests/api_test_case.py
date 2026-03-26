@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 
 
 class ApiTestCase(unittest.TestCase):
+    app_mode = "server"
+
     def setUp(self):
         self.test_root = os.path.join(os.path.dirname(__file__), ".tmp")
         os.makedirs(self.test_root, exist_ok=True)
@@ -20,18 +22,32 @@ class ApiTestCase(unittest.TestCase):
         os.environ["BEMO_SYNC_TOKEN"] = "test-sync-token"
 
         import core.paths as paths_module
+        import services.app_store_repository as app_store_repository_module
+        import services.app_attachment_service as app_attachment_service_module
+        import services.app_storage_service as app_storage_service_module
+        import services.note_store_service as note_store_service_module
         import services.sync_store_repository as sync_store_repository_module
         import services.sync_service as sync_service_module
+        import api.app_storage as app_storage_api_module
+        import api.attachment_assets as attachment_assets_api_module
+        import api.notes_app as notes_app_api_module
         import api.sync as sync_module
         import app_factory as app_factory_module
 
         importlib.reload(paths_module)
+        importlib.reload(app_store_repository_module)
+        importlib.reload(app_attachment_service_module)
+        importlib.reload(app_storage_service_module)
+        importlib.reload(note_store_service_module)
         importlib.reload(sync_store_repository_module)
         importlib.reload(sync_service_module)
+        importlib.reload(app_storage_api_module)
+        importlib.reload(attachment_assets_api_module)
+        importlib.reload(notes_app_api_module)
         self.sync_module = importlib.reload(sync_module)
         self.app_factory_module = importlib.reload(app_factory_module)
 
-        self.client = TestClient(self.app_factory_module.create_app("server"))
+        self.client = TestClient(self.app_factory_module.create_app(self.app_mode))
 
     def tearDown(self):
         self.client.close()

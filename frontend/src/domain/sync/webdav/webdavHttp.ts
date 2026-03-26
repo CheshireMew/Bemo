@@ -1,9 +1,9 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import {
+  getSyncProxyToken,
   hasBackendOrigin,
   hasSyncProxyToken,
   resolveBackendUrl,
-  SYNC_PROXY_TOKEN,
 } from '../../../config.js';
 import { readSyncConfigSnapshot } from '../syncConfig.js';
 
@@ -229,7 +229,7 @@ async function requestViaCapacitor(url: string, init: WebDavRequestInit) {
 }
 
 function getWebDavProxyAccessToken() {
-  return SYNC_PROXY_TOKEN || readSyncConfigSnapshot().accessToken;
+  return getSyncProxyToken() || readSyncConfigSnapshot().accessToken;
 }
 
 // Browser WebDAV access is constrained by third-party CORS policy.
