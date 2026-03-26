@@ -2,50 +2,51 @@
 
 ## Project Identity
 
-This repository is **not** a general-purpose frontend/backend split application.
+This repository should be treated as one product with shared domain semantics, but with:
 
-Treat it as:
+- a backend-backed Web / Desktop runtime
+- a local-backed Mobile runtime
+- separate interaction shells for Web / Desktop and Mobile
 
-- a **frontend-first, local-first product**
-- with an **optional Python sync-server**
-- where the Python side is retained only for **self-hosted server sync APIs**
+It is not a pure local-first app, and it is not a generic frontend/backend split app.
 
 ## Default Assumptions
 
 When reading or modifying this repo, assume:
 
-- the frontend is the primary product runtime
-- core product features should live in the frontend whenever technically possible
-- the backend is not required for normal single-device usage
-- WebDAV sync is frontend-owned
-- AI is frontend-owned
-- import/export is frontend-owned
-- note CRUD, search, trash, conflict handling, and attachment UX are frontend-owned
+- Web / Desktop use backend app storage as the primary source of truth
+- Mobile uses local app storage as the primary source of truth
+- frontend owns product semantics, UI shells, sync flow, AI, and import/export semantics
+- backend owns Web / Desktop app storage plus sync and browser-proxy capabilities
+- Mobile is not just a reduced Web shell; it may need distinct UI and runtime handling
 
-## Backend Boundary
+## Architectural Boundary
 
-The Python backend should be treated as an **optional sync-server**, not as a business backend.
+Keep these concerns shared when possible:
 
-Keep backend scope limited to:
+- note, attachment, sync, import/export, and AI contracts
+- normalization rules
+- sync protocol and conflict semantics
 
-- server sync change APIs
-- server sync blob APIs
-- sync authentication / token checks
-- sync-specific storage and tests
+Keep these concerns runtime-specific when needed:
 
-Do **not** add or restore backend ownership for:
+- primary storage implementation
+- attachment persistence and URL resolution
+- file picking, sharing, and native capability bridges
+- page structure, navigation, editor interaction, and settings layout
 
-- note CRUD for normal app usage
-- AI chat proxying by default
-- import/export flows
-- editor workflows
-- local attachment management unless required as a temporary sync-server compatibility bridge
+## Change Direction
 
-## Migration Direction
+Do not try to force all platforms back into one storage path or one UI shell.
 
-If a feature exists in both frontend and backend, prefer the frontend implementation unless the feature is explicitly required for the optional self-hosted sync-server mode.
+When a feature diverges, the goal is:
+
+- one product semantics
+- isolated runtime adapters
+- separate shells where UX genuinely differs
 
 If uncertain, choose this interpretation:
 
-- `frontend` = product
-- `backend` = optional sync target
+- `frontend` = shared product layer + platform shells
+- `backend` = Web / Desktop app data service + sync service
+- `mobile` = local runtime with its own shell and runtime adapters

@@ -1,80 +1,67 @@
 # Backend
 
-这个目录现在不能再简单写成“只剩 sync-server”。
+`backend` 当前不是“只剩 sync-server”的辅助模块。
 
-按当前实现，它同时承担两类职责：
+它在现阶段承担两类正式职责：
 
-- Web / Desktop 当前的应用数据存储
-- 同步相关 API 与网页端代理能力
+- Web / Desktop 的应用数据存储
+- 同步 API 与网页端代理能力
 
 ## 当前角色
 
-backend 现在负责的内容包括：
+backend 现在负责：
 
-- Web / Desktop 的笔记数据接口
+- Web / Desktop 的笔记接口
 - Web / Desktop 的附件接口
-- 备份导入导出相关接口
+- Web / Desktop 的备份相关接口
 - sync `push / pull / blobs`
 - 网页端 WebDAV 代理
 
-所以它现在更接近“应用数据服务 + 同步服务”的组合，而不是一个纯远端同步目标。
+因此它更接近“Web / Desktop 应用数据服务 + 同步服务”，而不是一个纯远端同步目标。
 
-## 与 Android 的关系
+## 与 Mobile 的关系
 
-Android 是当前例外路径。
+Mobile 主存储在本地，所以它不是通过 backend 才能单机运行。
 
-由于打包和运行时约束，移动端仍然保留本地数据库作为主存储，所以不能用 Web / Desktop 的运行方式去理解它。
+但这不代表 backend 是可删的兼容层。对整个产品来说：
 
-这也意味着：
+- Web / Desktop 依赖 backend 作为主存储
+- Mobile 在需要同步、联调和网页端互通时也会与 backend 协作
 
-- 不启动 backend，Web / Desktop 的主数据路径通常不完整
-- 不启动 backend，Android 单机本地路径仍然可以成立
+## 启动方式
 
-## 开发启动
+仓库根目录的开发脚本默认会一起启动 frontend 和 backend：
 
-仓库根目录下的启动脚本已经按这个现实来组织：
+- [start-dev.ps1](E:/Work/Code/Bemo/start-dev.ps1)
+- [start-dev.bat](E:/Work/Code/Bemo/start-dev.bat)
 
-- [start-dev.ps1](E:/Work/Code/Bemo/start-dev.ps1) 默认会启动 backend 和 frontend
-- [start-dev.bat](E:/Work/Code/Bemo/start-dev.bat) 也默认会这样做
-- 只有显式传 `-FrontendOnly` 或 `--frontend-only` 时，才只启动前端
-
-如果你只想单独启动 backend：
+如果只想单独启动 backend：
 
 ```powershell
 .\start-sync-server.ps1
 ```
 
-如果你要显式启动纯同步服务模式，而不是当前 Web / Desktop 使用的 app 模式：
+如果你明确要跑纯同步服务模式，而不是 Web / Desktop 当前使用的 app 模式：
 
 ```powershell
 .\start-sync-server.ps1 -Mode server
 ```
 
-## 环境变量
+## 读代码时的判断
 
-当前最重要的变量仍然是：
+读 backend 时，优先按下面两块看：
 
-- `BEMO_SYNC_TOKEN`
-- `BEMO_CORS_ORIGINS`
-- `BEMO_MAX_SYNC_BLOB_BYTES`
+- `/api/app/*` 和对应 service：Web / Desktop 当前的应用数据服务
+- `/api/sync/*` 和对应 service：同步协议与远端传输能力
 
-即使 backend 现在不只是 sync-server，这几个变量依然控制同步和网页端代理行为。
-
-## 代码阅读建议
-
-读 backend 时，先按职责分两块：
-
-- `/api/app/*` 和对应 service：Web / Desktop 当前的应用存储接口
-- `/api/sync/*` 和对应 service：同步接口与远端传输能力
-
-不要再默认把 backend 里的所有东西都当成“历史兼容层”或者“只给 sync 用”。
+不要默认把 `/api/app/*` 当作“迟早会删掉的历史兼容层”。
 
 ## 结论
 
 当前 backend 的准确定位是：
 
-- Web / Desktop 的应用数据服务
+- Web / Desktop 主存储服务
 - 同步服务
 - 网页端代理桥接
 
-如果以后要把它重新收窄成纯 sync-server，需要先完成真实迁移，再改这份文档，而不是先沿用旧说法。
+更完整的当前架构说明请看 [CURRENT_ARCHITECTURE.md](E:/Work/Code/Bemo/CURRENT_ARCHITECTURE.md)。

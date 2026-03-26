@@ -1,40 +1,38 @@
 <template>
-  <header class="topbar">
-    <div class="topbar-row topbar-row-main">
-      <button v-if="showSidebarToggle" class="icon-btn menu-btn" title="打开导航" @click="$emit('openSidebar')">
-        <PanelLeftOpen :size="18" />
-      </button>
-      <div class="search-box">
-        <Search class="search-icon" :size="16" />
-        <input type="text" v-model="searchQuery" placeholder="Ctrl+K 或直接搜索..." />
-        <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">×</button>
-      </div>
-      <div class="topbar-actions">
-        <button
-          class="icon-btn"
-          :class="{ active: sortOrder === 'asc' }"
-          :title="sortOrder === 'desc' ? '当前从新到旧，点击切换为从旧到新' : '当前从旧到新，点击切换为从新到旧'"
-          @click="toggleSortOrder"
-        >
-          <ArrowUpDown :size="18" />
-        </button>
-        <button class="icon-btn" :title="isDarkMode ? '切换浅色模式' : '切换深色模式'" @click="toggleTheme">
-          <Sun v-if="isDarkMode" :size="20" />
-          <Moon v-else :size="20" />
-        </button>
-        <button class="icon-btn" title="设置" @click="$emit('openSettings')">
-          <Settings :size="20" />
-        </button>
-      </div>
+  <div class="topbar-row topbar-row-main">
+    <button v-if="showSidebarToggle" class="icon-btn menu-btn" title="打开导航" @click="emit('openSidebar')">
+      <PanelLeftOpen :size="18" />
+    </button>
+    <div class="search-box">
+      <Search class="search-icon" :size="16" />
+      <input type="text" v-model="searchQuery" placeholder="Ctrl+K 或直接搜索..." />
+      <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">×</button>
     </div>
-  </header>
+    <div class="topbar-actions">
+      <button
+        class="icon-btn"
+        :class="{ active: sortOrder === 'asc' }"
+        :title="sortOrder === 'desc' ? '当前从新到旧，点击切换为从旧到新' : '当前从旧到新，点击切换为从新到旧'"
+        @click="toggleSortOrder"
+      >
+        <ArrowUpDown :size="18" />
+      </button>
+      <button class="icon-btn" :title="isDarkMode ? '切换浅色模式' : '切换深色模式'" @click="toggleTheme">
+        <Sun v-if="isDarkMode" :size="20" />
+        <Moon v-else :size="20" />
+      </button>
+      <button class="icon-btn" title="设置" @click="emit('openSettings')">
+        <Settings :size="20" />
+      </button>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { watch } from 'vue';
 import { Search, Settings, ArrowUpDown, PanelLeftOpen, Sun, Moon } from 'lucide-vue-next';
-import { searchQuery, performSearch, sortOrder, toggleSortOrder } from '../../store/notes';
-import { isDarkMode, toggleTheme } from '../../store/ui';
+import { searchQuery, performSearch, sortOrder, toggleSortOrder } from '../../../store/notes';
+import { isDarkMode, toggleTheme } from '../../../store/ui';
 
 withDefaults(defineProps<{
   showSidebarToggle?: boolean;
@@ -42,7 +40,10 @@ withDefaults(defineProps<{
   showSidebarToggle: false,
 });
 
-defineEmits(['openSettings', 'openSidebar']);
+const emit = defineEmits<{
+  openSettings: [];
+  openSidebar: [];
+}>();
 
 watch(searchQuery, (q) => {
   performSearch(q);
@@ -50,19 +51,6 @@ watch(searchQuery, (q) => {
 </script>
 
 <style scoped>
-.topbar {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  width: 100%;
-  max-width: 760px;
-  padding: calc(20px + var(--safe-top)) 0 18px 0;
-  margin: 0;
-  background: color-mix(in srgb, var(--bg-main) 88%, transparent);
-  backdrop-filter: blur(16px);
-  gap: 10px;
-}
-
 .topbar-row {
   display: flex;
   align-items: center;
@@ -87,9 +75,11 @@ watch(searchQuery, (q) => {
   flex: 1;
   min-width: 0;
 }
+
 .search-box:focus-within {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 18%, transparent);
 }
+
 .search-box input {
   border: none;
   background: transparent;
@@ -99,8 +89,16 @@ watch(searchQuery, (q) => {
   font-size: 0.94rem;
   color: var(--text-primary);
 }
-.search-box input::placeholder { color: var(--text-secondary, #888); }
-.search-icon { color: var(--text-secondary, #888); flex-shrink: 0; }
+
+.search-box input::placeholder {
+  color: var(--text-secondary, #888);
+}
+
+.search-icon {
+  color: var(--text-secondary, #888);
+  flex-shrink: 0;
+}
+
 .search-clear {
   background: none;
   border: none;
@@ -135,6 +133,7 @@ watch(searchQuery, (q) => {
   border-radius: 999px;
   transition: all 0.2s ease;
 }
+
 .icon-btn:hover {
   color: var(--text-primary);
   background-color: var(--bg-main, #f4f4f5);
@@ -145,22 +144,7 @@ watch(searchQuery, (q) => {
   background-color: var(--border-color, #e8eaed);
 }
 
-@media (max-width: 1023px) {
-  .topbar {
-    max-width: 720px;
-    padding-top: calc(16px + var(--safe-top));
-    padding-bottom: 16px;
-  }
-}
-
 @media (max-width: 767px) {
-  .topbar {
-    max-width: none;
-    padding-top: calc(12px + var(--safe-top));
-    padding-bottom: 14px;
-    gap: 8px;
-  }
-
   .topbar-row {
     flex-wrap: nowrap;
     gap: 8px;
@@ -181,10 +165,8 @@ watch(searchQuery, (q) => {
   }
 
   .topbar-actions {
-    gap: 4px;
-  }
-  .topbar-actions {
     justify-content: flex-end;
+    gap: 4px;
     margin-left: 0;
   }
 

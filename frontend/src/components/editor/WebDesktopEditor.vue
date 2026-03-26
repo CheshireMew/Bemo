@@ -1,15 +1,10 @@
 <template>
-  <component :is="editorComponent" v-bind="props" @saved="emit('saved')" @cancel="emit('cancel')" />
+  <SharedEditorCore shell="web-desktop" v-bind="props" @saved="emit('saved')" @cancel="emit('cancel')" />
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import MobileEditor from './editor/MobileEditor.vue';
-import WebDesktopEditor from './editor/WebDesktopEditor.vue';
-import { getProductShell } from '../domain/runtime/shellRuntime';
-import type { EditorSubmitPayload } from './editor/SharedEditorCore.vue';
-
-export type { EditorSubmitPayload } from './editor/SharedEditorCore.vue';
+import SharedEditorCore from './SharedEditorCore.vue';
+import type { EditorSubmitPayload } from './SharedEditorCore.vue';
 
 const props = withDefaults(defineProps<{
   initialContent?: string;
@@ -34,10 +29,4 @@ const props = withDefaults(defineProps<{
 });
 
 const emit = defineEmits(['saved', 'cancel']);
-
-const editorComponent = computed(() => (
-  getProductShell() === 'mobile'
-    ? MobileEditor
-    : WebDesktopEditor
-));
 </script>
