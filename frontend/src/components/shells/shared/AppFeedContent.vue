@@ -16,21 +16,26 @@ import { currentView } from '../../../store/ui';
 <style scoped>
 .feed-container {
   width: 100%;
-  max-width: 760px;
+  max-width: var(--layout-content-width);
   padding: 0 0 calc(64px + var(--safe-bottom));
   margin: 0;
 }
 
 @media (max-width: 1023px) {
   .feed-container {
-    max-width: 720px;
+    max-width: var(--layout-content-width-compact);
   }
 }
 
 @media (max-width: 767px) {
   .feed-container {
+    flex: 1;
+    min-height: 0;
     max-width: none;
-    padding-bottom: calc(40px + var(--safe-bottom));
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(120px + var(--safe-bottom));
   }
 }
 </style>

@@ -45,7 +45,7 @@ const stackClass = computed(() => (
 }
 
 .notification-stack-mobile {
-  top: 12px;
+  top: calc(12px + var(--safe-top));
   right: 12px;
   left: 12px;
   width: auto;

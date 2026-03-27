@@ -28,6 +28,10 @@ export function shouldKeepDeleteAsConflict(localRevision: number, baseRevision: 
   return baseRevision !== null && localRevision > baseRevision;
 }
 
+export function shouldKeepLocalTrashState(localRevision: number, remoteRevision: number) {
+  return localRevision >= remoteRevision;
+}
+
 export function hasConcurrentPatchConflict(
   local: Pick<ConflictComparableNote, 'revision' | 'tags'> & { pinned?: boolean },
   baseRevision: number | null,

@@ -29,7 +29,7 @@ const emit = defineEmits<{
   flex-direction: column;
   align-items: stretch;
   width: 100%;
-  max-width: 760px;
+  max-width: var(--layout-content-width);
   padding: calc(20px + var(--safe-top)) 0 18px 0;
   margin: 0;
   background: color-mix(in srgb, var(--bg-main) 88%, transparent);
@@ -39,7 +39,7 @@ const emit = defineEmits<{
 
 @media (max-width: 1023px) {
   .topbar {
-    max-width: 720px;
+    max-width: var(--layout-content-width-compact);
     padding-top: calc(16px + var(--safe-top));
     padding-bottom: 16px;
   }

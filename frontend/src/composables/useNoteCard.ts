@@ -1,10 +1,14 @@
-import { computed, ref, watch } from 'vue';
+import { computed, ref, toValue, watch, type MaybeRefOrGetter } from 'vue';
 
 import type { NoteMeta } from '../store/notes';
 import { pushNotification } from '../store/notifications';
-import { openAiChat } from '../store/ui';
+import { openAiChat, openImagePreview as openImagePreviewOverlay } from '../store/ui';
 import { settings } from '../store/settings';
 import { resolveAttachmentUrl } from '../domain/attachments/attachmentUrlResolver';
+import {
+  copyContentToClipboard,
+  openExternalResource,
+} from '../domain/runtime/nativePlatformBridge.js';
 import { renderMarkdownToHtml } from '../utils/markdownRenderer';
 import { getEditorAttachmentDisplayKind, splitEditorMarkdownByKind } from '../utils/editorAttachments';
 
@@ -13,13 +17,15 @@ export function formatNoteDate(timestamp: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-export function useNoteCard(note: NoteMeta) {
+export function useNoteCard(noteSource: MaybeRefOrGetter<NoteMeta>) {
+  const note = computed(() => toValue(noteSource));
   const isEditing = ref(false);
   const renderedHtml = ref('');
   const resolvedImageUrls = ref<Record<string, string>>({});
   const resolvedAttachmentUrls = ref<Record<string, string>>({});
   const copyFeedback = ref(false);
-  const editDraftStorageKey = computed(() => `bemo.editor.draft:note:${note.note_id}`);
+  const editDraftStorageKey = computed(() => `bemo.editor.draft:note:${note.value.note_id}`);
+  const copyActionLabel = computed(() => (copyFeedback.value ? '已复制' : '复制'));
   const copyButtonTitle = computed(() => {
     if (copyFeedback.value) {
       return '已复制';
@@ -27,17 +33,17 @@ export function useNoteCard(note: NoteMeta) {
     return settings.editor.copyFormat === 'rich-text' ? '复制富文本内容' : '复制 Markdown 内容';
   });
 
-  const splitContent = computed(() => splitEditorMarkdownByKind(note.content || ''));
+  const splitContent = computed(() => splitEditorMarkdownByKind(note.value.content || ''));
   const imageAttachments = computed(() => splitContent.value.attachments.filter((attachment) => getEditorAttachmentDisplayKind(attachment) === 'image'));
   const audioAttachments = computed(() => splitContent.value.attachments.filter((attachment) => getEditorAttachmentDisplayKind(attachment) === 'audio'));
   const videoAttachments = computed(() => splitContent.value.attachments.filter((attachment) => getEditorAttachmentDisplayKind(attachment) === 'video'));
   const fileAttachments = computed(() => splitContent.value.attachments.filter((attachment) => getEditorAttachmentDisplayKind(attachment) === 'file'));
 
   const openNoteAiChat = () => {
-    const firstLine = (note.content || '').trim().split('\n')[0]?.replace(/^#+\s*/, '').trim() || '';
+    const firstLine = (note.value.content || '').trim().split('\n')[0]?.replace(/^#+\s*/, '').trim() || '';
     openAiChat({
-      noteId: note.note_id,
-      noteLabel: firstLine || note.title || '当前笔记',
+      noteId: note.value.note_id,
+      noteLabel: firstLine || note.value.title || '当前笔记',
     });
   };
 
@@ -59,6 +65,7 @@ export function useNoteCard(note: NoteMeta) {
   let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
   const flashCopyFeedback = () => {
     copyFeedback.value = true;
+    pushNotification('已复制笔记内容', 'success', 1800);
     if (copyFeedbackTimer) {
       clearTimeout(copyFeedbackTimer);
     }
@@ -68,11 +75,13 @@ export function useNoteCard(note: NoteMeta) {
   };
 
   const copyNoteContent = async () => {
-    const markdown = note.content || '';
+    const markdown = note.value.content || '';
 
     try {
       if (settings.editor.copyFormat === 'markdown') {
-        await navigator.clipboard.writeText(markdown);
+        await copyContentToClipboard({
+          text: markdown,
+        });
         flashCopyFeedback();
         return;
       }
@@ -82,15 +91,10 @@ export function useNoteCard(note: NoteMeta) {
       temp.innerHTML = html;
       const plainText = temp.innerText || temp.textContent || markdown;
 
-      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
-        const item = new ClipboardItem({
-          'text/html': new Blob([html], { type: 'text/html' }),
-          'text/plain': new Blob([plainText], { type: 'text/plain' }),
-        });
-        await navigator.clipboard.write([item]);
-      } else {
-        await navigator.clipboard.writeText(plainText);
-      }
+      await copyContentToClipboard({
+        text: plainText,
+        html,
+      });
 
       flashCopyFeedback();
     } catch (error) {
@@ -100,13 +104,34 @@ export function useNoteCard(note: NoteMeta) {
   };
 
   const openImagePreview = (url: string) => {
-    const target = resolvedImageUrls.value[url] || url;
-    window.open(target, '_blank', 'noopener,noreferrer');
+    const previewItems = imageAttachments.value.map((image) => ({
+      url: resolvedImageUrls.value[image.url] || image.url,
+      label: image.label,
+    }));
+    openImagePreviewOverlay(previewItems, resolvedImageUrls.value[url] || url);
   };
 
-  watch(() => note.content, async (content) => {
+  const openFileAttachment = async (url: string, label: string) => {
+    const target = resolvedAttachmentUrls.value[url] || url;
+    try {
+      await openExternalResource({
+        url: target,
+        fileName: label || `${note.value.note_id}-attachment`,
+      });
+    } catch (error) {
+      console.error('Failed to open attachment:', error);
+      pushNotification('文件打开失败', 'error');
+    }
+  };
+
+  watch(() => note.value.content, async (content) => {
     renderedHtml.value = String(await renderMarkdownToHtml(splitEditorMarkdownByKind(content || '').body));
   }, { immediate: true });
+
+  watch(() => note.value.note_id, () => {
+    isEditing.value = false;
+    copyFeedback.value = false;
+  });
 
   watch(imageAttachments, async (nextImages) => {
     const entries = await Promise.all(nextImages.map(async (image) => (
@@ -127,6 +152,8 @@ export function useNoteCard(note: NoteMeta) {
     renderedHtml,
     resolvedImageUrls,
     resolvedAttachmentUrls,
+    copyFeedback,
+    copyActionLabel,
     copyButtonTitle,
     imageAttachments,
     audioAttachments,
@@ -138,5 +165,6 @@ export function useNoteCard(note: NoteMeta) {
     handleEditSaved,
     copyNoteContent,
     openImagePreview,
+    openFileAttachment,
   };
 }

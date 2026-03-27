@@ -55,16 +55,15 @@
         </div>
       </div>
       <div v-if="fileAttachments.length" class="note-file-list">
-        <a
+        <button
           v-for="file in fileAttachments"
           :key="file.url"
+          type="button"
           class="note-file-card"
-          :href="resolvedAttachmentUrls[file.url] || file.url"
-          target="_blank"
-          rel="noreferrer"
+          @click="openFileAttachment(file.url, file.label)"
         >
           <span class="note-file-label">{{ file.label }}</span>
-        </a>
+        </button>
       </div>
     </template>
   </div>
@@ -90,6 +89,7 @@ const props = defineProps<{
   cancelEdit: () => void;
   handleEditSaved: () => void;
   openImagePreview: (url: string) => void;
+  openFileAttachment: (url: string, label: string) => void;
 }>();
 
 const saveEdit = async (payload: EditorSubmitPayload) => {
@@ -193,8 +193,10 @@ const saveEdit = async (payload: EditorSubmitPayload) => {
 .note-file-card {
   display: flex;
   align-items: center;
-  text-decoration: none;
   color: var(--text-primary);
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
 }
 
 .note-audio-title,

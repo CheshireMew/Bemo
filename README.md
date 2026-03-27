@@ -41,6 +41,17 @@ Web / Desktop 继续使用 backend 主存储，是因为本地存储在这些运
 - 文件选择、分享、原生能力接入
 - 页面结构、导航、编辑器交互和设置页布局
 
+## 关于移动端，不要再按“三端完全等价”理解
+
+当前需要明确记住的事实是：
+
+- Android / Mobile 应按 `local-backed runtime` 理解，不按 Web / Desktop 的 backend-backed 主存储理解
+- Mobile 不提供“从坚果云同步目录恢复”入口
+- Mobile 不提供“快捷键说明”设置页
+- Mobile 的复制笔记、图片预览、文件打开走原生 bridge
+
+这几条不是临时缺口，而是当前产品边界。后续如果讨论“某个桌面入口手机上为什么没有”，先判断是不是运行时和原生能力差异，不要先假设移动端漏实现。
+
 ## 仓库结构
 
 - [frontend](./frontend)：产品前端、共享 domain、Web/Desktop shell、Mobile shell

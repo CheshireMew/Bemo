@@ -59,6 +59,16 @@ export const randomWalkNonce = ref(0);
 export const isAiChatOpen = ref(false);
 export const aiChatNoteId = ref<string | null>(null);
 export const aiChatNoteLabel = ref('');
+export const isMobileSettingsOpen = ref(false);
+export const isMobileComposeOpen = ref(false);
+export const mobileEditingNoteId = ref<string | null>(null);
+export type ImagePreviewItem = {
+  url: string;
+  label: string;
+};
+export const isImagePreviewOpen = ref(false);
+export const imagePreviewItems = ref<ImagePreviewItem[]>([]);
+export const imagePreviewIndex = ref(0);
 
 export function setView(mode: ViewMode) {
   currentView.value = mode;
@@ -81,8 +91,63 @@ export function closeAiChat() {
   aiChatNoteLabel.value = '';
 }
 
+export function openMobileSettings() {
+  isMobileSettingsOpen.value = true;
+}
+
+export function closeMobileSettings() {
+  isMobileSettingsOpen.value = false;
+}
+
+export function openMobileCompose() {
+  isMobileComposeOpen.value = true;
+}
+
+export function closeMobileCompose() {
+  isMobileComposeOpen.value = false;
+}
+
+export function openMobileNoteEditor(noteId: string) {
+  mobileEditingNoteId.value = noteId || null;
+}
+
+export function closeMobileNoteEditor() {
+  mobileEditingNoteId.value = null;
+}
+
+export function openImagePreview(items: ImagePreviewItem[], activeUrl?: string) {
+  if (!items.length) return;
+  imagePreviewItems.value = items;
+  imagePreviewIndex.value = Math.max(0, items.findIndex((item) => item.url === activeUrl));
+  isImagePreviewOpen.value = true;
+}
+
+export function closeImagePreview() {
+  isImagePreviewOpen.value = false;
+  imagePreviewItems.value = [];
+  imagePreviewIndex.value = 0;
+}
+
+export function showNextPreviewImage() {
+  if (imagePreviewItems.value.length <= 1) return;
+  imagePreviewIndex.value = (imagePreviewIndex.value + 1) % imagePreviewItems.value.length;
+}
+
+export function showPreviousPreviewImage() {
+  if (imagePreviewItems.value.length <= 1) return;
+  imagePreviewIndex.value = (imagePreviewIndex.value - 1 + imagePreviewItems.value.length) % imagePreviewItems.value.length;
+}
+
 // 侧边栏状态 (例如：移动端侧边栏是否展开等，如果后续需要)
 export const isSidebarOpen = ref(false);
+export function openSidebar() {
+  isSidebarOpen.value = true;
+}
+
+export function closeSidebar() {
+  isSidebarOpen.value = false;
+}
+
 export function toggleSidebar() {
   isSidebarOpen.value = !isSidebarOpen.value;
 }

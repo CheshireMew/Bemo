@@ -14,46 +14,25 @@
 
     <slot name="taglist"></slot>
 
-    <nav class="nav-menu bottom-menu">
-      <a href="#" class="nav-item" :class="{ active: currentView === 'trash' }" @click.prevent="openTrash">
-        <Trash2 class="icon" :size="18" /> 回收站
-      </a>
-    </nav>
   </div>
 </template>
 
 <script setup lang="ts">
 import { 
-  LayoutGrid, Dices, Trash2, MessagesSquare
+  LayoutGrid, Dices, MessagesSquare
 } from 'lucide-vue-next';
-import { currentView, setView, openRandomWalk, openAiChat } from '../../store/ui';
-import { fetchTrash, selectedDate } from '../../store/notes';
+import { usePrimaryNavigation } from '../../composables/usePrimaryNavigation';
 
 const emit = defineEmits<{
   navigate: [];
 }>();
 
-const handleAllNotes = () => {
-  setView('all');
-  selectedDate.value = null; // 切换回全部笔记时，清空日期筛选
-  emit('navigate');
-};
-
-const handleRandomWalk = () => {
-  openRandomWalk();
-  emit('navigate');
-};
-
-const openTrash = async () => {
-  setView('trash');
-  await fetchTrash();
-  emit('navigate');
-};
-
-const openDefaultAiChat = () => {
-  openAiChat();
-  emit('navigate');
-};
+const {
+  currentView,
+  openAllNotes: handleAllNotes,
+  openRandomWalkView: handleRandomWalk,
+  openDefaultAiChat,
+} = usePrimaryNavigation(() => emit('navigate'));
 </script>
 
 <style scoped>
@@ -69,5 +48,4 @@ const openDefaultAiChat = () => {
 .nav-item.active .icon { color: white; }
 .icon { color: var(--text-secondary); }
 
-.bottom-menu { margin-top: auto; margin-bottom: 0; }
 </style>

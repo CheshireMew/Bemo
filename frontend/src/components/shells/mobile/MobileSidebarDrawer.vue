@@ -11,6 +11,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import SidebarContent from '../shared/SidebarContent.vue';
+import { useMobileBackHandler } from '../../../composables/useMobileBackHandler';
 import { useScrollLock } from '../../../composables/useScrollLock';
 
 const props = defineProps<{
@@ -22,6 +23,14 @@ const emit = defineEmits<{
 }>();
 
 useScrollLock(computed(() => props.open));
+useMobileBackHandler({
+  id: 'mobile-sidebar-drawer',
+  priority: 640,
+  enabled: computed(() => props.open),
+  dismiss: () => {
+    emit('close');
+  },
+});
 </script>
 
 <style scoped>
@@ -43,10 +52,9 @@ useScrollLock(computed(() => props.open));
 }
 
 .sidebar-drawer {
-  width: min(88vw, 360px);
+  width: 100vw;
   padding: calc(22px + var(--safe-top)) 16px calc(20px + var(--safe-bottom));
   background: var(--bg-main);
-  border-right: 1px solid var(--border-color);
-  box-shadow: 24px 0 48px rgba(15, 23, 42, 0.18);
+  box-shadow: none;
 }
 </style>

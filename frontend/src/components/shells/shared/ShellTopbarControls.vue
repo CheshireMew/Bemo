@@ -5,7 +5,7 @@
     </button>
     <div class="search-box">
       <Search class="search-icon" :size="16" />
-      <input type="text" v-model="searchQuery" placeholder="Ctrl+K 或直接搜索..." />
+      <input type="text" v-model="searchQuery" :placeholder="searchPlaceholder" />
       <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">×</button>
     </div>
     <div class="topbar-actions">
@@ -36,8 +36,10 @@ import { isDarkMode, toggleTheme } from '../../../store/ui';
 
 withDefaults(defineProps<{
   showSidebarToggle?: boolean;
+  searchPlaceholder?: string;
 }>(), {
   showSidebarToggle: false,
+  searchPlaceholder: 'Ctrl+K 或直接搜索...',
 });
 
 const emit = defineEmits<{

@@ -29,7 +29,7 @@
         class="tag-badge"
         :class="{ active: selectedTag === tag.name }"
         :title="`#${tag.name} (${tag.count})`"
-        @click="toggleTag(tag.name)"
+        @click="handleTagClick(tag.name)"
       >
         <span class="tag-name">#{{ tag.name }}</span>
         <span class="tag-count">{{ tag.count }}</span>
@@ -43,6 +43,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { notes, selectedTag, toggleTag } from '../../store/notes';
+
+const emit = defineEmits<{
+  navigate: [];
+}>();
 
 const visibleLimit = 10;
 const expanded = ref(false);
@@ -75,6 +79,11 @@ const visibleTags = computed(() => {
   if (expanded.value) return filteredTags.value;
   return filteredTags.value.slice(0, visibleLimit);
 });
+
+const handleTagClick = (tagName: string) => {
+  toggleTag(tagName);
+  emit('navigate');
+};
 </script>
 
 <style scoped>

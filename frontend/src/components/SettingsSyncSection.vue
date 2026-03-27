@@ -125,10 +125,10 @@
         <div>
           <label class="field-label" for="webdav-url">WebDAV 地址</label>
         </div>
-        <input id="webdav-url" v-model="syncSettings.webdavUrl" type="url" placeholder="https://dav.jianguoyun.com/dav" />
+        <input id="webdav-url" v-model="syncSettings.webdavUrl" type="url" :placeholder="webdavUrlPlaceholder" />
       </div>
 
-      <p class="field-hint">坚果云请填写 `https://dav.jianguoyun.com/dav`，不要只填域名根路径。</p>
+      <p class="field-hint">{{ webdavProviderHint }}</p>
 
       <div class="field-row">
         <div>
@@ -263,6 +263,7 @@ import { computed } from 'vue';
 import SettingsWebDavDiagnosticsPanel from './SettingsWebDavDiagnosticsPanel.vue';
 import { useSyncOperations } from '../composables/useSyncOperations';
 import { useSyncSettings } from '../composables/useSyncSettings';
+import { getWebDavProviderHint, getWebDavUrlPlaceholder } from '../domain/sync/webdav/webdavProviders.js';
 import {
   serverLastSyncAt,
   serverPendingCount,
@@ -298,6 +299,9 @@ const currentModeBadge = computed(() => {
   if (syncSettings.mode === 'webdav') return 'WebDAV';
   return '本地';
 });
+
+const webdavUrlPlaceholder = computed(() => getWebDavUrlPlaceholder(syncSettings.webdavUrl));
+const webdavProviderHint = computed(() => getWebDavProviderHint(syncSettings.webdavUrl));
 
 const {
   handleCleanRemoteBlobs,
@@ -338,7 +342,7 @@ const {
 }
 
 .sync-hero-copy {
-  max-width: 720px;
+  max-width: var(--layout-content-width-compact);
 }
 
 .sync-hero-copy h4 {
@@ -420,7 +424,7 @@ const {
 
 .overview-grid {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
 }

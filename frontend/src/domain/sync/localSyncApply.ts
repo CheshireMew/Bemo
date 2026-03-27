@@ -21,6 +21,7 @@ import {
   hasConcurrentPatchConflict,
   hasConcurrentUpdateConflict,
   shouldKeepDeleteAsConflict,
+  shouldKeepLocalTrashState,
 } from './localSyncConflicts.js';
 
 type SyncChange = {
@@ -72,6 +73,10 @@ function hasAppliedTrashState(note: NoteMeta, payload: Record<string, unknown>, 
     && note.pinned === Boolean(remote.pinned ?? note.pinned);
 }
 
+function getRemoteRevision(payload: Record<string, unknown>, fallback: number) {
+  return normalizeNoteContentPayload(payload, fallback).revision;
+}
+
 export async function applyChangesLocally(changes: SyncChange[]) {
   const applied: Array<Record<string, unknown>> = [];
   const conflicts: Array<Record<string, unknown>> = [];
@@ -101,6 +106,16 @@ export async function applyChangesLocally(changes: SyncChange[]) {
 
       const trash = await findLocalTrashNoteById(noteId);
       if (trash) {
+        if (shouldKeepLocalTrashState(trash.revision, getRemoteRevision(payload, trash.revision))) {
+          applied.push({
+            status: 'applied',
+            note_id: noteId,
+            filename: trash.filename,
+            deduplicated: true,
+            kept_trash: true,
+          });
+          continue;
+        }
         const restored = await restoreLocalTrashNote(trash.note_id);
         const updated = await applyRemoteActiveState(noteId, payload, restored);
         applied.push({ status: 'applied', note_id: noteId, filename: updated.filename });
@@ -326,6 +341,16 @@ export async function applyChangesLocally(changes: SyncChange[]) {
       }
 
       if (localTrash) {
+        if (shouldKeepLocalTrashState(localTrash.revision, getRemoteRevision(payload, localTrash.revision))) {
+          applied.push({
+            status: 'applied',
+            note_id: noteId,
+            filename: localTrash.filename,
+            deduplicated: true,
+            kept_trash: true,
+          });
+          continue;
+        }
         const restored = await restoreLocalTrashNote(localTrash.note_id);
         const updated = await applyRemoteActiveState(noteId, payload, restored);
         applied.push({ status: 'applied', note_id: noteId, filename: updated.filename });

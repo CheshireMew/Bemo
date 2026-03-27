@@ -69,24 +69,7 @@ export function shouldUseAndroidNativeImportPicker() {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 }
 
-async function ensureNativeImportPermissions() {
-  const status = await FilePicker.checkPermissions();
-  const current = status.readExternalStorage;
-  if (current === 'granted') {
-    return;
-  }
-
-  const requested = await FilePicker.requestPermissions({
-    permissions: ['readExternalStorage'],
-  });
-
-  if (requested.readExternalStorage !== 'granted') {
-    throw new Error('没有获得 Android 文件读取权限，无法继续导入。');
-  }
-}
-
 export async function pickNativeImportFile(kind: ImportFileKind): Promise<File | null> {
-  await ensureNativeImportPermissions();
   const result = await FilePicker.pickFiles({
     limit: 1,
     readData: false,

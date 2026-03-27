@@ -20,6 +20,13 @@
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
   --layout-max-width: 1200px;
+  --layout-shell-gap: 20px;
+  --layout-shell-padding: 20px;
+  --layout-shell-padding-compact: 16px;
+  --layout-sidebar-width: 280px;
+  --layout-content-width: 760px;
+  --layout-content-width-compact: 720px;
+  --layout-settings-width: calc(var(--layout-sidebar-width) + var(--layout-shell-gap) + var(--layout-content-width));
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);

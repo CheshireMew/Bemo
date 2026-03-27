@@ -1,6 +1,8 @@
 import { onMounted } from 'vue';
 
 import { loadAiSettings } from '../domain/ai/localAiSettings';
+import { installMobileBackHandler } from '../domain/runtime/mobileBackNavigation.js';
+import { installMobileKeyboardInsetBridge } from '../domain/runtime/mobileKeyboardInsets.js';
 import { fetchNotes } from '../store/notes';
 import { initSync } from '../store/sync';
 import { initTheme } from '../store/ui';
@@ -20,6 +22,8 @@ export function useAppBootstrap() {
   ensureSettingsInitialized();
 
   onMounted(() => {
+    installMobileBackHandler();
+    installMobileKeyboardInsetBridge();
     initTheme();
     initSync(() => {
       fetchNotes();

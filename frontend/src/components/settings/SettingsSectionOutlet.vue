@@ -7,6 +7,7 @@
     <SettingsEditorSection v-else-if="activeTab === 'editor'" />
     <SettingsShortcutsSection v-else-if="activeTab === 'shortcuts'" />
     <SettingsAiSection v-else-if="activeTab === 'ai'" />
+    <SettingsTrashSection v-else-if="activeTab === 'trash'" />
     <SettingsConflictsSection v-else />
   </div>
 </template>
@@ -20,6 +21,7 @@ import SettingsEditorSection from '../SettingsEditorSection.vue';
 import SettingsImportExportSection from '../SettingsImportExportSection.vue';
 import SettingsShortcutsSection from '../SettingsShortcutsSection.vue';
 import SettingsSyncSection from '../SettingsSyncSection.vue';
+import SettingsTrashSection from '../SettingsTrashSection.vue';
 import type { SettingsTabId } from '../../composables/useSettingsTabs';
 
 defineProps<{

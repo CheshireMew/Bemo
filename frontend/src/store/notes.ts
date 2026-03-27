@@ -78,26 +78,56 @@ export const displayedNotes = computed(() => {
   });
 });
 
+function removeNoteFromVisibleCollections(noteId: string) {
+  notes.value = notes.value.filter((item) => item.note_id !== noteId);
+  if (searchResults.value !== null) {
+    searchResults.value = searchResults.value.filter((item) => item.note_id !== noteId);
+  }
+}
+
+async function refreshVisibleNotes() {
+  notes.value = await listDisplayNotes();
+
+  const query = searchQuery.value.trim();
+  if (!query) {
+    searchResults.value = null;
+    return;
+  }
+
+  try {
+    searchResults.value = await searchDisplayNotes(query);
+  } catch (error) {
+    console.error('Failed to refresh search results:', error);
+    searchResults.value = null;
+  }
+}
+
 // ==========================
 // 操作行为 (Actions)
 // ==========================
 
 export async function fetchNotes() {
   try {
-    notes.value = await listDisplayNotes();
+    await refreshVisibleNotes();
   } catch (error) {
     console.error(error);
   }
 }
 
 export async function deleteNote(noteId: string) {
+  const previousNotes = [...notes.value];
+  const previousSearchResults = searchResults.value ? [...searchResults.value] : null;
+
   try {
     const note = notes.value.find((item) => item.note_id === noteId);
     if (!note) return;
+    removeNoteFromVisibleCollections(noteId);
     const queued = await moveNoteToTrash(note);
     if (queued) requestSyncNow();
-    await fetchNotes();
+    await refreshVisibleNotes();
   } catch (e) {
+    notes.value = previousNotes;
+    searchResults.value = previousSearchResults;
     console.error('Error deleting note:', e);
   }
 }
@@ -106,7 +136,7 @@ export async function togglePin(note: NoteMeta) {
   try {
     const queued = await togglePinned(note);
     if (queued) requestSyncNow();
-    await fetchNotes();
+    await refreshVisibleNotes();
   } catch (e) {
     console.error('Error pinning note:', e);
   }
@@ -115,13 +145,13 @@ export async function togglePin(note: NoteMeta) {
 export async function updateNoteContent(note: NoteMeta, payload: { content: string; tags: string[] }) {
   const queued = await updateNote(note, payload);
   if (queued) requestSyncNow();
-  await fetchNotes();
+  await refreshVisibleNotes();
 }
 
 export async function createNoteContent(payload: { content: string; tags: string[] }) {
   const created = await createNote(payload);
   if (created.syncQueued) requestSyncNow();
-  await fetchNotes();
+  await refreshVisibleNotes();
   return created;
 }
 
@@ -169,11 +199,19 @@ export async function emptyTrash() {
 
 // 标签功能
 export function toggleTag(tag: string) {
+  setView('all');
   selectedTag.value = selectedTag.value === tag ? null : tag;
 }
 
 export function toggleSortOrder() {
   sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc';
+}
+
+export function clearSelectedFilters() {
+  const hadActiveFilters = Boolean(selectedDate.value || selectedTag.value);
+  selectedDate.value = null;
+  selectedTag.value = null;
+  return hadActiveFilters;
 }
 
 // 日期过滤
@@ -189,6 +227,17 @@ export function selectDate(date: Date) {
 
 // 搜索行为
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
+export function clearSearch() {
+  const hadSearch = Boolean(searchQuery.value.trim() || searchResults.value !== null);
+  if (searchTimer) {
+    clearTimeout(searchTimer);
+    searchTimer = null;
+  }
+  searchQuery.value = '';
+  searchResults.value = null;
+  return hadSearch;
+}
+
 export function performSearch(q: string) {
   if (searchTimer) clearTimeout(searchTimer);
   if (!q.trim()) {

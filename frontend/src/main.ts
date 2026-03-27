@@ -2,12 +2,14 @@ import { createApp } from 'vue'
 import './style.css'
 import './assets/settings.css'
 import App from './App.vue'
+import { Capacitor } from '@capacitor/core';
 
 createApp(App).mount('#app')
 
-const isDevRuntime = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const isDevRuntime = import.meta.env.DEV;
+const isNativeRuntime = Capacitor.isNativePlatform();
 
-async function unregisterDevServiceWorkers() {
+async function unregisterServiceWorkersAndClearCaches() {
   if (!('serviceWorker' in navigator)) return;
   const registrations = await navigator.serviceWorker.getRegistrations();
   await Promise.all(registrations.map((registration) => registration.unregister()));
@@ -18,16 +20,16 @@ async function unregisterDevServiceWorkers() {
   }
 }
 
-if (isDevRuntime) {
+if (isDevRuntime || isNativeRuntime) {
   window.addEventListener('load', () => {
-    unregisterDevServiceWorkers().catch((err) => {
-      console.warn('[SW] Dev cleanup failed:', err);
+    unregisterServiceWorkersAndClearCaches().catch((err) => {
+      console.warn('[SW] Cleanup failed:', err);
     });
   });
 }
 
 // Register Service Worker for PWA
-if (!isDevRuntime && 'serviceWorker' in navigator) {
+if (!isDevRuntime && !isNativeRuntime && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').then((reg) => {
       console.log('[SW] Registered:', reg.scope);

@@ -32,9 +32,9 @@ body {
   min-height: 100dvh;
   width: min(100%, var(--layout-max-width));
   margin: 0 auto;    /* 居中 */
-  padding-left: max(20px, var(--safe-left));
-  padding-right: max(20px, var(--safe-right));
-  gap: 20px;
+  padding-left: max(var(--layout-shell-padding), var(--safe-left));
+  padding-right: max(var(--layout-shell-padding), var(--safe-right));
+  gap: var(--layout-shell-gap);
   align-items: stretch;
 }
 
@@ -50,9 +50,9 @@ body {
 /* Mobile Responsive */
 @media (max-width: 1023px) {
   .flomo-layout {
-    padding-left: max(16px, var(--safe-left));
-    padding-right: max(16px, var(--safe-right));
-    gap: 16px;
+    padding-left: max(var(--layout-shell-padding-compact), var(--safe-left));
+    padding-right: max(var(--layout-shell-padding-compact), var(--safe-right));
+    gap: var(--layout-shell-padding-compact);
   }
 }
 

@@ -196,6 +196,7 @@ import {
 import { useAiChat } from '../../composables/useAiChat';
 import { useAiContextSelection } from '../../composables/useAiContextSelection';
 import { useConversationRename } from '../../composables/useConversationRename';
+import { useMobileBackHandler } from '../../composables/useMobileBackHandler';
 import { useAiPromptPresets } from '../../composables/useAiPromptPresets';
 import { useScrollLock } from '../../composables/useScrollLock';
 
@@ -302,6 +303,24 @@ const {
   renameConversation,
 });
 void editingTitleInput;
+
+useMobileBackHandler({
+  id: 'ai-prompt-presets',
+  priority: 720,
+  enabled: computed(() => props.shell === 'mobile' && isPresetPanelOpen.value),
+  dismiss: () => {
+    togglePresetPanel();
+  },
+});
+
+useMobileBackHandler({
+  id: 'ai-conversation-rename',
+  priority: 700,
+  enabled: computed(() => props.shell === 'mobile' && Boolean(editingConversationId.value)),
+  dismiss: () => {
+    cancelConversationRename();
+  },
+});
 
 const formatContextMode = (value: TimeRange | null | undefined) => {
   const labelMap: Record<TimeRange, string> = {
@@ -882,7 +901,27 @@ useScrollLock(isAiChatOpen);
   border-right: none;
   border-bottom: 1px solid var(--border-color, #e4e4e7);
   padding: 12px 16px;
-  max-height: 34dvh;
+  max-height: none;
+  background: color-mix(in srgb, var(--bg-card, #fff) 94%, transparent);
+}
+
+.ai-modal-mobile .new-chat-btn {
+  align-self: flex-start;
+  padding: 8px 12px;
+  font-size: 0.84rem;
+}
+
+.ai-modal-mobile .conversation-list {
+  flex-direction: row;
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 10px;
+  padding-right: 0;
+}
+
+.ai-modal-mobile .conversation-card {
+  min-width: 220px;
+  flex-shrink: 0;
 }
 
 .ai-modal-mobile .ai-modal-header,
@@ -905,6 +944,10 @@ useScrollLock(isAiChatOpen);
   padding-bottom: calc(16px + var(--safe-bottom));
 }
 
+.ai-modal-mobile .ai-modal-body {
+  padding-top: 16px;
+}
+
 .ai-modal-mobile .prompt-presets,
 .ai-modal-mobile .presets-btn,
 .ai-modal-mobile .preset-panel,
@@ -922,5 +965,13 @@ useScrollLock(isAiChatOpen);
 
 .ai-modal-mobile .chat-bubble {
   max-width: 92%;
+}
+
+.ai-modal-mobile .footer-action-buttons {
+  justify-content: stretch;
+}
+
+.ai-modal-mobile .footer-action-buttons button {
+  flex: 1;
 }
 </style>

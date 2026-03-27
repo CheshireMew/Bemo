@@ -13,7 +13,7 @@
         <template v-else>
           <button class="btn-action" title="编辑" @click="startEdit"><Pencil :size="14" /></button>
           <button class="btn-action" title="与 AI 对话" @click="openNoteAiChat"><Bot :size="14" /></button>
-          <button class="btn-action" :title="copyButtonTitle" @click="copyNoteContent"><Copy :size="14" /></button>
+          <button class="btn-action" :class="{ copied: copyFeedback }" :title="copyButtonTitle" :aria-label="copyButtonTitle" @click="copyNoteContent"><Copy :size="14" /></button>
           <button class="btn-action" :title="note.pinned ? '取消置顶' : '置顶'" @click="togglePin(note)"><Pin :size="14" :class="{ 'pin-active': note.pinned }" /></button>
           <button class="btn-action" title="删除" @click="deleteNote(note.note_id)"><Trash2 :size="14" /></button>
         </template>
@@ -34,11 +34,13 @@
       :cancelEdit="cancelEdit"
       :handleEditSaved="handleEditSaved"
       :openImagePreview="openImagePreview"
+      :openFileAttachment="openFileAttachment"
     />
   </div>
 </template>
 
 <script setup lang="ts">
+import { toRef } from 'vue';
 import { Bot, Copy, Pencil, Pin, RotateCcw, Trash2 } from 'lucide-vue-next';
 import SharedNoteCardBody from '../../MainFeed/note-card/SharedNoteCardBody.vue';
 import type { NoteMeta } from '../../../store/notes';
@@ -60,6 +62,7 @@ const {
   renderedHtml,
   resolvedImageUrls,
   resolvedAttachmentUrls,
+  copyFeedback,
   copyButtonTitle,
   imageAttachments,
   audioAttachments,
@@ -71,7 +74,8 @@ const {
   handleEditSaved,
   copyNoteContent,
   openImagePreview,
-} = useNoteCard(props.note);
+  openFileAttachment,
+} = useNoteCard(toRef(props, 'note'));
 </script>
 
 <style scoped>
@@ -136,6 +140,11 @@ const {
 .btn-action:hover {
   color: var(--text-primary);
   background: #f4f4f5;
+}
+
+.btn-action.copied {
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
 }
 
 .pin-active {

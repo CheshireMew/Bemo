@@ -43,11 +43,11 @@
         </div>
       </article>
 
-      <article class="settings-card">
+      <article v-if="canRestoreSyncDirectory" class="settings-card">
         <h4>坚果云同步目录</h4>
-        <p>直接读取 `C:\Users\Dylan\Nutstore\1\bemo-sync` 中的最新同步快照，并覆盖恢复到当前本机数据库。</p>
+        <p>选择坚果云里的 `bemo-sync` 同步目录，读取其中最新同步快照，再覆盖恢复到当前本机数据库。</p>
         <div class="button-row">
-          <button type="button" class="secondary-btn" @click="importNutstoreSyncBackup">从坚果云同步目录恢复</button>
+          <button type="button" class="secondary-btn" @click="triggerSyncDirectoryImport">选择同步目录并恢复</button>
         </div>
       </article>
       <article class="settings-card danger-card">
@@ -69,21 +69,26 @@
     <input type="file" ref="backupFileInput" accept=".zip,.json" hidden @change="handleZipImport" />
     <input type="file" ref="markdownArchiveFileInput" accept=".zip" hidden @change="handleMarkdownArchiveImport" />
     <input type="file" ref="flomoFileInput" accept=".zip,.csv,.txt,.html" hidden @change="handleFlomoImport" />
+    <input v-if="canRestoreSyncDirectory" type="file" ref="syncDirectoryInput" hidden multiple webkitdirectory directory @change="handleSyncDirectoryImport" />
   </section>
 </template>
 
 <script setup lang="ts">
 import { useImportExport } from '../composables/useImportExport';
+import { canRestoreFromSyncDirectory } from '../domain/runtime/platformCapabilities.js';
 
 const emit = defineEmits<{
   imported: [];
 }>();
+
+const canRestoreSyncDirectory = canRestoreFromSyncDirectory();
 
 const {
   isImporting,
   flomoFileInput,
   backupFileInput,
   markdownArchiveFileInput,
+  syncDirectoryInput,
   exportBackup,
   exportMarkdownArchive,
   exportFlomo,
@@ -93,7 +98,8 @@ const {
   handleFlomoImport,
   triggerMarkdownArchiveImport,
   handleMarkdownArchiveImport,
-  importNutstoreSyncBackup,
+  triggerSyncDirectoryImport,
+  handleSyncDirectoryImport,
   clearAllExperimentData,
   resetToFirstInstallState,
 } = useImportExport(() => {
@@ -103,6 +109,7 @@ const {
 void flomoFileInput;
 void backupFileInput;
 void markdownArchiveFileInput;
+void syncDirectoryInput;
 </script>
 
 <style scoped>

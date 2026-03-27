@@ -14,7 +14,7 @@
         class="heatmap-cell"
         :class="[`level-${day.level}`, { today: day.isToday }]"
         :title="day.empty ? '' : `${day.date.toLocaleDateString()} : ${day.count} 篇笔记`"
-        @click="!day.empty && selectDate(day.date)"
+        @click="!day.empty && handleDateSelect(day.date)"
       ></div>
     </div>
     <!-- Months -->
@@ -28,6 +28,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useHeatmap } from '../../composables/useHeatmap';
 import { selectDate } from '../../store/notes';
+
+const emit = defineEmits<{
+  navigate: [];
+}>();
 
 const { heatmapData, heatmapMonths } = useHeatmap();
 const heatmapContainer = ref<HTMLElement | null>(null);
@@ -43,6 +47,11 @@ let resizeObserver: ResizeObserver | null = null;
 const handleResize = () => {
   viewportWidth.value = window.innerWidth;
   updateCellSize();
+};
+
+const handleDateSelect = (date: Date) => {
+  selectDate(date);
+  emit('navigate');
 };
 
 const updateCellSize = () => {

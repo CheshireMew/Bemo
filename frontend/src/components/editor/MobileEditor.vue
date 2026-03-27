@@ -1,8 +1,9 @@
 <template>
-  <SharedEditorCore shell="mobile" v-bind="props" @saved="emit('saved')" @cancel="emit('cancel')" />
+  <SharedEditorCore ref="editorRef" shell="mobile" v-bind="props" @saved="emit('saved')" @cancel="emit('cancel')" />
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import SharedEditorCore from './SharedEditorCore.vue';
 import type { EditorSubmitPayload } from './SharedEditorCore.vue';
 
@@ -14,6 +15,7 @@ const props = withDefaults(defineProps<{
   showCancel?: boolean;
   autosaveDraft?: boolean;
   resetOnSuccess?: boolean;
+  autoFocus?: boolean;
   submitTitle?: string;
   submitAction?: ((payload: EditorSubmitPayload) => Promise<void> | void) | null;
 }>(), {
@@ -24,9 +26,16 @@ const props = withDefaults(defineProps<{
   showCancel: false,
   autosaveDraft: true,
   resetOnSuccess: true,
+  autoFocus: false,
   submitTitle: '发送',
   submitAction: null,
 });
 
 const emit = defineEmits(['saved', 'cancel']);
+
+const editorRef = ref<InstanceType<typeof SharedEditorCore> | null>(null);
+
+defineExpose({
+  focusEditor: () => editorRef.value?.focusEditor(),
+});
 </script>

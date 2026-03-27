@@ -41,7 +41,7 @@
           'selected': d.isSelected,
           'has-notes': d.hasNotes
         }"
-        @click="selectDate(d.date)"
+        @click="handleDateSelect(d.date)"
       >{{ d.day }}</div>
     </div>
   </div>
@@ -50,6 +50,10 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount, onMounted } from 'vue';
 import { notes, selectedDate, selectDate } from '../../store/notes';
+
+const emit = defineEmits<{
+  navigate: [];
+}>();
 
 const calendarRoot = ref<HTMLElement | null>(null);
 const calendarMonth = ref(new Date());
@@ -94,6 +98,12 @@ const changePickerYear = (offset: number) => {
 const selectMonth = (month: number) => {
   calendarMonth.value = new Date(pickerYear.value, month, 1);
   showMonthPicker.value = false;
+};
+
+const handleDateSelect = (date: Date) => {
+  selectDate(date);
+  showMonthPicker.value = false;
+  emit('navigate');
 };
 
 const handleDocumentClick = (event: MouseEvent) => {

@@ -1,10 +1,10 @@
 <template>
   <div class="notes-feed">
-    <div v-if="selectedDate" class="filter-bar">
+    <div v-if="showInlineFilters && selectedDate" class="filter-bar">
       <span>筛选：{{ selectedDate.toLocaleDateString() }}</span>
       <button class="filter-clear" @click="selectedDate = null">×</button>
     </div>
-    <div v-if="selectedTag" class="filter-bar">
+    <div v-if="showInlineFilters && selectedTag" class="filter-bar">
       <span>标签：#{{ selectedTag }}</span>
       <button class="filter-clear" @click="selectedTag = null">×</button>
     </div>
@@ -18,8 +18,12 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { displayedNotes, selectedDate, selectedTag } from '../../store/notes';
+import { getProductShell } from '../../domain/runtime/shellRuntime';
 import NoteCard from './NoteCard.vue';
+
+const showInlineFilters = computed(() => getProductShell() !== 'mobile');
 </script>
 
 <style scoped>
@@ -47,5 +51,11 @@ import NoteCard from './NoteCard.vue';
   color: var(--accent-color); 
   cursor: pointer; 
   padding: 0 4px; 
+}
+
+@media (max-width: 767px) {
+  .notes-feed {
+    margin-top: 10px;
+  }
 }
 </style>

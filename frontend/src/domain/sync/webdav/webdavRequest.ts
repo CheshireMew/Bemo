@@ -1,4 +1,5 @@
 import { encodeBytesToBase64, webdavHttpRequest, type WebDavRequestInit } from './webdavHttp.js';
+import { normalizeWebDavProviderRoot } from './webdavProviders.js';
 
 const WEBDAV_RETRY_BASE_MS = 1_000;
 const WEBDAV_RETRY_MAX_MS = 10_000;
@@ -9,24 +10,8 @@ export function encodeBasicAuth(username: string, password: string) {
   return `Basic ${encodeBytesToBase64(new TextEncoder().encode(`${username}:${password}`))}`;
 }
 
-function normalizeKnownWebDavRoot(url: string) {
-  try {
-    const parsed = new URL(url);
-    if (
-      parsed.hostname === 'dav.jianguoyun.com'
-      && (parsed.pathname === '' || parsed.pathname === '/')
-    ) {
-      parsed.pathname = '/dav';
-      return parsed.toString().replace(/\/$/, '');
-    }
-  } catch {
-    return url;
-  }
-  return url;
-}
-
 export function normalizeWebDavContainer(url: string, basePath: string) {
-  const root = normalizeKnownWebDavRoot(url).replace(/\/$/, '');
+  const root = normalizeWebDavProviderRoot(url).replace(/\/$/, '');
   const path = basePath.replace(/^\/+|\/+$/g, '');
   return `${root}/${path ? `${path}` : ''}`.replace(/\/$/, '');
 }

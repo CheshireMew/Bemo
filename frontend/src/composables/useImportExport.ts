@@ -11,7 +11,7 @@ import {
   clearCurrentWorkspaceData,
   exportBackupArchive,
   exportMarkdownArchive,
-  importBackupFromSyncDirectory,
+  importBackupFromSyncDirectoryFiles,
   importBackupArchive,
   importMarkdownArchiveZip,
   resetCurrentInstallState,
@@ -21,11 +21,11 @@ import {
   shouldUseAndroidNativeImportPicker,
 } from '../domain/importExport/fileImportPicker.js';
 import { exportFlomoCsv, importFlomoArchive } from '../domain/importExport/flomoImportExport.js';
+import { canRestoreFromSyncDirectory } from '../domain/runtime/platformCapabilities.js';
 import { pushNotification } from '../store/notifications';
 import { requestSyncNow } from '../domain/sync/syncCoordinator.js';
 
 export function useImportExport(onSuccess?: () => void) {
-  const nutstoreSyncPath = 'C:\\Users\\Dylan\\Nutstore\\1\\bemo-sync';
   const isImporting = ref(false);
   const isCleaningOrphans = ref(false);
   const attachmentSummary = ref({
@@ -41,6 +41,7 @@ export function useImportExport(onSuccess?: () => void) {
   const flomoFileInput = ref<HTMLInputElement | null>(null);
   const backupFileInput = ref<HTMLInputElement | null>(null);
   const markdownArchiveFileInput = ref<HTMLInputElement | null>(null);
+  const syncDirectoryInput = ref<HTMLInputElement | null>(null);
 
   const refreshAttachmentSummary = async () => {
     try {
@@ -225,14 +226,27 @@ export function useImportExport(onSuccess?: () => void) {
     }
   };
 
-  const importNutstoreSyncBackup = async () => {
+  const triggerSyncDirectoryImport = () => {
     if (isImporting.value || isCleaningOrphans.value) return;
-    const confirmed = window.confirm(`这会用同步目录 ${nutstoreSyncPath} 中的最新快照覆盖当前本机数据。建议先导出完整备份。确定继续吗？`);
-    if (!confirmed) return;
+    if (!canRestoreFromSyncDirectory()) return;
+    syncDirectoryInput.value?.click();
+  };
 
+  const handleSyncDirectoryImport = async (event: Event) => {
+    const target = event.target as HTMLInputElement;
+    const files = target.files ? Array.from(target.files) : [];
+    if (!files.length) return;
+
+    const confirmed = window.confirm('这会用你选择的同步目录中的最新快照覆盖当前本机数据。建议先导出完整备份。确定继续吗？');
+    if (!confirmed) {
+      target.value = '';
+      return;
+    }
+
+    if (isImporting.value || isCleaningOrphans.value) return;
     isImporting.value = true;
     try {
-      const res = await importBackupFromSyncDirectory(nutstoreSyncPath);
+      const res = await importBackupFromSyncDirectoryFiles(files);
       pushNotification(`已从坚果云同步目录恢复，导入了 ${res.imported_notes} 条笔记和 ${res.imported_images} 个附件。`, 'success');
       await refreshAttachmentSummary();
       if (onSuccess) onSuccess();
@@ -241,6 +255,7 @@ export function useImportExport(onSuccess?: () => void) {
       pushNotification('同步目录恢复失败: ' + (e.response?.data?.detail || e.message), 'error');
     } finally {
       isImporting.value = false;
+      target.value = '';
     }
   };
 
@@ -305,6 +320,7 @@ export function useImportExport(onSuccess?: () => void) {
     flomoFileInput,
     backupFileInput,
     markdownArchiveFileInput,
+    syncDirectoryInput,
     exportBackup,
     exportMarkdownArchive: exportMarkdownArchiveFile,
     exportFlomo,
@@ -314,7 +330,8 @@ export function useImportExport(onSuccess?: () => void) {
     handleFlomoImport,
     triggerMarkdownArchiveImport,
     handleMarkdownArchiveImport,
-    importNutstoreSyncBackup,
+    triggerSyncDirectoryImport,
+    handleSyncDirectoryImport,
     cleanupOrphanImages,
     clearAllExperimentData,
     resetToFirstInstallState,

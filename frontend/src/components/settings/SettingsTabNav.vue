@@ -44,7 +44,7 @@ const layoutClass = computed(() => (
 }
 
 .settings-nav-sidebar {
-  width: 280px;
+  width: var(--layout-sidebar-width);
   flex-shrink: 0;
   padding: 24px 20px 24px 24px;
   flex-direction: column;

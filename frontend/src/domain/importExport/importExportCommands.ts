@@ -3,7 +3,7 @@ import { buildBackupArchiveBlob, parseBackupArchive } from './backupArchive.js';
 import { clearCurrentAppData, clearLocalReplicaState, usesRemoteAppData } from '../appStore/dataAdapter.js';
 import { downloadBlob } from './importExportShared.js';
 import { buildMarkdownArchiveBlob, importMarkdownArchive } from './markdownArchive.js';
-import { getSyncProxyToken, resolveBackendUrl } from '../../config.js';
+import { buildBackupPayloadFromSyncDirectoryFiles } from './syncDirectoryBackup.js';
 
 export async function exportBackupArchive() {
   const archive = await buildBackupArchiveBlob();
@@ -35,37 +35,8 @@ export async function importMarkdownArchiveZip(file: File) {
   return result;
 }
 
-export async function importBackupFromSyncDirectory(path: string) {
-  const url = resolveBackendUrl('/api/sync/webdav/local-backup');
-  const syncProxyToken = getSyncProxyToken();
-  if (!url) {
-    throw new Error('当前没有可用的本机同步服务地址，无法读取同步目录。');
-  }
-  if (!syncProxyToken) {
-    throw new Error('当前没有可用的同步服务 Token，无法读取同步目录。');
-  }
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${syncProxyToken}`,
-    },
-    body: JSON.stringify({ path }),
-  });
-
-  if (!response.ok) {
-    let message = `读取同步目录失败 (${response.status})`;
-    try {
-      const payload = await response.json() as { detail?: string };
-      if (payload.detail) message = payload.detail;
-    } catch {
-      // Ignore non-JSON error payloads.
-    }
-    throw new Error(message);
-  }
-
-  const payload = await response.json() as Partial<BackupPayload>;
+export async function importBackupFromSyncDirectoryFiles(files: Iterable<File>) {
+  const payload = await buildBackupPayloadFromSyncDirectoryFiles(files);
   const result = await applyBackupPayload(payload);
   if (usesRemoteAppData()) {
     await clearLocalReplicaState();

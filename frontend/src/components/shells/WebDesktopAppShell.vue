@@ -24,6 +24,8 @@
       @close="isSettingsOpen = false"
       @notesImported="onNoteSaved"
     />
+    <AiChatModal />
+    <AppImagePreviewOverlay />
     <AppNotifications />
   </div>
 </template>
@@ -31,7 +33,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
+import AiChatModal from '../AiChatModal.vue';
 import AppNotifications from '../AppNotifications.vue';
+import AppImagePreviewOverlay from '../media/AppImagePreviewOverlay.vue';
 import AppFeedContent from './shared/AppFeedContent.vue';
 import { currentView } from '../../store/ui';
 import { useViewport } from '../../composables/useViewport';
@@ -67,7 +71,7 @@ const isCompactShell = computed(() => isMobile.value || isTablet.value);
   top: 0;
   z-index: 10;
   width: 100%;
-  max-width: 760px;
+  max-width: var(--layout-content-width);
   background: var(--bg-main);
 }
 
@@ -77,7 +81,7 @@ const isCompactShell = computed(() => isMobile.value || isTablet.value);
   }
 
   .sticky-stack {
-    max-width: 720px;
+    max-width: var(--layout-content-width-compact);
   }
 }
 

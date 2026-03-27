@@ -8,6 +8,20 @@
 
 版本与 Git tag 约定见 [RELEASE_VERSIONING.md](E:/Work/Code/Bemo/RELEASE_VERSIONING.md)。
 
+## 先确认当前 Android 的产品边界
+
+不要把 Android 包理解成 Web / Desktop 的另一种壳。
+
+当前准确事实是：
+
+- Android 主运行时是 `local-backed`
+- backend 对 Android 主要用于同步、联调、代理或特定远端能力，不应被理解成 Android 的主存储依赖
+- Android 不提供“从坚果云同步目录恢复”入口
+- Android 不提供“快捷键说明”设置页
+- Android 的复制笔记、图片预览、文件打开走原生 bridge
+
+如果后面出现“为什么 Android 和桌面页结构不一样”的讨论，先按运行时边界理解，不要先按缺功能理解。
+
 ## 1. 环境要求
 
 - Android Studio

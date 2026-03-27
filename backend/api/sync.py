@@ -3,7 +3,6 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from core.paths import MAX_SYNC_BLOB_BYTES, SYNC_TOKEN
-from services.sync_directory_backup_service import build_backup_payload_from_sync_directory
 from services.sync_service import (
     ensure_sync_store,
     get_blob,
@@ -39,10 +38,6 @@ class WebDavProxyRequest(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     body: str | None = None
     bodyEncoding: str | None = None
-
-
-class SyncDirectoryImportRequest(BaseModel):
-    path: str | None = None
 
 
 def _require_sync_auth(authorization: str | None) -> None:
@@ -83,20 +78,6 @@ def sync_pull(cursor: str | None = None, limit: int = 200, authorization: str | 
 async def sync_webdav_request(payload: WebDavProxyRequest, authorization: str | None = Header(default=None)):
     _require_sync_auth(authorization)
     return await proxy_webdav_request(payload.model_dump())
-
-
-@router.post("/webdav/local-backup")
-def sync_webdav_local_backup(
-    payload: SyncDirectoryImportRequest,
-    authorization: str | None = Header(default=None),
-):
-    _require_sync_auth(authorization)
-    try:
-        return build_backup_payload_from_sync_directory(payload.path)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.head("/blobs/{blob_hash:path}")

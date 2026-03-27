@@ -10,7 +10,7 @@ import SidebarContent from '../shared/SidebarContent.vue';
 
 <style scoped>
 .sidebar {
-  width: 280px;
+  width: var(--layout-sidebar-width);
   background-color: var(--bg-sidebar);
   display: flex;
   flex-direction: column;

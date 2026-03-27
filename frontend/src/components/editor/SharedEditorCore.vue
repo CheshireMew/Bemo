@@ -46,24 +46,24 @@
 
     <div class="editor-toolbar">
       <div class="toolbar-icons" @mousedown.prevent>
-        <button class="icon-btn" :class="{ active: showPreview }" title="切换预览 (Ctrl+Shift+P)" @click="togglePreview">
+        <button class="icon-btn" :class="{ active: showPreview }" :title="actionTitle('切换预览', 'Ctrl+Shift+P')" @click="togglePreview">
           <Eye v-if="!showPreview" :size="20" />
           <PenLine v-else :size="20" />
         </button>
         <div class="divider"></div>
-        <button class="icon-btn" :class="{ active: showTagInput }" title="添加标签" @click="showTagInput = !showTagInput"><Hash :size="20" /></button>
-        <button class="icon-btn" title="上传图片" @click="triggerImageUpload"><ImageIcon :size="20" /></button>
+        <button class="icon-btn" :class="{ active: showTagInput }" :title="actionTitle('添加标签')" @click="showTagInput = !showTagInput"><Hash :size="20" /></button>
+        <button class="icon-btn" :title="actionTitle('上传图片')" @click="triggerImageUpload"><ImageIcon :size="20" /></button>
         <div class="divider"></div>
-        <button class="icon-btn" title="加粗 Ctrl+B" @click="insertBold"><Bold :size="20" /></button>
-        <button class="icon-btn" title="斜体 Ctrl+I" @click="insertItalic"><Italic :size="20" /></button>
-        <button class="icon-btn" title="删除线 Ctrl+Shift+X" @click="insertStrikethrough"><Strikethrough :size="20" /></button>
-        <button class="icon-btn" title="链接 Ctrl+K" @click="insertLink"><LinkIcon :size="20" /></button>
+        <button class="icon-btn" :title="actionTitle('加粗', 'Ctrl+B')" @click="insertBold"><Bold :size="20" /></button>
+        <button class="icon-btn" :title="actionTitle('斜体', 'Ctrl+I')" @click="insertItalic"><Italic :size="20" /></button>
+        <button class="icon-btn" :title="actionTitle('删除线', 'Ctrl+Shift+X')" @click="insertStrikethrough"><Strikethrough :size="20" /></button>
+        <button class="icon-btn" :title="actionTitle('插入链接', 'Ctrl+K')" @click="insertLink"><LinkIcon :size="20" /></button>
         <div class="divider"></div>
-        <button class="icon-btn" title="列表 Ctrl+Shift+L" @click="insertList"><List :size="20" /></button>
-        <button class="icon-btn" title="序号列表 Ctrl+Shift+O" @click="insertOrderedList"><ListOrdered :size="20" /></button>
-        <button class="icon-btn" title="清单 Ctrl+Shift+T" @click="insertChecklist"><CheckSquare :size="20" /></button>
-        <button class="icon-btn" title="代码 Ctrl+`" @click="insertCode"><Code :size="20" /></button>
-        <button class="icon-btn" title="清除格式 Ctrl+\\" @click="clearFormatting"><Eraser :size="20" /></button>
+        <button class="icon-btn" :title="actionTitle('列表', 'Ctrl+Shift+L')" @click="insertList"><List :size="20" /></button>
+        <button class="icon-btn" :title="actionTitle('序号列表', 'Ctrl+Shift+O')" @click="insertOrderedList"><ListOrdered :size="20" /></button>
+        <button class="icon-btn" :title="actionTitle('任务清单', 'Ctrl+Shift+T')" @click="insertChecklist"><CheckSquare :size="20" /></button>
+        <button class="icon-btn" :title="actionTitle('行内代码', 'Ctrl+`')" @click="insertCode"><Code :size="20" /></button>
+        <button class="icon-btn" :title="actionTitle('清除格式', 'Ctrl+\\\\')" @click="clearFormatting"><Eraser :size="20" /></button>
       </div>
 
       <div class="toolbar-action">
@@ -89,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, nextTick, onBeforeUnmount } from 'vue';
+import { ref, watch, computed, nextTick, onBeforeUnmount, onMounted } from 'vue';
 import { marked } from 'marked';
 import { settings } from '../../store/settings';
 import { useEditorDraft } from '../../composables/useEditorDraft';
@@ -125,6 +125,7 @@ const props = withDefaults(defineProps<{
   showCancel?: boolean;
   autosaveDraft?: boolean;
   resetOnSuccess?: boolean;
+  autoFocus?: boolean;
   submitTitle?: string;
   submitAction?: ((payload: EditorSubmitPayload) => Promise<void> | void) | null;
 }>(), {
@@ -136,6 +137,7 @@ const props = withDefaults(defineProps<{
   showCancel: false,
   autosaveDraft: true,
   resetOnSuccess: true,
+  autoFocus: false,
   submitTitle: '发送',
   submitAction: null,
 });
@@ -179,6 +181,11 @@ const hasUnsavedLocalChanges = computed(() => (
   || tagInput.value !== propsTagString.value
   || showTagInput.value
 ));
+const actionTitle = (label: string, shortcut?: string) => (
+  props.shell === 'mobile' || !shortcut
+    ? label
+    : `${label} (${shortcut})`
+);
 
 const {
   handleCompositionEnd,
@@ -328,6 +335,38 @@ const clearFormatting = async () => {
   }
 };
 
+const focusActiveSurface = () => {
+  if (showPreview.value) {
+    const preview = previewRef.value;
+    if (!preview) return;
+
+    preview.focus();
+    const selection = window.getSelection();
+    if (!selection) return;
+
+    const range = document.createRange();
+    range.selectNodeContents(preview);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return;
+  }
+
+  const textarea = textareaRef.value;
+  if (!textarea) return;
+
+  textarea.focus({ preventScroll: true });
+  const cursor = textarea.value.length;
+  textarea.setSelectionRange(cursor, cursor);
+};
+
+const focusEditor = async () => {
+  await nextTick();
+  requestAnimationFrame(() => {
+    focusActiveSurface();
+  });
+};
+
 const {
   isSaving,
   saveNote,
@@ -393,6 +432,15 @@ watch(imageAttachments, async (nextImages) => {
   const entries = await Promise.all(nextImages.map(async (image) => ([image.url, await resolveAttachmentUrl(image.url)] as const)));
   resolvedImageUrls.value = Object.fromEntries(entries);
 }, { immediate: true });
+
+onMounted(() => {
+  if (!props.autoFocus) return;
+  void focusEditor();
+});
+
+defineExpose({
+  focusEditor,
+});
 
 onBeforeUnmount(() => {
   if (props.autosaveDraft) return;

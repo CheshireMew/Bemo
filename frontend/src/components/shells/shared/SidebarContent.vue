@@ -1,19 +1,17 @@
 <template>
   <div class="sidebar-content">
     <UserProfile :show-close="showClose" @close="emit('close')" />
-    <MiniCalendar />
-    <Heatmap />
+    <MiniCalendar @navigate="emit('navigate')" />
+    <Heatmap @navigate="emit('navigate')" />
     <NavMenu @navigate="emit('navigate')">
       <template #taglist>
-        <TagList />
+        <TagList @navigate="emit('navigate')" />
       </template>
     </NavMenu>
-    <AiChatModal />
   </div>
 </template>
 
 <script setup lang="ts">
-import AiChatModal from '../../AiChatModal.vue';
 import UserProfile from '../../Sidebar/UserProfile.vue';
 import MiniCalendar from '../../Sidebar/MiniCalendar.vue';
 import Heatmap from '../../Sidebar/Heatmap.vue';

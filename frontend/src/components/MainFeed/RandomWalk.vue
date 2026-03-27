@@ -18,6 +18,7 @@
     
     <NoteCard 
       v-if="randomNote" 
+      :key="randomNote.note_id"
       :note="randomNote"
       isRandom
     />

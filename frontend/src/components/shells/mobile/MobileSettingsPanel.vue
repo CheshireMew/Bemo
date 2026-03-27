@@ -5,14 +5,17 @@
         <header class="settings-header">
           <div>
             <h2>设置</h2>
-            <p>移动端入口先独立，内容仍复用同一套设置 section。</p>
+            <p>管理同步、导入导出、编辑器和 AI 等功能。</p>
           </div>
           <button class="close-btn" type="button" @click="emit('close')">关闭</button>
         </header>
 
         <div class="settings-body">
           <SettingsTabNav v-model:activeTab="activeTab" :tabs="tabs" layout="mobile-tabs" />
-          <SettingsSectionOutlet :active-tab="activeTab" @notesImported="emit('notesImported')" />
+          <SettingsSectionOutlet
+            :active-tab="activeTab"
+            @notesImported="emit('notesImported')"
+          />
         </div>
       </section>
     </div>
