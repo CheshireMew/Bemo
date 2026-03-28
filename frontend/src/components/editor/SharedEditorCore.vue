@@ -157,7 +157,7 @@ const previewRef = ref<HTMLElement | null>(null);
 const editorCardRef = ref<HTMLElement | null>(null);
 const showTagInput = ref(false);
 const tagInput = ref('');
-const showPreview = ref(true);
+const showPreview = ref(props.shell !== 'mobile');
 const isComposing = ref(false);
 const draftStorageKey = `bemo.editor.draft:${props.draftKey}`;
 const placeholderText = computed(() => props.placeholder);
@@ -340,7 +340,11 @@ const focusActiveSurface = () => {
     const preview = previewRef.value;
     if (!preview) return;
 
-    preview.focus();
+    try {
+      preview.focus({ preventScroll: true });
+    } catch {
+      preview.focus();
+    }
     const selection = window.getSelection();
     if (!selection) return;
 

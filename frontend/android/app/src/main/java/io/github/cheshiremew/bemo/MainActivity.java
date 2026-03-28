@@ -42,17 +42,24 @@ public class MainActivity extends BridgeActivity {
         ViewCompat.setOnApplyWindowInsetsListener(content, (view, windowInsets) -> {
             Insets imeInsets = windowInsets.getInsets(WindowInsetsCompat.Type.ime());
             Insets systemBarInsets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
-            int keyboardInset = Math.max(0, imeInsets.bottom - systemBarInsets.bottom);
+            int keyboardInsetPx = Math.max(0, imeInsets.bottom - systemBarInsets.bottom);
+            float density = getResources().getDisplayMetrics().density;
+            int keyboardInsetDp = Math.round(keyboardInsetPx / density);
 
-            if (bridge != null && keyboardInset != lastKeyboardInset) {
-                lastKeyboardInset = keyboardInset;
+            if (bridge != null && keyboardInsetPx != lastKeyboardInset) {
+                lastKeyboardInset = keyboardInsetPx;
                 bridge.triggerWindowJSEvent(
                     "bemoKeyboardInsetChange",
-                    "{\"height\":" + keyboardInset + "}"
+                    "{\"height\":" + keyboardInsetDp + "}"
                 );
             }
 
-            return windowInsets;
+            // Consume IME insets so the system does NOT resize the WebView
+            // for the keyboard. JS handles keyboard compensation exclusively
+            // via mobileKeyboardInset to avoid double-compensation.
+            return new WindowInsetsCompat.Builder(windowInsets)
+                .setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE)
+                .build();
         });
 
         content.post(() -> ViewCompat.requestApplyInsets(content));

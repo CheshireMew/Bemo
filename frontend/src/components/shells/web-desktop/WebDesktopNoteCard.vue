@@ -15,7 +15,7 @@
           <button class="btn-action" title="与 AI 对话" @click="openNoteAiChat"><Bot :size="14" /></button>
           <button class="btn-action" :class="{ copied: copyFeedback }" :title="copyButtonTitle" :aria-label="copyButtonTitle" @click="copyNoteContent"><Copy :size="14" /></button>
           <button class="btn-action" :title="note.pinned ? '取消置顶' : '置顶'" @click="togglePin(note)"><Pin :size="14" :class="{ 'pin-active': note.pinned }" /></button>
-          <button class="btn-action" title="删除" @click="deleteNote(note.note_id)"><Trash2 :size="14" /></button>
+          <button class="btn-action" title="删除" @click="deleteNote(note)"><Trash2 :size="14" /></button>
         </template>
       </div>
     </div>

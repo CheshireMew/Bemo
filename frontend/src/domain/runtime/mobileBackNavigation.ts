@@ -5,7 +5,7 @@ import {
   selectedTag,
   clearSearch,
   clearSelectedFilters,
-} from '../../store/notes';
+} from '../../store/notes.js';
 import {
   closeAiChat,
   closeImagePreview,
@@ -21,7 +21,7 @@ import {
   isSidebarOpen,
   mobileEditingNoteId,
   setView,
-} from '../../store/ui';
+} from '../../store/ui.js';
 import { performDefaultNativeBackNavigation } from './nativePlatformBridge.js';
 import { isAndroidNativePlatform, isMobileProductShell } from './platformCapabilities.js';
 

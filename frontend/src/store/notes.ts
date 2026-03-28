@@ -10,12 +10,12 @@ import {
   searchDisplayNotes,
   togglePinned,
   updateNote,
-} from '../domain/appStore/notesAdapter';
-import type { NoteMeta } from '../domain/notes/notesTypes';
-import { setView } from './ui';
+} from '../domain/appStore/notesAdapter.js';
+import type { NoteMeta } from '../domain/notes/notesTypes.js';
+import { setView } from './ui.js';
 import { requestSyncNow } from '../domain/sync/syncCoordinator.js';
 
-export type { NoteMeta } from '../domain/notes/notesTypes';
+export type { NoteMeta } from '../domain/notes/notesTypes.js';
 
 // ==========================
 // 状态 (State)
@@ -37,7 +37,7 @@ export const sortOrder = ref<'desc' | 'asc'>('desc');
 // 收集所有去重且排序过的标签
 export const allTags = computed(() => {
   const set = new Set<string>();
-  notes.value.forEach((n) => (n.tags || []).forEach((t) => set.add(t)));
+  notes.value.forEach((n: NoteMeta) => (n.tags || []).forEach((t: string) => set.add(t)));
   return Array.from(set).sort();
 });
 
@@ -47,7 +47,7 @@ export const filteredNotes = computed(() => {
 
   if (selectedDate.value) {
     const sel = selectedDate.value;
-    result = result.filter((n) => {
+    result = result.filter((n: NoteMeta) => {
       const d = new Date(n.created_at * 1000);
       return (
         d.getFullYear() === sel.getFullYear() &&
@@ -59,7 +59,7 @@ export const filteredNotes = computed(() => {
 
   if (selectedTag.value) {
     const tag = selectedTag.value;
-    result = result.filter((n) => n.tags && n.tags.includes(tag));
+    result = result.filter((n: NoteMeta) => n.tags && n.tags.includes(tag));
   }
 
   return result;
@@ -79,10 +79,20 @@ export const displayedNotes = computed(() => {
 });
 
 function removeNoteFromVisibleCollections(noteId: string) {
-  notes.value = notes.value.filter((item) => item.note_id !== noteId);
+  notes.value = notes.value.filter((item: NoteMeta) => item.note_id !== noteId);
   if (searchResults.value !== null) {
-    searchResults.value = searchResults.value.filter((item) => item.note_id !== noteId);
+    searchResults.value = searchResults.value.filter((item: NoteMeta) => item.note_id !== noteId);
   }
+}
+
+function resolveVisibleNote(input: NoteMeta | string) {
+  if (typeof input !== 'string') {
+    return input;
+  }
+
+  return notes.value.find((item: NoteMeta) => item.note_id === input)
+    || searchResults.value?.find((item: NoteMeta) => item.note_id === input)
+    || null;
 }
 
 async function refreshVisibleNotes() {
@@ -114,14 +124,14 @@ export async function fetchNotes() {
   }
 }
 
-export async function deleteNote(noteId: string) {
+export async function deleteNote(input: NoteMeta | string) {
   const previousNotes = [...notes.value];
   const previousSearchResults = searchResults.value ? [...searchResults.value] : null;
 
   try {
-    const note = notes.value.find((item) => item.note_id === noteId);
+    const note = resolveVisibleNote(input);
     if (!note) return;
-    removeNoteFromVisibleCollections(noteId);
+    removeNoteFromVisibleCollections(note.note_id);
     const queued = await moveNoteToTrash(note);
     if (queued) requestSyncNow();
     await refreshVisibleNotes();

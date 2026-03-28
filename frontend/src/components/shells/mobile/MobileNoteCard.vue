@@ -32,7 +32,7 @@
         <Pin :size="14" :class="{ 'pin-active': note.pinned }" />
         <span>{{ note.pinned ? '取消置顶' : '置顶' }}</span>
       </button>
-      <button class="action-chip action-chip-danger" type="button" @click="deleteNote(note.note_id)">
+      <button class="action-chip action-chip-danger" type="button" @click="removeNote">
         <Trash2 :size="14" />
         <span>删除</span>
       </button>
@@ -124,6 +124,11 @@ useMobileBackHandler({
 const startEdit = () => {
   actionsOpen.value = false;
   openMobileNoteEditor(props.note.note_id);
+};
+
+const removeNote = async () => {
+  actionsOpen.value = false;
+  await deleteNote(props.note);
 };
 </script>
 
