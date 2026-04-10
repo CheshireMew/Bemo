@@ -8,7 +8,8 @@ from services.note_contract import (
     normalize_note_tags,
     now_iso,
 )
-from services.sync_store_repository import connect, ensure_sync_store
+from services.sync_store_repository import connect, ensure_sync_store, has_blob_record, get_blob_record
+from services import app_store_repository
 
 
 def apply_remote_change(change: dict[str, Any]) -> dict[str, Any]:
@@ -59,13 +60,8 @@ def _apply_create(
 ) -> dict[str, Any]:
     if current and not current["deleted_at"]:
         return {"status": "conflict", "operation_id": operation_id, "reason": "note_exists"}
-    content = str(payload.get("content") or "")
-    tags = normalize_note_tags(payload.get("tags"))
-    attachments = normalize_note_attachments(payload.get("attachments"))
-    pinned = bool(payload.get("pinned", False))
-    created_at = str(payload.get("created_at") or now_iso())
-    title = derive_note_title(content)
     revision = max(1, int(payload.get("revision") or 1))
+    normalized = _normalize_note_payload(payload, current)
     conn.execute(
         """
         INSERT OR REPLACE INTO notes_current (
@@ -75,25 +71,20 @@ def _apply_create(
         """,
         (
             note_id,
-            str(payload.get("filename") or ""),
-            title,
-            content,
-            json.dumps(tags, ensure_ascii=False),
-            json.dumps(attachments, ensure_ascii=False),
-            1 if pinned else 0,
+            normalized["filename"],
+            normalized["title"],
+            normalized["content"],
+            json.dumps(normalized["tags"], ensure_ascii=False),
+            json.dumps(normalized["attachments"], ensure_ascii=False),
+            1 if normalized["pinned"] else 0,
             revision,
-            created_at,
+            normalized["created_at"],
             now_iso(),
             operation_id,
             device_id,
         ),
     )
-    return _applied_result(change, note_id, revision, {
-        **payload,
-        "tags": tags,
-        "attachments": attachments,
-        "revision": revision,
-    })
+    return _applied_result(change, note_id, revision, {**normalized, "revision": revision})
 
 
 def _apply_update(
@@ -107,25 +98,20 @@ def _apply_update(
     current_revision: int,
     base_revision: int | None,
 ) -> dict[str, Any]:
-    content = str(payload.get("content") or "")
+    normalized = _normalize_note_payload(payload, current)
     current_tags = _current_tags(current)
-    next_tags = normalize_note_tags(payload.get("tags")) if payload.get("tags") is not None else current_tags
+    next_tags = normalized["tags"]
     if (
         base_revision is not None
         and base_revision != current_revision
         and (
-            content != str(current["content"])
+            normalized["content"] != str(current["content"])
             or next_tags != current_tags
         )
     ):
         return _revision_conflict(operation_id, note_id, current_revision)
 
     next_revision = current_revision + 1
-    attachments = (
-        normalize_note_attachments(payload.get("attachments"))
-        if payload.get("attachments") is not None
-        else _current_attachments(current)
-    )
     conn.execute(
         """
         UPDATE notes_current
@@ -133,9 +119,9 @@ def _apply_update(
         WHERE note_id = ?
         """,
         (
-            content,
+            normalized["content"],
             json.dumps(next_tags, ensure_ascii=False),
-            json.dumps(attachments, ensure_ascii=False),
+            json.dumps(normalized["attachments"], ensure_ascii=False),
             next_revision,
             now_iso(),
             operation_id,
@@ -143,12 +129,7 @@ def _apply_update(
             note_id,
         ),
     )
-    return _applied_result(change, note_id, next_revision, {
-        **payload,
-        "tags": next_tags,
-        "attachments": attachments,
-        "revision": next_revision,
-    })
+    return _applied_result(change, note_id, next_revision, {**normalized, "revision": next_revision})
 
 
 def _apply_patch(
@@ -166,22 +147,24 @@ def _apply_patch(
         return _revision_conflict(operation_id, note_id, current_revision)
 
     next_revision = current_revision + 1
-    pinned = payload.get("pinned")
-    tags = payload.get("tags")
-    next_pinned = int(bool(pinned)) if pinned is not None else int(current["pinned"] or 0)
-    next_tags_json = json.dumps(tags if tags is not None else json.loads(current["tags_json"]), ensure_ascii=False)
+    normalized = _normalize_note_payload(payload, current)
     conn.execute(
         """
         UPDATE notes_current
         SET pinned = ?, tags_json = ?, revision = ?, updated_at = ?, last_operation_id = ?, last_device_id = ?
         WHERE note_id = ?
         """,
-        (next_pinned, next_tags_json, next_revision, now_iso(), operation_id, device_id, note_id),
+        (
+            1 if normalized["pinned"] else 0,
+            json.dumps(normalized["tags"], ensure_ascii=False),
+            next_revision,
+            now_iso(),
+            operation_id,
+            device_id,
+            note_id,
+        ),
     )
-    return _applied_result(change, note_id, next_revision, {
-        **payload,
-        "revision": next_revision,
-    })
+    return _applied_result(change, note_id, next_revision, {**normalized, "revision": next_revision})
 
 
 def _apply_trash(
@@ -320,9 +303,71 @@ def _applied_result(
     revision: int,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    _project_to_app_store(str(change.get("type") or ""), note_id, payload, revision)
     stored_change = dict(change)
     stored_change["payload"] = payload
     return {"status": "applied", "note_id": note_id, "revision": revision, "change": stored_change}
+
+
+def _project_to_app_store(
+    change_type: str,
+    note_id: str,
+    payload: dict[str, Any],
+    revision: int,
+) -> None:
+    if not note_id:
+        return
+    if change_type == "note.purge":
+        app_store_repository.delete_note(note_id)
+        return
+
+    attachments = normalize_note_attachments(payload.get("attachments"))
+    _ensure_app_attachments(attachments)
+
+    content = str(payload.get("content") or "")
+    created_at = str(payload.get("created_at") or now_iso())
+    deleted_at = now_iso() if change_type == "note.trash" else None
+    app_store_repository.upsert_note(
+        {
+            "note_id": note_id,
+            "filename": str(payload.get("filename") or ""),
+            "title": derive_note_title(content),
+            "content": content,
+            "tags_json": json.dumps(normalize_note_tags(payload.get("tags")), ensure_ascii=False),
+            "attachments_json": json.dumps(attachments, ensure_ascii=False),
+            "pinned": bool(payload.get("pinned")),
+            "revision": revision,
+            "created_at": created_at,
+            "updated_at": now_iso(),
+            "deleted_at": deleted_at,
+        }
+    )
+
+
+def _ensure_app_attachments(attachments: list[dict[str, Any]] | None) -> None:
+    if not attachments:
+        return
+    for item in attachments:
+        filename = str(item.get("filename") or "")
+        blob_hash = str(item.get("blob_hash") or "")
+        mime_type = str(item.get("mime_type") or "application/octet-stream")
+        if not filename or not blob_hash:
+            continue
+
+        if not app_store_repository.has_blob_record(blob_hash):
+            if has_blob_record(blob_hash):
+                data = get_blob_record(blob_hash)
+                app_store_repository.put_blob_record(blob_hash, data)
+
+        record = app_store_repository.get_attachment_record(filename)
+        size = 0
+        if not record or record.get("blob_hash") != blob_hash:
+            if app_store_repository.has_blob_record(blob_hash):
+                data = app_store_repository.get_blob_record(blob_hash)
+                size = len(data)
+            app_store_repository.upsert_attachment_record(
+                filename, blob_hash, mime_type, size, now_iso()
+            )
 
 
 def _revision_conflict(operation_id: str, note_id: str, current_revision: int) -> dict[str, Any]:

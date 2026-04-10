@@ -77,6 +77,29 @@ async function stopServer(child: ReturnType<typeof spawn>) {
   spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
     stdio: 'ignore',
   });
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(() => resolve(), 5_000);
+    child.once('close', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+async function removeDirWithRetry(targetPath: string) {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      rmSync(targetPath, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
+    }
+  }
+
+  throw lastError;
 }
 
 export async function withBackendServer<T>(
@@ -123,6 +146,6 @@ export async function withBackendServer<T>(
     });
   } finally {
     await stopServer(child);
-    rmSync(dataDir, { recursive: true, force: true });
+    await removeDirWithRetry(dataDir);
   }
 }

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "build:android": "vue-tsc -b && vite build --mode android",
-    "test:unit": "powershell -Command \"if (Test-Path .test-dist) { Remove-Item .test-dist -Recurse -Force }\" && tsc -p tsconfig.tests.json && node .test-dist/tests/runAll.js",
+    "test:unit": "node -e \"require('node:fs').rmSync('.test-dist', { recursive: true, force: true })\" && tsc -p tsconfig.tests.json && node .test-dist/tests/runAll.js",
     "preview": "vite preview",
     "tauri": "tauri",
     "android:doctor": "powershell -ExecutionPolicy Bypass -File .\\scripts\\check-android-env.ps1",
