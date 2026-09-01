@@ -2,7 +2,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from core.paths import MAX_SYNC_BLOB_BYTES, SYNC_TOKEN
+from core.paths import MAX_SYNC_BLOB_BYTES, SYNC_TOKEN, has_configured_sync_token
 from services.sync_service import (
     ensure_sync_store,
     get_blob,
@@ -42,7 +42,7 @@ class WebDavProxyRequest(BaseModel):
 
 def _require_sync_auth(authorization: str | None) -> None:
     expected = f"Bearer {SYNC_TOKEN}".strip()
-    if not authorization or authorization.strip() != expected:
+    if not has_configured_sync_token() or not authorization or authorization.strip() != expected:
         raise HTTPException(status_code=401, detail="Unauthorized sync request")
 
 

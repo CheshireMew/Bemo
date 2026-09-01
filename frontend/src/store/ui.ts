@@ -56,10 +56,9 @@ function applyTheme() {
 export type ViewMode = 'all' | 'trash' | 'random';
 export const currentView = ref<ViewMode>('all');
 export const randomWalkNonce = ref(0);
-export const isAiChatOpen = ref(false);
-export const aiChatNoteId = ref<string | null>(null);
-export const aiChatNoteLabel = ref('');
 export const isMobileSettingsOpen = ref(false);
+export const requestedSettingsTab = ref<string | null>(null);
+export const settingsRequestNonce = ref(0);
 export const isMobileComposeOpen = ref(false);
 export const mobileEditingNoteId = ref<string | null>(null);
 export type ImagePreviewItem = {
@@ -79,20 +78,13 @@ export function openRandomWalk() {
   randomWalkNonce.value += 1;
 }
 
-export function openAiChat(options?: { noteId?: string | null; noteLabel?: string }) {
-  aiChatNoteId.value = options?.noteId || null;
-  aiChatNoteLabel.value = options?.noteLabel?.trim() || '';
-  isAiChatOpen.value = true;
-}
-
-export function closeAiChat() {
-  isAiChatOpen.value = false;
-  aiChatNoteId.value = null;
-  aiChatNoteLabel.value = '';
-}
-
 export function openMobileSettings() {
   isMobileSettingsOpen.value = true;
+}
+
+export function requestSettingsTab(tab: string) {
+  requestedSettingsTab.value = tab;
+  settingsRequestNonce.value += 1;
 }
 
 export function closeMobileSettings() {

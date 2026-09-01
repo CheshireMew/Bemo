@@ -1,5 +1,8 @@
 <template>
-  <div class="note-card mobile-note-card" :class="{ pinned: note.pinned }">
+  <div
+    class="note-card mobile-note-card"
+    :class="{ pinned: note.pinned }"
+  >
     <div class="note-header">
       <span class="note-date">
         <Pin v-if="note.pinned" class="note-date-pin" :size="13" />
@@ -7,35 +10,16 @@
       </span>
       <div class="note-actions">
         <template v-if="isTrash">
-          <button class="btn-action btn-restore" title="恢复" @click="emit('restore')"><RotateCcw :size="14" /></button>
-          <button class="btn-action" title="永久删除" @click="emit('permanentDelete')"><Trash2 :size="14" /></button>
+          <button class="btn-action btn-restore" type="button" title="恢复" aria-label="恢复笔记" @click="emit('restore')"><RotateCcw :size="16" /></button>
+          <button class="btn-action" type="button" title="永久删除" aria-label="永久删除笔记" @click="emit('permanentDelete')"><Trash2 :size="16" /></button>
         </template>
         <template v-else>
-          <button class="btn-action" title="编辑" @click="startEdit"><Pencil :size="14" /></button>
-          <button class="btn-action" :title="actionsOpen ? '收起操作' : '更多操作'" @click="actionsOpen = !actionsOpen">
-            <MoreHorizontal :size="16" />
-          </button>
+          <button class="btn-action" type="button" title="编辑" aria-label="编辑笔记" @click="startEdit"><Pencil :size="17" /></button>
+          <button class="btn-action" type="button" :class="{ copied: copyFeedback }" :title="copyButtonTitle" :aria-label="copyButtonTitle" @click="copyNoteContent"><Copy :size="17" /></button>
+          <button class="btn-action" type="button" :title="note.pinned ? '取消置顶' : '置顶'" :aria-label="note.pinned ? '取消置顶' : '置顶笔记'" @click="togglePin(note)"><Pin :size="17" :class="{ 'pin-active': note.pinned }" /></button>
+          <button class="btn-action" type="button" title="移到回收站" aria-label="将笔记移到回收站" @click="removeNote"><Trash2 :size="17" /></button>
         </template>
       </div>
-    </div>
-
-    <div v-if="!isTrash && actionsOpen && !isEditing" class="action-sheet">
-      <button class="action-chip" type="button" @click="openNoteAiChat">
-        <Bot :size="14" />
-        <span>AI</span>
-      </button>
-      <button class="action-chip" :class="{ copied: copyFeedback }" type="button" @click="copyNoteContent">
-        <Copy :size="14" />
-        <span>{{ copyActionLabel }}</span>
-      </button>
-      <button class="action-chip" type="button" @click="togglePin(note)">
-        <Pin :size="14" :class="{ 'pin-active': note.pinned }" />
-        <span>{{ note.pinned ? '取消置顶' : '置顶' }}</span>
-      </button>
-      <button class="action-chip action-chip-danger" type="button" @click="removeNote">
-        <Trash2 :size="14" />
-        <span>删除</span>
-      </button>
     </div>
 
     <SharedNoteCardBody
@@ -59,19 +43,17 @@
       :open="isEditSheetOpen"
       :note="note"
       @close="closeMobileNoteEditor"
-      @saved="actionsOpen = false"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRef, watch } from 'vue';
-import { Bot, Copy, MoreHorizontal, Pencil, Pin, RotateCcw, Trash2 } from 'lucide-vue-next';
+import { computed, toRef } from 'vue';
+import { Copy, Pencil, Pin, RotateCcw, Trash2 } from 'lucide-vue-next';
 import SharedNoteCardBody from '../../MainFeed/note-card/SharedNoteCardBody.vue';
 import MobileNoteEditSheet from './MobileNoteEditSheet.vue';
 import type { NoteMeta } from '../../../store/notes';
 import { deleteNote, togglePin } from '../../../store/notes';
-import { useMobileBackHandler } from '../../../composables/useMobileBackHandler';
 import { formatNoteDate, useNoteCard } from '../../../composables/useNoteCard';
 import { closeMobileNoteEditor, mobileEditingNoteId, openMobileNoteEditor } from '../../../store/ui';
 
@@ -85,49 +67,29 @@ const emit = defineEmits<{
   permanentDelete: [];
 }>();
 
-const actionsOpen = ref(false);
 const isEditSheetOpen = computed(() => mobileEditingNoteId.value === props.note.note_id);
 const noop = () => {};
 
 const {
-  isEditing,
   renderedHtml,
   resolvedImageUrls,
   resolvedAttachmentUrls,
   copyFeedback,
-  copyActionLabel,
+  copyButtonTitle,
   imageAttachments,
   audioAttachments,
   videoAttachments,
   fileAttachments,
-  openNoteAiChat,
   copyNoteContent,
   openImagePreview,
   openFileAttachment,
 } = useNoteCard(toRef(props, 'note'));
 
-watch(isEditing, (editing) => {
-  if (editing) {
-    actionsOpen.value = false;
-  }
-});
-
-useMobileBackHandler({
-  id: `mobile-note-actions:${props.note.note_id}`,
-  priority: 620,
-  enabled: computed(() => Boolean(actionsOpen.value && !props.isTrash && !isEditSheetOpen.value)),
-  dismiss: () => {
-    actionsOpen.value = false;
-  },
-});
-
 const startEdit = () => {
-  actionsOpen.value = false;
   openMobileNoteEditor(props.note.note_id);
 };
 
 const removeNote = async () => {
-  actionsOpen.value = false;
   await deleteNote(props.note);
 };
 </script>
@@ -136,7 +98,7 @@ const removeNote = async () => {
 .note-card {
   background: var(--bg-card);
   border-radius: var(--radius-lg);
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--border-color);
   transition: border-color 0.2s;
 }
@@ -146,12 +108,13 @@ const removeNote = async () => {
 }
 
 .note-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 10px;
-  font-size: 0.8rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+  font-size: var(--font-size-small);
+  font-weight: 400;
   color: var(--text-secondary);
 }
 
@@ -160,7 +123,12 @@ const removeNote = async () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.76rem;
+  font-size: var(--font-size-caption);
+  font-weight: 400;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .note-date-pin {
@@ -170,19 +138,25 @@ const removeNote = async () => {
 
 .note-actions {
   display: flex;
-  gap: 4px;
+  gap: 0;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .btn-action {
   background: none;
   border: none;
-  color: #a1a1aa;
+  color: var(--text-secondary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  width: 38px;
+  height: 38px;
+  min-width: 38px !important;
+  min-height: 38px !important;
+  padding: 0;
+  border-radius: 12px;
   display: flex;
   align-items: center;
+  justify-content: center;
   transition: all 0.15s;
 }
 
@@ -191,37 +165,9 @@ const removeNote = async () => {
   background: #f4f4f5;
 }
 
-.action-sheet {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0 0 12px;
-}
-
-.action-chip {
-  border: 1px solid var(--border-color, #e4e4e7);
-  border-radius: 12px;
-  background: var(--bg-main, #f8fafc);
-  color: var(--text-primary);
-  padding: 10px 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.action-chip-danger {
-  color: #b91c1c;
-}
-
-.action-chip.copied {
+.btn-action.copied {
   color: var(--accent-color, #31d279);
-  border-color: color-mix(in srgb, var(--accent-color, #31d279) 45%, var(--border-color, #e4e4e7));
-  background: color-mix(in srgb, var(--accent-color, #31d279) 12%, var(--bg-main, #f8fafc));
+  background: color-mix(in srgb, var(--accent-color, #31d279) 12%, transparent);
 }
 
 .pin-active {

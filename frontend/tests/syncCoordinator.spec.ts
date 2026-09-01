@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { setRuntimeConfigOverride } from '../src/config.js';
 
 import { listLocalNotes } from '../src/domain/notes/localNoteQueries.js';
 import { defaultSettings } from '../src/domain/settings/defaultSettings.js';
@@ -10,6 +11,7 @@ import { getSyncState } from '../src/domain/sync/syncStatusBus.js';
 import { installMemoryIndexedDb } from './memoryIndexedDb.js';
 
 installMemoryIndexedDb();
+setRuntimeConfigOverride({ appStorageMode: 'local' });
 
 function resetSyncSettings() {
   Object.assign(settings.sync, structuredClone(defaultSettings.sync), {

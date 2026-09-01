@@ -165,7 +165,7 @@ async function handleRun() {
 .diagnostics-header p {
   margin: 6px 0 0;
   color: var(--text-secondary, #71717a);
-  font-size: 0.92rem;
+  font-size: var(--font-size-supporting);
   line-height: 1.6;
 }
 
@@ -215,7 +215,7 @@ async function handleRun() {
   flex-wrap: wrap;
   gap: 10px;
   justify-content: flex-end;
-  font-size: 0.88rem;
+  font-size: var(--font-size-small);
   font-weight: 700;
 }
 
@@ -236,7 +236,7 @@ async function handleRun() {
   flex-wrap: wrap;
   gap: 12px 18px;
   color: var(--text-secondary, #71717a);
-  font-size: 0.86rem;
+  font-size: var(--font-size-small);
 }
 
 .diagnostics-list {
@@ -280,7 +280,8 @@ async function handleRun() {
 
 .diagnostic-phase {
   color: var(--text-secondary, #71717a);
-  font-size: 0.78rem;
+  font-size: var(--font-size-caption);
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -294,7 +295,7 @@ async function handleRun() {
   flex-shrink: 0;
   border-radius: 999px;
   padding: 4px 10px;
-  font-size: 0.8rem;
+  font-size: var(--font-size-caption);
   font-weight: 700;
 }
 
@@ -326,7 +327,7 @@ async function handleRun() {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 0.88rem;
+  font-size: var(--font-size-small);
 }
 
 @media (max-width: 768px) {

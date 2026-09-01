@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
-import { renderMarkdownToHtml } from '../src/utils/markdownRenderer.js';
+import { JSDOM } from 'jsdom';
+import { setRuntimeConfigOverride } from '../src/config.js';
 import { clearAttachmentUrlCache, resolveAttachmentUrl } from '../src/domain/attachments/attachmentUrlResolver.js';
 import {
   getAttachmentBlob,
@@ -14,6 +15,10 @@ import { collectSyncAttachments, ensureLocalAttachment } from '../src/domain/att
 import { installMemoryIndexedDb } from './memoryIndexedDb.js';
 
 installMemoryIndexedDb();
+setRuntimeConfigOverride({ appStorageMode: 'local' });
+const dom = new JSDOM('<!doctype html><html><body></body></html>');
+Object.assign(globalThis, { window: dom.window, document: dom.window.document });
+const { renderMarkdownToHtml } = await import('../src/utils/markdownRenderer.js');
 
 let objectUrlCounter = 0;
 const revokedUrls: string[] = [];
@@ -63,8 +68,10 @@ async function testResolveAttachmentUrlPrefersLocalBlob() {
 
 async function testResolveAttachmentUrlDoesNotFallbackWithoutBackendConfig() {
   await resetDb();
+  setRuntimeConfigOverride({ appStorageMode: 'backend', apiBase: '' });
   const url = await resolveAttachmentUrl('/images/missing.png');
   assert.equal(url, '');
+  setRuntimeConfigOverride({ appStorageMode: 'local' });
 }
 
 async function testResolveAttachmentUrlSupportsDraftAttachmentBlobs() {
@@ -162,3 +169,4 @@ await testCollectSyncAttachmentsPrefersAttachmentRefsForKnownNote();
 await testResolveAttachmentUrlRefreshesCachedObjectUrlAfterOverwrite();
 
 console.log('attachmentUrls.spec passed');
+dom.window.close();

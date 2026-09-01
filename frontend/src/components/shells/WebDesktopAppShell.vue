@@ -12,7 +12,6 @@
         />
         <WebDesktopComposerShell
           v-if="currentView !== 'trash' && currentView !== 'random'"
-          @saved="onNoteSaved"
         />
       </div>
 
@@ -22,22 +21,20 @@
     <WebDesktopSettingsPanel
       :open="isSettingsOpen"
       @close="isSettingsOpen = false"
-      @notesImported="onNoteSaved"
+      @notesImported="onNotesImported"
     />
-    <AiChatModal />
     <AppImagePreviewOverlay />
     <AppNotifications />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
-import AiChatModal from '../AiChatModal.vue';
 import AppNotifications from '../AppNotifications.vue';
 import AppImagePreviewOverlay from '../media/AppImagePreviewOverlay.vue';
 import AppFeedContent from './shared/AppFeedContent.vue';
-import { currentView } from '../../store/ui';
+import { currentView, settingsRequestNonce } from '../../store/ui';
 import { useViewport } from '../../composables/useViewport';
 import { useAppBootstrap } from '../../composables/useAppBootstrap';
 import WebDesktopComposerShell from './web-desktop/WebDesktopComposerShell.vue';
@@ -49,9 +46,13 @@ import WebDesktopTopbar from './web-desktop/WebDesktopTopbar.vue';
 const isSettingsOpen = ref(false);
 const isSidebarOpen = ref(false);
 const { isMobile, isTablet } = useViewport();
-const { onNoteSaved } = useAppBootstrap();
+const { onNotesImported } = useAppBootstrap();
 
 const isCompactShell = computed(() => isMobile.value || isTablet.value);
+
+watch(settingsRequestNonce, () => {
+  isSettingsOpen.value = true;
+});
 </script>
 
 <style scoped>
@@ -82,6 +83,7 @@ const isCompactShell = computed(() => isMobile.value || isTablet.value);
 
   .sticky-stack {
     max-width: var(--layout-content-width-compact);
+    margin-inline: auto;
   }
 }
 

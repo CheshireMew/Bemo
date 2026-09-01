@@ -5,6 +5,9 @@ __pycache__/
 *.py[cod]
 backend/tests/.tmp/
 backend/venv/
+/venv/
+/frontend/.npm-cache/
+*.htpasswd
 backend/build/
 backend/dist/
 frontend/src-tauri/target/

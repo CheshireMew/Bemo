@@ -4,9 +4,6 @@ export const defaultSettings: AppSettings = {
   importExport: {
     lastSection: 'export',
   },
-  aiPrompts: {
-    presets: [],
-  },
   editor: {
     autoSaveEnabled: true,
     autoSaveDelaySec: 3,
@@ -15,16 +12,6 @@ export const defaultSettings: AppSettings = {
     markdownBreaks: true,
     preferredMode: 'rich-text',
     copyFormat: 'rich-text',
-  },
-  ai: {
-    enabled: false,
-    provider: 'openai',
-    baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4o-mini',
-    systemPrompt: '',
-    apiKey: '',
-    hasApiKey: false,
-    maskedApiKey: '',
   },
   sync: {
     mode: 'local',

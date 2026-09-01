@@ -1,19 +1,17 @@
 import { clearBackendAppStorage } from '../attachments/backendAttachmentsApi.js';
 import {
   getAllAttachmentBlobRecords,
-  putAttachmentBlob,
 } from '../attachments/blobStorage.js';
-import { getReferencedAttachmentFilenames, replaceNoteAttachmentRefsForScope } from '../attachments/attachmentRefStorage.js';
+import { getReferencedAttachmentFilenames } from '../attachments/attachmentRefStorage.js';
 import { extractAttachmentFilename, extractAttachmentUrlsFromContent } from '../attachments/attachmentLinks.js';
 import { clearAttachmentUrlCache } from '../attachments/attachmentUrlResolver.js';
-import { openIndexedDb } from '../storage/indexedDb.js';
+import { withIndexedDb } from '../storage/transactions.js';
+import { extractAttachmentFilenames } from '../attachments/attachmentRefParser.js';
+import { validateBackupPayload } from '../importExport/backupValidation.js';
 import { shouldUseBackendAppStore } from '../runtime/appStoreRuntime.js';
-import { getCachedNotes, setCachedNotes } from '../notes/notesStorage.js';
-import { getTrashNotes, setTrashNotes } from '../notes/trashStorage.js';
+import { getCachedNotes } from '../notes/notesStorage.js';
+import { getTrashNotes } from '../notes/trashStorage.js';
 import type { NoteMeta } from '../notes/notesTypes.js';
-import { clearConflicts } from '../sync/conflictStorage.js';
-import { clearMutationLog } from '../sync/mutationLogStorage.js';
-import { clearRemoteSyncProgressState } from '../sync/syncStateStorage.js';
 import { applyBackendBackupPayload, buildBackendBackupPayload } from '../importExport/backendImportExport.js';
 import type { BackupAttachment, BackupPayload } from '../importExport/backupPayload.js';
 
@@ -23,7 +21,7 @@ export function usesRemoteAppData() {
 
 export function getClearCurrentDataPrompt() {
   return shouldUseBackendAppStore()
-    ? '这会清空当前主存储里的所有笔记、回收站、附件和同步残留，并删除本机缓存，仅保留设置。确定继续吗？'
+    ? '这会永久删除后端主存储中的所有笔记、回收站、附件和同步残留，并清理本机缓存，仅保留设置。使用同一后端的其他设备也会受到影响。建议先导出完整备份。'
     : '这会清空本地所有笔记、回收站、附件和同步队列，仅保留设置。确定继续吗？';
 }
 
@@ -60,17 +58,6 @@ async function serializeLocalAttachmentBlobs(notes: NoteMeta[], trash: NoteMeta[
     })));
 }
 
-async function restoreLocalAttachmentBlobs(attachments: BackupAttachment[]): Promise<number> {
-  for (const attachment of attachments) {
-    await putAttachmentBlob({
-      filename: attachment.filename,
-      blob: new Blob([Uint8Array.from(attachment.data)], { type: attachment.mime_type || 'application/octet-stream' }),
-      mimeType: attachment.mime_type,
-    });
-  }
-  return attachments.length;
-}
-
 async function buildLocalBackupPayload(): Promise<BackupPayload> {
   const [notes, trash] = await Promise.all([
     getCachedNotes(),
@@ -87,34 +74,27 @@ async function buildLocalBackupPayload(): Promise<BackupPayload> {
 }
 
 async function applyLocalBackupPayload(payload: Partial<BackupPayload>) {
-  const notes = Array.isArray(payload.notes) ? payload.notes : [];
-  const trash = Array.isArray(payload.trash) ? payload.trash : [];
-  const attachments = (payload.version === 2 || payload.version === 3) && Array.isArray(payload.attachments)
-    ? payload.attachments.filter((item): item is BackupAttachment => (
-      Boolean(item)
-      && typeof item.filename === 'string'
-      && typeof item.mime_type === 'string'
-      && Array.isArray(item.data)
-    ))
-    : [];
-
-  await setCachedNotes(notes);
-  await setTrashNotes(trash);
-  await Promise.all([
-    replaceNoteAttachmentRefsForScope('active', notes),
-    replaceNoteAttachmentRefsForScope('trash', trash),
-  ]);
-  const importedImages = await restoreLocalAttachmentBlobs(attachments);
-  await clearMutationLog();
-  await clearConflicts();
-  await Promise.all([
-    clearRemoteSyncProgressState('server'),
-    clearRemoteSyncProgressState('webdav'),
-  ]);
+  const { notes, trash, attachments } = validateBackupPayload(payload);
+  const blobs = attachments.map(item => ({ filename: item.filename, mime_type: item.mime_type,
+    blob: new Blob([Uint8Array.from(item.data)], { type: item.mime_type }), updatedAt: Date.now() }));
+  const stores = ['cachedNotes', 'trashNotes', 'attachmentBlobs', 'draftAttachmentBlobs', 'attachmentRefs', 'blobIndex', 'mutationLog', 'conflicts', 'syncState'];
+  await withIndexedDb(stores, 'readwrite', tx => {
+    for (const name of stores) if (name !== 'syncState') tx.objectStore(name).clear();
+    notes.forEach(note => tx.objectStore('cachedNotes').put(note));
+    trash.forEach(note => tx.objectStore('trashNotes').put(note));
+    blobs.forEach(blob => tx.objectStore('attachmentBlobs').put(blob));
+    for (const [scope, items] of [['active', notes], ['trash', trash]] as const) {
+      for (const note of items) for (const filename of extractAttachmentFilenames(note.content)) {
+        tx.objectStore('attachmentRefs').put({ id: `note:${note.note_id}:${filename}`, owner_type: 'note', owner_id: note.note_id, note_id: note.note_id, filename, scope, updatedAt: Date.now() });
+      }
+    }
+    for (const target of ['server', 'webdav']) for (const suffix of ['cursor', 'last_sync_at']) tx.objectStore('syncState').delete(`${target}_${suffix}`);
+  });
+  clearAttachmentUrlCache();
 
   return {
     imported_notes: notes.length,
-    imported_images: importedImages,
+    imported_images: attachments.length,
     imported_note_records: [],
   };
 }
@@ -126,9 +106,7 @@ export async function buildBackupPayloadForCurrentStore(): Promise<BackupPayload
 }
 
 export async function applyBackupPayloadToCurrentStore(payload: Partial<BackupPayload>) {
-  if (payload.format !== 'bemo-backup' || (payload.version !== 1 && payload.version !== 2 && payload.version !== 3)) {
-    throw new Error('不支持的备份格式，请选择 Bemo 导出的 JSON 备份文件。');
-  }
+  validateBackupPayload(payload);
 
   if (shouldUseBackendAppStore()) {
     const result = await applyBackendBackupPayload(payload);
@@ -143,8 +121,7 @@ export async function applyBackupPayloadToCurrentStore(payload: Partial<BackupPa
 }
 
 export async function clearLocalReplicaState() {
-  const db = await openIndexedDb();
-  const tx = db.transaction([
+  await withIndexedDb([
     'cachedNotes',
     'trashNotes',
     'mutationLog',
@@ -154,7 +131,7 @@ export async function clearLocalReplicaState() {
     'attachmentBlobs',
     'draftAttachmentBlobs',
     'attachmentRefs',
-  ], 'readwrite');
+  ], 'readwrite', tx => {
 
   tx.objectStore('cachedNotes').clear();
   tx.objectStore('trashNotes').clear();
@@ -166,8 +143,6 @@ export async function clearLocalReplicaState() {
   tx.objectStore('draftAttachmentBlobs').clear();
   tx.objectStore('attachmentRefs').clear();
 
-  await new Promise<void>((resolve) => {
-    tx.oncomplete = () => resolve();
   });
 
   clearAttachmentUrlCache();

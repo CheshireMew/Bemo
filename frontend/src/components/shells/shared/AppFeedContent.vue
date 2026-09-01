@@ -24,6 +24,7 @@ import { currentView } from '../../../store/ui';
 @media (max-width: 1023px) {
   .feed-container {
     max-width: var(--layout-content-width-compact);
+    margin-inline: auto;
   }
 }
 

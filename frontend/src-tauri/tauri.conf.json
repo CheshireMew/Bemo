@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Bemo",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.cheshire.bemo",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -15,6 +15,8 @@
         "title": "Bemo Notes",
         "width": 800,
         "height": 600,
+        "minWidth": 360,
+        "minHeight": 560,
         "resizable": true,
         "fullscreen": false
       }
@@ -32,7 +34,6 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ],
-    "externalBin": ["bemo-api"]
+    ]
   }
 }

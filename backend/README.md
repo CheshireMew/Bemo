@@ -32,8 +32,8 @@ Mobile 主存储在本地，所以它不是通过 backend 才能单机运行。
 
 仓库根目录的开发脚本默认会一起启动 frontend 和 backend：
 
-- [start-dev.ps1](E:/Work/Code/Bemo/start-dev.ps1)
-- [start-dev.bat](E:/Work/Code/Bemo/start-dev.bat)
+- [start-dev.ps1](../start-dev.ps1)
+- [start-dev.bat](../start-dev.bat)
 
 如果只想单独启动 backend：
 
@@ -64,4 +64,4 @@ Mobile 主存储在本地，所以它不是通过 backend 才能单机运行。
 - 同步服务
 - 网页端代理桥接
 
-更完整的当前架构说明请看 [CURRENT_ARCHITECTURE.md](E:/Work/Code/Bemo/CURRENT_ARCHITECTURE.md)。
+更完整的当前架构说明请看 [CURRENT_ARCHITECTURE.md](../CURRENT_ARCHITECTURE.md)。依赖准备、桌面后端入口与网络部署见 [运维说明](../docs/operations.md)。本地启动默认仅监听回环地址；网络部署请使用经过鉴权的代理，不要直接公开 app API。

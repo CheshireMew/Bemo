@@ -1,6 +1,5 @@
-import { onMounted } from 'vue';
+import { onBeforeUnmount, onMounted } from 'vue';
 
-import { loadAiSettings } from '../domain/ai/localAiSettings';
 import { installMobileBackHandler } from '../domain/runtime/mobileBackNavigation.js';
 import { installMobileKeyboardInsetBridge } from '../domain/runtime/mobileKeyboardInsets.js';
 import { fetchNotes } from '../store/notes';
@@ -20,25 +19,24 @@ function ensureSettingsInitialized() {
 
 export function useAppBootstrap() {
   ensureSettingsInitialized();
+  let stopSync: (() => void) | undefined;
 
   onMounted(() => {
     installMobileBackHandler();
     installMobileKeyboardInsetBridge();
     initTheme();
-    initSync(() => {
-      fetchNotes();
+    stopSync = initSync(() => {
+      void fetchNotes();
     });
     fetchNotes();
-    loadAiSettings().catch((error) => {
-      console.error('Failed to load AI settings.', error);
-    });
   });
+  onBeforeUnmount(() => stopSync?.());
 
-  const onNoteSaved = () => {
-    fetchNotes();
+  const onNotesImported = () => {
+    void fetchNotes();
   };
 
   return {
-    onNoteSaved,
+    onNotesImported,
   };
 }

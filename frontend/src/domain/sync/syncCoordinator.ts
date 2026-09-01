@@ -2,8 +2,6 @@ import { getOrCreateDeviceId } from '../storage/deviceIdentity.js';
 import { addConflict } from './conflictStorage.js';
 import {
   claimLegacyMutationTargets,
-  getMutationLog,
-  removeMutation,
   type SyncTarget,
 } from './mutationLogStorage.js';
 import {
@@ -12,12 +10,14 @@ import {
   getSyncStateValue,
   setSyncStateValue,
 } from './syncStateStorage.js';
-import { applyChangesLocally } from './localSyncApply.js';
+import { applyChangesToCurrentStore } from '../appStore/syncReplicaAdapter.js';
+import { getPendingChanges as getMutationLog, acknowledgeChange } from './syncQueue.js';
 import {
   initializeSyncState,
   refreshSyncPendingCounts,
   setSyncState,
   setSyncStatus,
+  reportSyncError,
   subscribeToSyncState,
 } from './syncStatusBus.js';
 import { prepareOutboundChanges, hydrateInboundAttachments } from './syncAttachmentRuntime.js';
@@ -30,17 +30,35 @@ import { consumeRemoteChanges, inspectRemoteSyncState } from './syncBootstrap.js
 
 let flushInFlight: Promise<void> | null = null;
 let flushAgainAfterCurrentRun = false;
+let syncPaused = 0;
+
+export async function withSyncPaused<T>(run: () => Promise<T>, resume = true): Promise<T> {
+  syncPaused++;
+  clearScheduledSync();
+  let completed = false;
+  try {
+    if (flushInFlight) await flushInFlight;
+    clearScheduledSync();
+    const result = await run();
+    completed = true;
+    return result;
+  } finally {
+    if (resume || !completed) syncPaused--;
+    if (!syncPaused) requestSyncNow();
+  }
+}
 
 function isBootstrapResumeCursor(cursor: string | null) {
   return typeof cursor === 'string' && cursor.startsWith('snapshot-bootstrap:');
 }
 
 export function onSyncStatusChange(fn: SyncListener): () => void {
-  void initializeSyncState(getSyncTargetLabel(readSyncConfigSnapshot()));
+  void initializeSyncState(getSyncTargetLabel(readSyncConfigSnapshot())).catch(reportSyncError);
   return subscribeToSyncState(fn);
 }
 
 export async function flushPendingQueue(): Promise<void> {
+  if (syncPaused) return;
   if (flushInFlight) {
     flushAgainAfterCurrentRun = true;
     return flushInFlight;
@@ -110,9 +128,7 @@ export async function flushPendingQueue(): Promise<void> {
 
         for (const accepted of ((pushResult.accepted || []) as Array<{ operation_id: string }>)) {
           const match = queue.find((item) => item.operation_id === accepted.operation_id);
-          if (match?.id) {
-            await removeMutation(match.id);
-          }
+          if (match) await acknowledgeChange(match);
         }
 
         for (const conflict of ((pushResult.conflicts || []) as Array<Record<string, unknown> & {
@@ -121,21 +137,19 @@ export async function flushPendingQueue(): Promise<void> {
           reason?: string;
         }>)) {
           const match = queue.find((item) => item.operation_id === conflict.operation_id);
-          if (match?.id) {
-            await removeMutation(match.id);
-          }
           await addConflict(syncMode as 'server' | 'webdav', {
             note_id: String(conflict.note_id || match?.entity_id || ''),
             operation_id: String(conflict.operation_id || ''),
             reason: String(conflict.reason || 'remote_conflict'),
             ...conflict,
           });
+          if (match) await acknowledgeChange(match);
         }
 
         const shouldBootstrapPull = remoteSyncState.missingLocalNoteIds.length > 0;
         const postPushCursor = shouldBootstrapPull
           ? (isBootstrapResumeCursor(storedCursor) ? storedCursor : null)
-          : String(pushResult.latest_cursor || await getSyncStateValue(cursorKey) || '').trim() || null;
+          : storedCursor;
         const deviceId = await getOrCreateDeviceId();
         const pullResult = await consumeRemoteChanges(transport, activeTarget, {
           cursorOverride: postPushCursor ?? undefined,
@@ -147,7 +161,7 @@ export async function flushPendingQueue(): Promise<void> {
             if (!inboundChanges.length) return;
 
             await hydrateInboundAttachments(inboundChanges, transport);
-            const localApplyResult = await applyChangesLocally(inboundChanges);
+            const localApplyResult = await applyChangesToCurrentStore(inboundChanges);
 
             for (const conflict of (localApplyResult.conflicts || [])) {
               await addConflict(syncMode as 'server' | 'webdav', {
@@ -185,22 +199,25 @@ export async function flushPendingQueue(): Promise<void> {
           status: 'offline',
           error: error instanceof Error ? error.message : '同步失败',
         });
-        await refreshSyncPendingCounts((await getMutationLog(queueTarget)).length);
+        reportSyncError(error);
         handleSyncFailure(requestSyncNow, error);
         return;
       }
-    } while (shouldContinueImmediately);
+    } while (shouldContinueImmediately && !syncPaused);
   })();
 
   try {
     await flushInFlight;
+  } catch (error) {
+    reportSyncError(error);
+    handleSyncFailure(requestSyncNow, error);
   } finally {
     flushInFlight = null;
   }
 }
 
 export function requestSyncNow(): void {
-  if (!navigator.onLine) return;
+  if (syncPaused || !navigator.onLine) return;
   clearScheduledSync();
   void flushPendingQueue();
 }

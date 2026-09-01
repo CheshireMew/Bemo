@@ -1,7 +1,7 @@
 <template>
   <div class="shared-note-card-body">
     <div v-if="note.tags && note.tags.length" class="note-tags">
-      <span v-for="t in note.tags" :key="t" class="note-tag" @click="isTrash ? null : toggleTag(t)">#{{ t }}</span>
+      <button v-for="t in note.tags" :key="t" type="button" class="note-tag" :disabled="isTrash" :aria-label="`按标签 ${t} 筛选`" @click="toggleTag(t)">#{{ t }}</button>
     </div>
 
     <div v-if="isEditing" class="edit-area">
@@ -73,7 +73,6 @@
 import Editor, { type EditorSubmitPayload } from '../../Editor.vue';
 import type { NoteMeta } from '../../../store/notes';
 import { toggleTag, updateNoteContent } from '../../../store/notes';
-import { pushNotification } from '../../../store/notifications';
 
 const props = defineProps<{
   note: NoteMeta;
@@ -93,13 +92,7 @@ const props = defineProps<{
 }>();
 
 const saveEdit = async (payload: EditorSubmitPayload) => {
-  try {
-    await updateNoteContent(props.note, payload);
-  } catch (e) {
-    console.error(e);
-    pushNotification('保存失败', 'error');
-    throw e;
-  }
+  await updateNoteContent(props.note, payload);
 };
 </script>
 
@@ -116,10 +109,19 @@ const saveEdit = async (payload: EditorSubmitPayload) => {
 }
 
 .note-tag {
-  font-size: 0.75rem;
+  font-size: var(--font-size-caption);
+  font-weight: 500;
   color: var(--accent-color);
   cursor: pointer;
   transition: opacity 0.15s;
+  border: none;
+  background: transparent;
+  padding: 2px 0;
+  font-family: inherit;
+}
+
+.note-tag:disabled {
+  cursor: default;
 }
 
 .note-tag:hover {
@@ -202,7 +204,7 @@ const saveEdit = async (payload: EditorSubmitPayload) => {
 .note-audio-title,
 .note-video-title,
 .note-file-label {
-  font-size: 0.84rem;
+  font-size: var(--font-size-small);
   font-weight: 600;
   margin-bottom: 8px;
   word-break: break-all;
@@ -227,7 +229,7 @@ const saveEdit = async (payload: EditorSubmitPayload) => {
   }
 
   .note-tag {
-    font-size: 0.72rem;
+    font-size: var(--font-size-caption);
   }
 
   .note-image-grid {

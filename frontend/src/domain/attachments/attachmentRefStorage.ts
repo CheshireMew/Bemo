@@ -1,4 +1,4 @@
-import { openIndexedDb } from '../storage/indexedDb.js';
+import { readStore, writeStore, withIndexedDb } from '../storage/transactions.js';
 import type { NoteMeta } from '../notes/notesTypes.js';
 import { extractAttachmentFilenames } from './attachmentRefParser.js';
 
@@ -19,101 +19,46 @@ function buildAttachmentRefId(ownerType: AttachmentRefOwnerType, ownerId: string
   return `${ownerType}:${ownerId}:${filename}`;
 }
 
-export async function getAllAttachmentRefs(): Promise<AttachmentRefRecord[]> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('attachmentRefs', 'readonly');
-  return new Promise((resolve) => {
-    const req = tx.objectStore('attachmentRefs').getAll();
-    req.onsuccess = () => resolve((req.result || []) as AttachmentRefRecord[]);
+export function getAllAttachmentRefs(): Promise<AttachmentRefRecord[]> {
+  return readStore('attachmentRefs', store => store.getAll());
+}
+
+function replaceRefs(matches: (record: AttachmentRefRecord) => boolean, records: AttachmentRefRecord[]) {
+  return withIndexedDb('attachmentRefs', 'readwrite', tx => {
+    const store = tx.objectStore('attachmentRefs');
+    const request = store.getAll();
+    request.onsuccess = () => {
+      try {
+        (request.result as AttachmentRefRecord[]).filter(matches).forEach(record => store.delete(record.id));
+        records.forEach(record => store.put(record));
+      } catch { tx.abort(); }
+    };
   });
 }
 
-export async function replaceAttachmentRefsForOwner(input: {
-  ownerType: AttachmentRefOwnerType;
-  ownerId: string;
-  noteId?: string;
-  scope: AttachmentRefScope;
-  filenames: string[];
+export function replaceAttachmentRefsForOwner(input: {
+  ownerType: AttachmentRefOwnerType; ownerId: string; noteId?: string; scope: AttachmentRefScope; filenames: string[];
 }): Promise<void> {
-  const existing = await getAllAttachmentRefs();
-  const nextFilenames = new Set(input.filenames.filter(Boolean));
-  const db = await openIndexedDb();
-  const tx = db.transaction('attachmentRefs', 'readwrite');
-  const store = tx.objectStore('attachmentRefs');
-  let hasWrites = false;
-
-  existing
-    .filter((record) => record.owner_type === input.ownerType && record.owner_id === input.ownerId)
-    .forEach((record) => {
-      if (!nextFilenames.has(record.filename)) {
-        hasWrites = true;
-        store.delete(record.id);
-      }
-    });
-
-  nextFilenames.forEach((filename) => {
-    hasWrites = true;
-    store.put({
-      id: buildAttachmentRefId(input.ownerType, input.ownerId, filename),
-      owner_type: input.ownerType,
-      owner_id: input.ownerId,
-      note_id: input.noteId || '',
-      filename,
-      scope: input.scope,
-      updatedAt: Date.now(),
-    } as AttachmentRefRecord);
-  });
-
-  if (!hasWrites) {
-    return;
-  }
-
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+  return replaceRefs(record => record.owner_type === input.ownerType && record.owner_id === input.ownerId,
+    [...new Set(input.filenames.filter(Boolean))].map(filename => ({
+      id: buildAttachmentRefId(input.ownerType, input.ownerId, filename), owner_type: input.ownerType,
+      owner_id: input.ownerId, note_id: input.noteId || '', filename, scope: input.scope, updatedAt: Date.now(),
+    })));
 }
 
-export async function deleteAttachmentRefsForOwner(ownerType: AttachmentRefOwnerType, ownerId: string): Promise<void> {
-  await replaceAttachmentRefsForOwner({
-    ownerType,
-    ownerId,
-    scope: ownerType === 'note' ? 'active' : 'draft',
-    filenames: [],
-  });
+export function deleteAttachmentRefsForOwner(ownerType: AttachmentRefOwnerType, ownerId: string): Promise<void> {
+  return replaceRefs(record => record.owner_type === ownerType && record.owner_id === ownerId, []);
 }
 
-export async function replaceNoteAttachmentRefsForScope(scope: 'active' | 'trash', notes: NoteMeta[]): Promise<void> {
-  const existing = await getAllAttachmentRefs();
-  const db = await openIndexedDb();
-  const tx = db.transaction('attachmentRefs', 'readwrite');
-  const store = tx.objectStore('attachmentRefs');
-  let hasWrites = false;
+export function createNoteAttachmentRefs(scope: 'active' | 'trash', notes: NoteMeta[]): AttachmentRefRecord[] {
+  return notes.flatMap(note => extractAttachmentFilenames(note.content || '').map(filename => ({
+    id: buildAttachmentRefId('note', note.note_id, filename), owner_type: 'note' as const, owner_id: note.note_id,
+    note_id: note.note_id, filename, scope, updatedAt: Date.now(),
+  })));
+}
 
-  existing
-    .filter((record) => record.owner_type === 'note' && record.scope === scope)
-    .forEach((record) => {
-      hasWrites = true;
-      store.delete(record.id);
-    });
-
-  notes.forEach((note) => {
-    extractAttachmentFilenames(note.content || '').forEach((filename) => {
-      hasWrites = true;
-      store.put({
-        id: buildAttachmentRefId('note', note.note_id, filename),
-        owner_type: 'note',
-        owner_id: note.note_id,
-        note_id: note.note_id,
-        filename,
-        scope,
-        updatedAt: Date.now(),
-      } as AttachmentRefRecord);
-    });
-  });
-
-  if (!hasWrites) {
-    return;
-  }
-
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+export function replaceNoteAttachmentRefsForScope(scope: 'active' | 'trash', notes: NoteMeta[]): Promise<void> {
+  return replaceRefs(record => record.owner_type === 'note' && record.scope === scope, createNoteAttachmentRefs(scope, notes));
 }
 
 export async function getReferencedAttachmentFilenames(scopes?: AttachmentRefScope[]): Promise<Set<string>> {
@@ -165,9 +110,6 @@ export async function getAttachmentReferenceSummary() {
   };
 }
 
-export async function clearAttachmentRefs(): Promise<void> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('attachmentRefs', 'readwrite');
-  tx.objectStore('attachmentRefs').clear();
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+export function clearAttachmentRefs(): Promise<void> {
+  return writeStore('attachmentRefs', store => { store.clear(); });
 }

@@ -6,6 +6,7 @@
       type="button"
       class="tab-btn"
       :class="{ active: activeTab === tab.id }"
+      :aria-current="activeTab === tab.id ? 'page' : undefined"
       @click="emit('update:activeTab', tab.id)"
     >
       <component :is="tab.icon" class="tab-icon" :size="18" />
@@ -72,7 +73,7 @@ const layoutClass = computed(() => (
   align-items: center;
   justify-content: flex-start;
   gap: 12px;
-  font-size: 0.95rem;
+  font-size: 0.9375rem;
   font-weight: 500;
   line-height: 1.45;
 }
@@ -89,7 +90,7 @@ const layoutClass = computed(() => (
 
 .tab-btn.active {
   background: var(--accent-color, #31d279);
-  color: white;
+  color: var(--accent-foreground, white);
   font-weight: 600;
 }
 
@@ -104,7 +105,7 @@ const layoutClass = computed(() => (
 }
 
 .tab-btn.active .tab-icon {
-  color: white;
+  color: var(--accent-foreground, white);
   opacity: 1;
 }
 

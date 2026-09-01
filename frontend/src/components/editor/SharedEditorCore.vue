@@ -5,27 +5,36 @@
         v-show="showPreview"
         class="editor-preview markdown-body"
         :data-placeholder="placeholderText"
-        contenteditable="true"
+        :contenteditable="!isSaving"
+        role="textbox"
+        aria-multiline="true"
+        :aria-label="`${placeholderText}，富文本编辑模式`"
+        :aria-invalid="Boolean(editorErrorMessage)"
+        :aria-describedby="editorErrorMessage ? editorErrorId : undefined"
         @input="handlePreviewInput"
         @compositionstart="isComposing = true"
         @compositionend="handleCompositionEnd"
-        @paste="handlePaste"
+        @paste="isSaving ? $event.preventDefault() : handlePaste($event)"
         ref="previewRef"
-        @keydown="handleKeydown"
+        @keydown="!isSaving && handleKeydown($event)"
       ></div>
       <textarea
         v-show="!showPreview"
         ref="textareaRef"
         v-model="content"
+        :readonly="isSaving"
         class="editor-input"
         :placeholder="placeholderText"
-        @paste="handlePaste"
+        :aria-label="`${placeholderText}，Markdown 源码模式`"
+        :aria-invalid="Boolean(editorErrorMessage)"
+        :aria-describedby="editorErrorMessage ? editorErrorId : undefined"
+        @paste="isSaving ? $event.preventDefault() : handlePaste($event)"
         @compositionstart="isComposing = true"
         @compositionend="handleCompositionEnd"
-        @keydown="handleKeydown"
+        @keydown="!isSaving && handleKeydown($event)"
       ></textarea>
 
-      <div v-if="imageAttachments.length" class="image-strip">
+      <div v-if="imageAttachments.length" class="image-strip" :inert="isSaving">
         <button
           v-for="image in imageAttachments"
           :key="image.url"
@@ -44,9 +53,22 @@
       </div>
     </div>
 
-    <div class="editor-toolbar">
-      <div class="toolbar-icons" @mousedown.prevent>
-        <button class="icon-btn" :class="{ active: showPreview }" :title="actionTitle('切换预览', 'Ctrl+Shift+P')" @click="togglePreview">
+    <div v-if="editorErrorMessage" :id="editorErrorId" class="editor-message editor-message-error" role="alert">
+      {{ editorErrorMessage }}
+    </div>
+    <div v-else-if="submissionBlockedReason" class="editor-message" role="status">
+      {{ submissionBlockedReason }}
+    </div>
+
+    <div class="editor-toolbar" :inert="isSaving">
+      <div class="toolbar-icons" @pointerdown.prevent>
+        <button
+          class="icon-btn"
+          :class="{ active: showPreview }"
+          :title="actionTitle(showPreview ? '切换到 Markdown' : '切换到富文本', 'Ctrl+Shift+P')"
+          :aria-label="showPreview ? '切换到 Markdown' : '切换到富文本'"
+          @click="togglePreview"
+        >
           <Eye v-if="!showPreview" :size="20" />
           <PenLine v-else :size="20" />
         </button>
@@ -68,7 +90,7 @@
 
       <div class="toolbar-action">
         <button v-if="showCancelButton" class="btn-cancel-text" type="button" @click="emit('cancel')">取消</button>
-        <button class="btn-send" :disabled="!hasContent || isUploading || isSaving" @click="saveNote" :title="submitButtonTitle">
+        <button class="btn-send" type="button" :disabled="!hasContent || isUploading || isSaving || Boolean(submissionBlockedReason)" @click="saveNote" :title="submitButtonTitle" :aria-label="submitButtonTitle">
           <span v-if="isUploading || isSaving" class="send-loading">...</span>
           <SendHorizontal v-else :size="18" class="send-icon" />
         </button>
@@ -80,6 +102,8 @@
     <div v-if="showTagInput" class="tag-input-area">
       <input
         v-model="tagInput"
+        :disabled="isSaving"
+        aria-label="笔记标签"
         class="tag-input"
         placeholder="输入标签，用逗号分隔..."
         @keydown.enter.prevent=""
@@ -102,6 +126,8 @@ import { useEditorSelection } from '../../composables/useEditorSelection';
 import { useEditorSubmit, type EditorSubmitPayload } from '../../composables/useEditorSubmit';
 import { resolveAttachmentUrl } from '../../domain/attachments/attachmentUrlResolver';
 import { clearDraftAttachmentSession, createDraftAttachmentSessionKey } from '../../domain/attachments/localAttachmentDrafts.js';
+import { getProductShell } from '../../domain/runtime/shellRuntime.js';
+import { notesReadError } from '../../store/notes.js';
 import {
   extractEditorAttachments,
   replaceEditorAttachmentsWithMarkers,
@@ -161,6 +187,7 @@ const showPreview = ref(props.shell !== 'mobile');
 const isComposing = ref(false);
 const draftStorageKey = `bemo.editor.draft:${props.draftKey}`;
 const placeholderText = computed(() => props.placeholder);
+const editorErrorId = `editor-error-${Math.random().toString(36).slice(2, 9)}`;
 const showCancelButton = computed(() => props.showCancel);
 const attachments = computed(() => extractEditorAttachments(content.value));
 const imageAttachments = computed(() => attachments.value
@@ -173,8 +200,14 @@ const resolvedImageUrls = ref<Record<string, string>>({});
 const submitButtonTitle = computed(() => {
   if (isUploading.value) return '图片上传中';
   if (isSaving.value) return '保存中';
+  if (submissionBlockedReason.value) return submissionBlockedReason.value;
   return props.submitTitle;
 });
+const submissionBlockedReason = computed(() => (
+  getProductShell() === 'web-desktop' && notesReadError.value
+    ? '数据服务暂时不可用，可以继续编辑；请先点击下方“重试”恢复连接后保存。'
+    : ''
+));
 const propsTagString = computed(() => (props.initialTags || []).join(', '));
 const hasUnsavedLocalChanges = computed(() => (
   content.value !== String(props.initialContent || '')
@@ -201,11 +234,17 @@ const {
   isComposing,
 });
 
+const setEditorMode = (richText: boolean) => {
+  if (showPreview.value !== richText && !isSaving.value) togglePreview();
+};
+watch(() => settings.editor.preferredMode, mode => setEditorMode(mode === 'rich-text'));
+
 const {
   fileInput,
   handleImageUpload,
   handlePaste,
   isUploading,
+  uploadError,
   removeAttachedImage,
   triggerImageUpload,
 } = useEditorImages({
@@ -373,6 +412,7 @@ const focusEditor = async () => {
 
 const {
   isSaving,
+  saveError,
   saveNote,
 } = useEditorSubmit({
   attachmentSessionKey,
@@ -382,6 +422,7 @@ const {
   showPreview,
   previewRef,
   isUploading,
+  blockedReason: submissionBlockedReason,
   handlePreviewInput,
   clearDraft,
   resetHistory,
@@ -389,6 +430,8 @@ const {
   submitAction: props.submitAction,
   emitSaved: () => emit('saved'),
 });
+
+const editorErrorMessage = computed(() => saveError.value || uploadError.value);
 
 const {
   handleKeydown,
@@ -437,6 +480,11 @@ watch(imageAttachments, async (nextImages) => {
   resolvedImageUrls.value = Object.fromEntries(entries);
 }, { immediate: true });
 
+watch(content, () => {
+  saveError.value = '';
+  uploadError.value = '';
+});
+
 onMounted(() => {
   if (!props.autoFocus) return;
   void focusEditor();
@@ -481,7 +529,6 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-height: 120px;
 }
-
 .editor-preview {
   width: 100%;
   min-height: 120px;
@@ -489,14 +536,14 @@ onBeforeUnmount(() => {
   cursor: text;
   background-color: transparent;
   outline: none;
-  font-size: 0.95rem;
+  font-size: var(--font-size-body);
   line-height: 1.6;
   color: var(--text-primary, #3f3f46);
 }
 
 .editor-preview:empty:before {
   content: attr(data-placeholder);
-  color: #a1a1aa;
+  color: var(--text-secondary);
 }
 
 .editor-input {
@@ -505,7 +552,7 @@ onBeforeUnmount(() => {
   border: none;
   resize: none;
   padding: 16px 20px;
-  font-size: 0.95rem;
+  font-size: var(--font-size-body);
   line-height: 1.6;
   color: var(--text-primary, #3f3f46);
   outline: none;
@@ -520,7 +567,7 @@ onBeforeUnmount(() => {
 }
 
 .editor-input::placeholder {
-  color: #a1a1aa;
+  color: var(--text-secondary);
 }
 
 .image-strip {
@@ -602,6 +649,21 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
+.editor-message {
+  padding: 9px 16px;
+  border-top: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--info-color) 8%, var(--bg-card));
+  color: var(--info-text);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-readable);
+  line-height: 1.5;
+}
+
+.editor-message-error {
+  background: color-mix(in srgb, var(--danger-color) 10%, var(--bg-card));
+  color: var(--danger-text);
+}
+
 .toolbar-icons {
   display: flex;
   align-items: center;
@@ -615,7 +677,7 @@ onBeforeUnmount(() => {
 .icon-btn {
   background: transparent;
   border: none;
-  color: #a1a1aa;
+  color: var(--text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -679,7 +741,7 @@ onBeforeUnmount(() => {
 
 .btn-send:not(:disabled) {
   background-color: var(--accent-color, #31d279);
-  color: white;
+  color: var(--accent-foreground, white);
   cursor: pointer;
   box-shadow: none;
 }
@@ -715,7 +777,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-color, #e4e4e7);
   border-radius: 6px;
   padding: 6px 10px;
-  font-size: 0.85rem;
+  font-size: var(--font-size-supporting);
   outline: none;
   background: var(--bg-card, white);
   color: var(--text-primary);
@@ -728,7 +790,7 @@ onBeforeUnmount(() => {
 .editor-shell-mobile .editor-preview,
 .editor-shell-mobile .editor-input {
   padding: 14px 16px;
-  font-size: 0.92rem;
+  font-size: var(--font-size-body);
 }
 
 .editor-shell-mobile .image-strip {
@@ -745,12 +807,25 @@ onBeforeUnmount(() => {
 
 .editor-shell-mobile .editor-toolbar {
   align-items: flex-end;
-  padding: 8px 12px;
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  padding: 6px 10px;
+  box-shadow: 0 -8px 20px color-mix(in srgb, var(--bg-main) 78%, transparent);
 }
 
 .editor-shell-mobile .toolbar-icons {
   flex: 1;
-  margin-right: 4px;
+  gap: 2px;
+  margin-right: 2px;
+  scroll-padding-inline: 4px;
+}
+
+.editor-shell-mobile .toolbar-icons .icon-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  flex: 0 0 44px;
 }
 
 .editor-shell-mobile .toolbar-action {
@@ -759,7 +834,8 @@ onBeforeUnmount(() => {
 
 .editor-shell-mobile .btn-send {
   width: 48px;
-  height: 36px;
+  height: 44px;
+  border-radius: 12px;
 }
 
 .editor-shell-mobile .tag-input-area {

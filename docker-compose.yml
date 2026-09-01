@@ -1,26 +1,38 @@
-version: '3.8'
-
 services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
     volumes:
       - bemo_data:/app/data
     environment:
       - BEMO_DATA_DIR=/app/data
+      - BEMO_SYNC_TOKEN=${BEMO_SYNC_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: always
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_WEB_SYNC_PROXY_TOKEN: ${BEMO_SYNC_TOKEN:-}
     ports:
-      - "80:80"
+      - "${BEMO_BIND_ADDRESS:-127.0.0.1}:${BEMO_WEB_PORT:-8080}:80"
+    volumes:
+      - type: bind
+        source: ${BEMO_AUTH_FILE:?Set BEMO_AUTH_FILE to an existing htpasswd file}
+        target: /etc/nginx/bemo.htpasswd
+        read_only: true
+        bind:
+          create_host_path: false
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: always
 
 volumes:

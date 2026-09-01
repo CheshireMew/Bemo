@@ -22,6 +22,12 @@ function Read-JavaMajorVersion([string]$JavaVersionOutput) {
 $frontendRoot = Split-Path -Parent $PSScriptRoot
 $androidRoot = Join-Path $frontendRoot "android"
 $keystorePropertiesPath = Join-Path $androidRoot "keystore.properties"
+$hasEnvironmentKeystore = (
+    $env:BEMO_KEYSTORE_PATH -and
+    $env:BEMO_KEYSTORE_PASSWORD -and
+    $env:BEMO_KEY_ALIAS -and
+    $env:BEMO_KEY_PASSWORD
+)
 
 if (-not $env:JAVA_HOME) {
     Fail "JAVA_HOME is not set. Android packaging currently requires JDK 17-25 with jlink."
@@ -55,8 +61,12 @@ if (-not ($env:ANDROID_HOME -or $env:ANDROID_SDK_ROOT)) {
     }
 }
 
-if ($RequireKeystore -and -not (Test-Path $keystorePropertiesPath)) {
-    Fail "android\\keystore.properties is missing. Copy keystore.properties.example and fill in the real signing values before building release artifacts."
+if ($hasEnvironmentKeystore -and -not (Test-Path $env:BEMO_KEYSTORE_PATH)) {
+    Fail "BEMO_KEYSTORE_PATH points to a missing signing file: $env:BEMO_KEYSTORE_PATH"
+}
+
+if ($RequireKeystore -and -not (Test-Path $keystorePropertiesPath) -and -not $hasEnvironmentKeystore) {
+    Fail "Release signing is missing. Configure android\\keystore.properties or the BEMO_KEYSTORE_PATH, BEMO_KEYSTORE_PASSWORD, BEMO_KEY_ALIAS, and BEMO_KEY_PASSWORD environment variables."
 }
 
 Write-Host "Android packaging environment check passed."

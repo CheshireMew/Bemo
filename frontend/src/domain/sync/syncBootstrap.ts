@@ -1,4 +1,4 @@
-import { listLocalNotes, listLocalTrashNotes } from '../notes/localNoteQueries.js';
+import { listCurrentNotes as listLocalNotes, listCurrentTrash as listLocalTrashNotes } from '../appStore/noteQueries.js';
 import { enqueueExistingLocalNotesForSync } from './noteSyncOutbox.js';
 import type { SyncTarget } from './mutationLogStorage.js';
 import { getSyncCursorStateKey, getSyncStateValue, setSyncStateValue } from './syncStateStorage.js';

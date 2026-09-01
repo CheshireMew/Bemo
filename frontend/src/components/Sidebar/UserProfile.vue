@@ -20,14 +20,15 @@
         <span class="stat-label">标签</span>
       </div>
       <div class="stat-item">
-        <span class="stat-num">392</span>
-        <span class="stat-label">天</span>
+        <span class="stat-num">{{ activeDays }}</span>
+        <span class="stat-label" title="有笔记记录的日期数，不代表连续记录天数">记录天数</span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { notes, allTags } from '../../store/notes';
 
 withDefaults(defineProps<{
@@ -39,6 +40,11 @@ withDefaults(defineProps<{
 const emit = defineEmits<{
   close: [];
 }>();
+
+const activeDays = computed(() => new Set(notes.value.map((note) => {
+  const date = new Date(note.created_at * 1000);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+})).size);
 </script>
 
 <style scoped>
@@ -62,7 +68,7 @@ const emit = defineEmits<{
 }
 
 .username { 
-  font-size: 1.16rem; 
+  font-size: 1.16rem;
   font-weight: 700; 
   letter-spacing: -0.03em;
   line-height: 1;
@@ -86,19 +92,17 @@ const emit = defineEmits<{
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 18px;
-  padding: 0 6px;
+  height: 20px;
+  padding: 0 7px;
   border-radius: 4px;
   border: 1px solid color-mix(in srgb, var(--accent-color) 40%, transparent);
   background: color-mix(in srgb, var(--accent-color) 15%, transparent);
   color: var(--accent-color);
-  font-size: 0.62rem;
+  font-size: 0.6875rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   line-height: 1;
   text-transform: uppercase;
-  transform: scale(0.8);
-  transform-origin: left center;
 }
 
 .close-btn {
@@ -132,14 +136,16 @@ const emit = defineEmits<{
   align-items: center; 
 }
 .stat-num { 
-  font-size: 1.3rem; 
-  font-weight: 700; 
-  color: var(--text-secondary); 
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
 }
 .stat-label { 
-  font-size: 0.75rem; 
+  font-size: var(--font-size-small);
+  font-weight: 400;
   color: var(--text-secondary); 
-  margin-top: 2px; 
+  margin-top: 4px;
 }
 
 @media (max-width: 767px) {
@@ -152,10 +158,9 @@ const emit = defineEmits<{
   }
 
   .badge {
-    height: 18px;
-    padding: 0 6px;
-    font-size: 0.62rem;
-    transform: scale(0.76);
+    height: 20px;
+    padding: 0 7px;
+    font-size: 0.6875rem;
   }
 }
 </style>

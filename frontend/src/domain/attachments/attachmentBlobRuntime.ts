@@ -8,6 +8,7 @@ import {
 import { resolveBackendAttachmentAssetUrl } from './backendAttachmentsApi.js';
 import { getAttachmentRefFilenamesForNote } from './attachmentRefStorage.js';
 import { buildAttachmentUrlFromFilename, extractAttachmentFilename, extractAttachmentUrlsFromContent } from './attachmentLinks.js';
+import { shouldUseBackendAppStore } from '../runtime/appStoreRuntime.js';
 
 export type SyncAttachment = {
   url: string;
@@ -24,7 +25,7 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 
 export async function collectSyncAttachments(
   content: string,
-  options?: { noteId?: string | null },
+  options?: { noteId?: string | null; source?: 'primary' | 'import' },
 ): Promise<Array<SyncAttachment & { data: Uint8Array }>> {
   const contentUrls = extractAttachmentUrlsFromContent(content);
   const contentFilenames = new Set(
@@ -32,7 +33,8 @@ export async function collectSyncAttachments(
       .map((url) => extractAttachmentFilename(url))
       .filter((filename): filename is string => Boolean(filename)),
   );
-  const refFilenames = options?.noteId
+  const backendPrimary = shouldUseBackendAppStore() && options?.source !== 'import';
+  const refFilenames = options?.noteId && !backendPrimary
     ? await getAttachmentRefFilenamesForNote(options.noteId, ['active', 'trash'])
     : [];
   const urls = Array.from(new Set([
@@ -45,7 +47,7 @@ export async function collectSyncAttachments(
 
   for (const url of urls) {
     const fileName = extractAttachmentFilename(url) || url.split('/').pop() || 'attachment.bin';
-    const localBlob = await getAttachmentBlob(fileName);
+    const localBlob = backendPrimary ? null : await getAttachmentBlob(fileName);
     let data: Uint8Array;
     let mimeType = localBlob?.type || 'application/octet-stream';
 
@@ -55,9 +57,9 @@ export async function collectSyncAttachments(
       const fallbackUrl = url.startsWith('/images/')
         ? (resolveBackendAttachmentAssetUrl(url) || url)
         : url;
-      if (!fallbackUrl) continue;
-      const response = await fetch(fallbackUrl);
-      if (!response.ok) continue;
+      if (!fallbackUrl) throw new Error(`找不到附件：${fileName}`);
+      const response = await fetch(fallbackUrl, { signal: AbortSignal.timeout(30_000) });
+      if (!response.ok) throw new Error(`读取附件失败：${fileName} (${response.status})`);
       data = new Uint8Array(await response.arrayBuffer());
       mimeType = response.headers.get('content-type') || mimeType;
     }

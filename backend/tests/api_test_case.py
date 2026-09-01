@@ -59,5 +59,6 @@ class ApiTestCase(unittest.TestCase):
             os.environ.pop("BEMO_SYNC_TOKEN", None)
         else:
             os.environ["BEMO_SYNC_TOKEN"] = self.original_sync_token
-        shutil.rmtree(self.data_dir, ignore_errors=True)
-        shutil.rmtree(self.test_root, ignore_errors=True)
+        if os.environ.get("BEMO_TEST_KEEP_DATA") != "1":
+            # Only this case owns data_dir; other running cases may own siblings.
+            shutil.rmtree(self.data_dir)

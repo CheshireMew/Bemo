@@ -1,6 +1,8 @@
 import type { NoteMeta } from './notesTypes.js';
 import { normalizeAppNoteRecord } from './noteContract.js';
 import { resolveBackendUrl } from '../../config.js';
+import { getOrCreateDeviceId } from '../storage/deviceIdentity.js';
+import { readSyncConfigSnapshot } from '../sync/syncConfig.js';
 
 type NoteContentPayload = {
   content: string;
@@ -27,11 +29,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   const response = await fetch(url, {
+    ...init,
+    signal: init?.signal ?? AbortSignal.timeout(30_000),
     headers: {
       'Content-Type': 'application/json',
+      ...(init?.method && readSyncConfigSnapshot().mode !== 'local' ? {
+        'X-Bemo-Sync-Context': JSON.stringify({ target: readSyncConfigSnapshot().mode, device_id: await getOrCreateDeviceId() }),
+      } : {}),
       ...(init?.headers || {}),
     },
-    ...init,
   });
 
   if (!response.ok) {
@@ -119,9 +125,9 @@ export async function purgeBackendTrashNote(noteId: string): Promise<void> {
   });
 }
 
-export async function emptyBackendTrash(): Promise<number> {
-  const payload = await request<{ deleted_count: number }>('/api/app/notes/trash', {
+export async function emptyBackendTrash(): Promise<NoteMeta[]> {
+  const payload = await request<{ deleted_count: number; deleted_notes: unknown[] }>('/api/app/notes/trash', {
     method: 'DELETE',
   });
-  return Number(payload.deleted_count || 0);
+  return payload.deleted_notes.map(requireNormalizedNote);
 }

@@ -1,4 +1,5 @@
-import { claimLegacyMutationTargets, getMutationLog, getPendingCountsByTarget } from './mutationLogStorage.js';
+import { claimLegacyMutationTargets } from './mutationLogStorage.js';
+import { getPendingChanges as getMutationLog, getPendingCountsByTarget } from './syncQueue.js';
 import { getSyncLastSyncStateKey, getSyncStateValue } from './syncStateStorage.js';
 import type { SyncListener, SyncState, SyncStatus } from './syncTypes.js';
 import { readSyncConfigSnapshot } from './syncConfig.js';
@@ -25,6 +26,11 @@ export function setSyncState(next: Partial<SyncState>) {
 
 export function setSyncStatus(status: SyncStatus) {
   currentState = { ...currentState, status };
+}
+
+export function reportSyncError(error: unknown) {
+  setSyncState({ status: 'offline', error: error instanceof Error ? error.message : '无法读取同步状态，请重试' });
+  notifySyncListeners();
 }
 
 export function notifySyncListeners(pendingCount = currentState.pendingCount) {

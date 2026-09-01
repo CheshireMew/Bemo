@@ -19,7 +19,6 @@
     "tests/**/*.ts"
   ],
   "exclude": [
-    "src/domain/ai/**/*.ts",
     "src/domain/settings/localSettingsStorage.ts"
   ]
 }

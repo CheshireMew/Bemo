@@ -2,12 +2,18 @@ apply plugin: 'com.android.application'
 
 def keystorePropertiesFile = rootProject.file('keystore.properties')
 def keystoreProperties = new Properties()
-def hasReleaseKeystore = keystorePropertiesFile.exists()
+def hasReleaseKeystoreFile = keystorePropertiesFile.exists()
+def releaseKeystorePath = System.getenv('BEMO_KEYSTORE_PATH')
+def releaseStorePassword = System.getenv('BEMO_KEYSTORE_PASSWORD')
+def releaseKeyAlias = System.getenv('BEMO_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('BEMO_KEY_PASSWORD')
+def hasReleaseKeystoreEnvironment = releaseKeystorePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+def hasReleaseKeystore = hasReleaseKeystoreFile || hasReleaseKeystoreEnvironment
 def appDisplayName = (rootProject.findProperty('BEMO_APP_NAME') ?: 'bemo').toString()
 def appVersionCode = Integer.parseInt((rootProject.findProperty('BEMO_VERSION_CODE') ?: '1').toString())
 def appVersionName = (rootProject.findProperty('BEMO_VERSION_NAME') ?: '0.1.0').toString()
 
-if (hasReleaseKeystore) {
+if (hasReleaseKeystoreFile) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
@@ -31,10 +37,10 @@ android {
     signingConfigs {
         if (hasReleaseKeystore) {
             release {
-                storeFile file(keystoreProperties['storeFile'])
-                storePassword keystoreProperties['storePassword']
-                keyAlias keystoreProperties['keyAlias']
-                keyPassword keystoreProperties['keyPassword']
+                storeFile file(hasReleaseKeystoreFile ? keystoreProperties['storeFile'] : releaseKeystorePath)
+                storePassword hasReleaseKeystoreFile ? keystoreProperties['storePassword'] : releaseStorePassword
+                keyAlias hasReleaseKeystoreFile ? keystoreProperties['keyAlias'] : releaseKeyAlias
+                keyPassword hasReleaseKeystoreFile ? keystoreProperties['keyPassword'] : releaseKeyPassword
             }
         }
     }

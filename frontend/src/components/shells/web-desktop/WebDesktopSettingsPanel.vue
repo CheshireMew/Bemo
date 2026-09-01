@@ -2,17 +2,17 @@
   <teleport to="body">
     <div v-if="open" class="settings-overlay" @click.self="emit('close')">
       <div class="settings-shell">
-        <section class="settings-panel" role="dialog" aria-modal="true" aria-label="设置">
+        <section v-modal-focus="() => emit('close')" class="settings-panel" role="dialog" aria-modal="true" aria-label="设置">
           <header class="settings-header">
             <div>
               <h2>设置</h2>
-              <p>管理导入导出、编辑器与 AI 配置。</p>
+              <p>管理同步、导入导出、编辑器与应用设置。</p>
             </div>
             <button class="close-btn" type="button" @click="emit('close')">关闭</button>
           </header>
 
           <div class="settings-body">
-            <SettingsTabNav v-model:activeTab="activeTab" :tabs="tabs" layout="sidebar" />
+            <SettingsTabNav v-model:activeTab="activeTab" :tabs="tabs" :layout="settingsNavLayout" />
             <SettingsSectionOutlet
               :active-tab="activeTab"
               @notesImported="emit('notesImported')"
@@ -26,10 +26,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { vModalFocus } from '../../../directives/modalFocus';
 import SettingsSectionOutlet from '../../settings/SettingsSectionOutlet.vue';
 import SettingsTabNav from '../../settings/SettingsTabNav.vue';
 import { useSettingsTabs } from '../../../composables/useSettingsTabs';
 import { useScrollLock } from '../../../composables/useScrollLock';
+import { useViewport } from '../../../composables/useViewport';
 
 const props = defineProps<{
   open: boolean;
@@ -41,6 +43,8 @@ const emit = defineEmits<{
 }>();
 
 const { activeTab, tabs } = useSettingsTabs();
+const { isMobile } = useViewport();
+const settingsNavLayout = computed(() => (isMobile.value ? 'mobile-tabs' : 'sidebar'));
 useScrollLock(computed(() => props.open));
 </script>
 
@@ -97,7 +101,7 @@ useScrollLock(computed(() => props.open));
 .settings-header p {
   margin: 6px 0 0;
   color: var(--text-secondary, #71717a);
-  font-size: 0.92rem;
+  font-size: var(--font-size-supporting);
   line-height: 1.5;
 }
 
@@ -129,6 +133,37 @@ useScrollLock(computed(() => props.open));
     padding-left: max(var(--layout-shell-padding-compact), var(--safe-left));
     padding-right: max(var(--layout-shell-padding-compact), var(--safe-right));
     justify-content: center;
+  }
+}
+
+@media (max-width: 767px) {
+  .settings-overlay {
+    padding: 0;
+  }
+
+  .settings-shell {
+    padding: 0;
+  }
+
+  .settings-panel {
+    width: 100vw;
+    height: 100dvh;
+    border: none;
+    border-radius: 0;
+  }
+
+  .settings-header {
+    padding: calc(16px + var(--safe-top)) 16px 14px;
+  }
+
+  .settings-body {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 420px) {
+  .settings-header p {
+    display: none;
   }
 }
 </style>

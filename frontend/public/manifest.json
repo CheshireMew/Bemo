@@ -1,7 +1,7 @@
 {
   "name": "Bemo Notes",
   "short_name": "Bemo",
-  "description": "轻量碎片笔记，AI 友好",
+  "description": "轻量、专注的碎片笔记工具",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f4f5f7",

@@ -1,76 +1,29 @@
 import type { NoteMeta } from './notesTypes.js';
-import { openIndexedDb } from '../storage/indexedDb.js';
+import { readStore, writeStore } from '../storage/transactions.js';
 
-function getFilenameLookup(store: IDBObjectStore, filename: string) {
-  if (store.indexNames.contains('filename')) {
-    return store.index('filename').get(filename);
-  }
-
-  const request = store.getAll();
-  return {
-    set onsuccess(handler: ((this: IDBRequest<NoteMeta[]>, ev: Event) => any) | null) {
-      request.onsuccess = handler;
-    },
-    set onerror(handler: ((this: IDBRequest<NoteMeta[]>, ev: Event) => any) | null) {
-      request.onerror = handler;
-    },
-    get result() {
-      return ((request.result || []) as NoteMeta[]).find((note) => note.filename === filename) ?? null;
-    },
-    get error() {
-      return request.error;
-    },
-  } as IDBRequest<NoteMeta | null>;
-}
-
-export async function setTrashNotes(notes: NoteMeta[]): Promise<void> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('trashNotes', 'readwrite');
-  const store = tx.objectStore('trashNotes');
-  store.clear();
-  notes.forEach((note) => store.put(note));
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
-}
-
-export async function getTrashNotes(): Promise<NoteMeta[]> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('trashNotes', 'readonly');
-  const store = tx.objectStore('trashNotes');
-  return new Promise((resolve) => {
-    const req = store.getAll();
-    req.onsuccess = () => resolve((req.result || []) as NoteMeta[]);
+export function setTrashNotes(notes: NoteMeta[]): Promise<void> {
+  return writeStore('trashNotes', store => {
+    store.clear();
+    notes.forEach(note => store.put(note));
   });
 }
 
-export async function putTrashNote(note: NoteMeta): Promise<void> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('trashNotes', 'readwrite');
-  tx.objectStore('trashNotes').put(note);
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+export function getTrashNotes(): Promise<NoteMeta[]> {
+  return readStore('trashNotes', store => store.getAll());
+}
+
+export function putTrashNote(note: NoteMeta): Promise<void> {
+  return writeStore('trashNotes', store => { store.put(note); });
 }
 
 export async function getTrashNote(noteId: string): Promise<NoteMeta | null> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('trashNotes', 'readonly');
-  return new Promise((resolve) => {
-    const req = tx.objectStore('trashNotes').get(noteId);
-    req.onsuccess = () => resolve((req.result as NoteMeta | undefined) ?? null);
-  });
+  return (await readStore<NoteMeta | undefined>('trashNotes', store => store.get(noteId))) ?? null;
 }
 
 export async function getTrashNoteByFilename(filename: string): Promise<NoteMeta | null> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('trashNotes', 'readonly');
-  return new Promise((resolve, reject) => {
-    const req = getFilenameLookup(tx.objectStore('trashNotes'), filename);
-    req.onsuccess = () => resolve((req.result as NoteMeta | undefined) ?? null);
-    req.onerror = () => reject(req.error);
-  });
+  return (await readStore<NoteMeta | undefined>('trashNotes', store => store.index('filename').get(filename))) ?? null;
 }
 
-export async function deleteTrashNote(noteId: string): Promise<void> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('trashNotes', 'readwrite');
-  tx.objectStore('trashNotes').delete(noteId);
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+export function deleteTrashNote(noteId: string): Promise<void> {
+  return writeStore('trashNotes', store => { store.delete(noteId); });
 }

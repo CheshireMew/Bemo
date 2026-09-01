@@ -25,10 +25,10 @@ def build_backup_payload() -> dict[str, Any]:
     for filename in sorted(referenced):
         record = attachment_records.get(filename)
         if not record:
-            continue
+            raise ValidationError(f"Backup attachment record missing: {filename}")
         blob_hash = str(record.get("blob_hash") or "")
         if not blob_hash or not app_store_repository.has_blob_record(blob_hash):
-            continue
+            raise ValidationError(f"Backup attachment data missing: {filename}")
         attachments.append(
             {
                 "filename": filename,
@@ -53,32 +53,45 @@ def apply_backup_payload(payload: dict[str, Any]) -> dict[str, int]:
 
     notes = _normalize_notes(payload.get("notes"))
     trash = _normalize_notes(payload.get("trash"))
-    attachments = _normalize_backup_attachments(payload.get("attachments"))
+    attachments = _normalize_backup_attachments(payload.get("attachments", [] if payload["version"] == 1 else None))
 
-    wipe_app_storage()
+    note_ids = [note["note_id"] for note in notes + trash]
+    if len(note_ids) != len(set(note_ids)):
+        raise ValidationError("Duplicate note ID in backup")
+    filenames = [item["filename"] for item in attachments]
+    if len(filenames) != len(set(filenames)):
+        raise ValidationError("Duplicate attachment filename in backup")
+    missing = _collect_referenced_filenames(notes + trash) - set(filenames)
+    if missing:
+        raise ValidationError(f"Backup attachment data missing: {', '.join(sorted(missing))}")
 
     attachment_index: dict[str, dict[str, str]] = {}
     for item in attachments:
         blob = bytes(item["data"])
         blob_hash = _blob_hash(blob)
         app_store_repository.put_blob_record(blob_hash, blob)
-        app_store_repository.upsert_attachment_record(
-            item["filename"],
-            blob_hash,
-            item["mime_type"],
-            len(blob),
-            now_iso(),
-        )
         attachment_index[item["filename"]] = {
             "filename": item["filename"],
             "blob_hash": blob_hash,
             "mime_type": item["mime_type"],
         }
 
-    for note in notes:
-        _upsert_note_snapshot(note, attachment_index, deleted=False)
-    for note in trash:
-        _upsert_note_snapshot(note, attachment_index, deleted=True)
+    # Blobs are content-addressed. Prepare them before replacing metadata; old
+    # blobs remain readable on failure and are reclaimed only by explicit cleanup.
+    with app_store_repository.transaction():
+        with app_store_repository.connect() as conn:
+            conn.execute("DELETE FROM notes_current")
+            conn.execute("DELETE FROM attachment_files")
+            app_store_repository.clear_replication_state(conn)
+        for item in attachments:
+            app_store_repository.upsert_attachment_record(
+                item["filename"], attachment_index[item["filename"]]["blob_hash"],
+                item["mime_type"], len(item["data"]), now_iso(),
+            )
+        for note in notes:
+            _upsert_note_snapshot(note, attachment_index, deleted=False)
+        for note in trash:
+            _upsert_note_snapshot(note, attachment_index, deleted=True)
 
     return {
         "imported_notes": len(notes) + len(trash),
@@ -147,27 +160,32 @@ def wipe_app_storage() -> None:
 
 def _normalize_notes(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
-        return []
-    return [item for item in value if isinstance(item, dict)]
+        raise ValidationError("Backup notes and trash must be arrays")
+    for item in value:
+        if not isinstance(item, dict) or not isinstance(item.get("note_id"), str) or not item["note_id"].strip():
+            raise ValidationError("Backup note requires a nonempty note_id")
+        if not isinstance(item.get("content"), str) or not isinstance(item.get("tags"), list):
+            raise ValidationError("Invalid backup note content or tags")
+        if not all(isinstance(tag, str) for tag in item["tags"]):
+            raise ValidationError("Invalid backup note tags")
+    return value
 
 
 def _normalize_backup_attachments(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
-        return []
+        raise ValidationError("Backup attachments must be an array")
 
     attachments: list[dict[str, Any]] = []
     for item in value:
         if not isinstance(item, dict):
-            continue
+            raise ValidationError("Invalid backup attachment")
         filename = str(item.get("filename") or "").strip()
         mime_type = str(item.get("mime_type") or "application/octet-stream").strip() or "application/octet-stream"
         data = item.get("data")
         if not filename or not isinstance(data, list):
-            continue
-        try:
-            bytes(data)
-        except ValueError:
-            continue
+            raise ValidationError("Invalid backup attachment")
+        if not all(type(byte) is int and 0 <= byte <= 255 for byte in data):
+            raise ValidationError("Invalid backup attachment bytes")
         attachments.append(
             {
                 "filename": filename,
@@ -215,9 +233,14 @@ def _upsert_note_snapshot(
 
 
 def _collect_backend_referenced_filenames() -> set[str]:
+    from services.app_sync_service import list_outbox
     referenced: set[str] = set()
     for row in app_store_repository.list_notes():
         referenced.update(_collect_referenced_filenames_from_row(row["content"], row["attachments_json"]))
+    for target in ('server', 'webdav'):
+        for change in list_outbox(target):
+            payload = change.get('payload', {})
+            referenced.update(_collect_referenced_filenames_from_row(payload.get('content'), payload.get('attachments')))
     return referenced
 
 

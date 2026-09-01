@@ -22,16 +22,16 @@
     <MobileSettingsPanel
       :open="isMobileSettingsOpen"
       @close="closeMobileSettings"
-      @notesImported="onNoteSaved"
+      @notesImported="onNotesImported"
     />
-    <AiChatModal />
     <AppImagePreviewOverlay />
     <AppNotifications />
   </div>
 </template>
 
 <script setup lang="ts">
-import AiChatModal from '../AiChatModal.vue';
+import { onBeforeUnmount, onMounted, watch } from 'vue';
+import '../../styles/mobile.css';
 import AppNotifications from '../AppNotifications.vue';
 import AppImagePreviewOverlay from '../media/AppImagePreviewOverlay.vue';
 import AppFeedContent from './shared/AppFeedContent.vue';
@@ -51,13 +51,25 @@ import {
   openMobileCompose,
   openMobileSettings,
   openSidebar,
+  settingsRequestNonce,
 } from '../../store/ui';
 
-const { onNoteSaved } = useAppBootstrap();
+const { onNotesImported } = useAppBootstrap();
+
+onMounted(() => {
+  document.documentElement.classList.add('bemo-mobile');
+});
+
+onBeforeUnmount(() => {
+  document.documentElement.classList.remove('bemo-mobile');
+});
+
+watch(settingsRequestNonce, () => {
+  openMobileSettings();
+});
 
 const handleComposeSaved = () => {
   closeMobileCompose();
-  onNoteSaved();
 };
 </script>
 

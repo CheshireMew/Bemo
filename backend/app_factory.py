@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from api import app_storage, attachment_assets, notes_app
+from api import app_storage, attachment_assets, notes_app, app_sync
 from api import sync
 from services.service_errors import ServiceError, to_status_code
 
@@ -56,9 +56,13 @@ def create_app(app_mode: str | None = None) -> FastAPI:
         )
 
     ensure_data_directories()
+    if is_app_mode:
+        from services.app_store_repository import ensure_app_store
+        ensure_app_store()
 
     app.include_router(sync.router, prefix="/api/sync", tags=["sync"])
     if is_app_mode:
+        app.include_router(app_sync.router, prefix="/api/app", tags=["app-sync"])
         app.include_router(attachment_assets.router, tags=["app-attachments"])
         app.include_router(notes_app.router, prefix="/api/app/notes", tags=["app-notes"])
         app.include_router(app_storage.router, prefix="/api/app", tags=["app-storage"])

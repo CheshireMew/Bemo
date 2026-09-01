@@ -6,6 +6,7 @@ import {
 import {
   getClearCurrentDataPrompt,
   getClearCurrentDataSuccessMessage,
+  usesRemoteAppData,
 } from '../domain/appStore/dataAdapter.js';
 import {
   clearCurrentWorkspaceData,
@@ -24,8 +25,17 @@ import { exportFlomoCsv, importFlomoArchive } from '../domain/importExport/flomo
 import { canRestoreFromSyncDirectory } from '../domain/runtime/platformCapabilities.js';
 import { pushNotification } from '../store/notifications';
 import { requestSyncNow } from '../domain/sync/syncCoordinator.js';
+import { requestConfirmation } from '../store/dialogs.js';
 
 export function useImportExport(onSuccess?: () => void) {
+  const confirmRestore = () => requestConfirmation({
+    title: '用备份替换当前数据？',
+    message: usesRemoteAppData()
+      ? '恢复会替换后端主存储中的笔记、回收站和附件，使用同一后端的其他设备也会受到影响。建议先导出完整备份。'
+      : '恢复会替换此设备上的笔记、回收站和附件。建议先导出完整备份。',
+    confirmLabel: '继续恢复',
+    danger: true,
+  });
   const isImporting = ref(false);
   const isCleaningOrphans = ref(false);
   const attachmentSummary = ref({
@@ -92,6 +102,7 @@ export function useImportExport(onSuccess?: () => void) {
   };
 
   const runBackupImport = async (file: File) => {
+    if (isImporting.value || !(await confirmRestore())) return;
     isImporting.value = true;
     try {
       const res = await importBackupArchive(file);
@@ -128,6 +139,7 @@ export function useImportExport(onSuccess?: () => void) {
   };
 
   const runMarkdownArchiveImport = async (file: File) => {
+    if (isImporting.value || !(await confirmRestore())) return;
     isImporting.value = true;
     try {
       const res = await importMarkdownArchiveZip(file);
@@ -237,7 +249,7 @@ export function useImportExport(onSuccess?: () => void) {
     const files = target.files ? Array.from(target.files) : [];
     if (!files.length) return;
 
-    const confirmed = window.confirm('这会用你选择的同步目录中的最新快照覆盖当前本机数据。建议先导出完整备份。确定继续吗？');
+    const confirmed = await confirmRestore();
     if (!confirmed) {
       target.value = '';
       return;
@@ -277,7 +289,12 @@ export function useImportExport(onSuccess?: () => void) {
 
   const clearAllExperimentData = async () => {
     if (isImporting.value || isCleaningOrphans.value) return;
-    const confirmed = window.confirm(getClearCurrentDataPrompt());
+    const confirmed = await requestConfirmation({
+      title: '清空当前工作区？',
+      message: getClearCurrentDataPrompt(),
+      confirmLabel: '清空工作区',
+      danger: true,
+    });
     if (!confirmed) return;
 
     isImporting.value = true;
@@ -296,7 +313,14 @@ export function useImportExport(onSuccess?: () => void) {
 
   const resetToFirstInstallState = async () => {
     if (isImporting.value || isCleaningOrphans.value) return;
-    const confirmed = window.confirm('这会删除当前设备上的所有笔记缓存、附件、AI 对话、同步配置、主题和其他本地设置，并刷新页面。确定继续吗？');
+    const confirmed = await requestConfirmation({
+      title: '将当前设备恢复到首次安装状态？',
+      message: usesRemoteAppData()
+        ? '这会清除当前设备的缓存、同步配置、主题和本地设置，不会删除后端主存储中的笔记和附件。随后应用会刷新。'
+        : '这会删除此设备上的笔记、回收站、附件、同步配置及其他本地设置。建议先导出备份。随后应用会刷新。',
+      confirmLabel: '重置当前设备',
+      danger: true,
+    });
     if (!confirmed) return;
 
     isImporting.value = true;

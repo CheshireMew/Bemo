@@ -4,7 +4,7 @@ import {
   onSyncStatusChange,
   registerSyncWindowEvents,
 } from '../domain/sync/syncCoordinator.js';
-import type { SyncStatus } from '../domain/sync/syncTypes.js';
+import type { SyncState, SyncStatus } from '../domain/sync/syncTypes.js';
 
 export const syncStatus = ref<SyncStatus>('online');
 export const pendingCount = ref(0);
@@ -17,7 +17,8 @@ export const webdavLastSyncAt = ref('');
 
 export function initSync(onComplete?: () => void) {
   registerSyncWindowEvents();
-  onSyncStatusChange((state) => {
+  let previous: SyncState | null = null;
+  const unsubscribe = onSyncStatusChange((state) => {
     syncStatus.value = state.status;
     pendingCount.value = state.pendingCount;
     serverPendingCount.value = state.serverPendingCount;
@@ -26,10 +27,11 @@ export function initSync(onComplete?: () => void) {
     syncError.value = state.error;
     serverLastSyncAt.value = state.serverLastSyncAt;
     webdavLastSyncAt.value = state.webdavLastSyncAt;
-    if (state.status === 'online' && state.pendingCount === 0 && onComplete) {
-      onComplete();
-    }
+    const completed = previous?.status === 'syncing' && state.status === 'online';
+    previous = state;
+    if (completed) onComplete?.();
   });
 
   flushPendingQueue().catch(() => {});
+  return unsubscribe;
 }

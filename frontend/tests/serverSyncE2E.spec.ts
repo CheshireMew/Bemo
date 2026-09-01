@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { setRuntimeConfigOverride } from '../src/config.js';
 
 import { getAttachmentBlob, putAttachmentBlob } from '../src/domain/attachments/blobStorage.js';
 import { replaceNoteAttachmentRefsForScope } from '../src/domain/attachments/attachmentRefStorage.js';
@@ -14,6 +15,7 @@ import { installMemoryIndexedDb } from './memoryIndexedDb.js';
 import { withBackendServer } from './backendServerHarness.js';
 
 installMemoryIndexedDb();
+setRuntimeConfigOverride({ appStorageMode: 'local' });
 
 async function resetDb() {
   indexedDB.deleteDatabase('bemo-offline');

@@ -442,7 +442,10 @@ async function testApplyBackupPayloadRebuildsAttachmentRefs() {
       tags: [],
       pinned: false,
     }],
-    attachments: [],
+    attachments: [
+      { filename: 'cover.png', mime_type: 'image/png', data: [1] },
+      { filename: 'trash.png', mime_type: 'image/png', data: [2] },
+    ],
   });
 
   const refs = await getAllAttachmentRefs();
@@ -720,17 +723,17 @@ async function testClearAllLocalExperimentDataRemovesNotesAttachmentsAndSyncStat
   assert.equal(localStorage.getItem('bemo.editor.draft:compose'), null);
 }
 
-async function testResetAppToFirstInstallStateRemovesSettingsAndAiConversations() {
+async function testResetAppToFirstInstallStateRemovesBemoLocalState() {
   await resetDb();
   localStorage.setItem('bemo.settings', JSON.stringify({ sync: { mode: 'server' } }));
-  localStorage.setItem('bemo.ai.conversations', JSON.stringify([{ id: 'conv-1' }]));
+  localStorage.setItem('bemo.legacy-state', JSON.stringify([{ id: 'legacy-1' }]));
   localStorage.setItem('theme', 'dark');
   localStorage.setItem('external-key', 'keep');
 
   await resetCurrentInstallState();
 
   assert.equal(localStorage.getItem('bemo.settings'), null);
-  assert.equal(localStorage.getItem('bemo.ai.conversations'), null);
+  assert.equal(localStorage.getItem('bemo.legacy-state'), null);
   assert.equal(localStorage.getItem('theme'), null);
   assert.equal(localStorage.getItem('external-key'), 'keep');
 }
@@ -749,7 +752,7 @@ await testImportFlomoZipRestoresAudioAndTranscript();
 await testImportedFlomoNoteCanBeEditedWithoutLosingAttachmentRefs();
 await testTrashRestoreAndPermanentDeleteHandleAttachmentRefsAndBlobs();
 await testClearAllLocalExperimentDataRemovesNotesAttachmentsAndSyncState();
-await testResetAppToFirstInstallStateRemovesSettingsAndAiConversations();
+await testResetAppToFirstInstallStateRemovesBemoLocalState();
 
 clearRuntimeConfigOverride();
 

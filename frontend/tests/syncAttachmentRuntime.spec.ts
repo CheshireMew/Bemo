@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { setRuntimeConfigOverride } from '../src/config.js';
 
 import { replaceNoteAttachmentRefsForScope } from '../src/domain/attachments/attachmentRefStorage.js';
 import { prepareOutboundChanges, hydrateInboundAttachments } from '../src/domain/sync/syncAttachmentRuntime.js';
@@ -7,6 +9,7 @@ import { putCachedNote } from '../src/domain/notes/notesStorage.js';
 import { installMemoryIndexedDb } from './memoryIndexedDb.js';
 
 installMemoryIndexedDb();
+setRuntimeConfigOverride({ appStorageMode: 'local' });
 
 async function resetDb() {
   indexedDB.deleteDatabase('bemo-offline');
@@ -72,7 +75,7 @@ async function testPrepareOutboundChangesIncludesAttachmentMetadataAndUploadsBlo
 async function testHydrateInboundAttachmentsStoresBlobAndIndex() {
   await resetDb();
 
-  const blobHash = 'sha256:test-cover';
+  const blobHash = `sha256:${createHash('sha256').update(new Uint8Array([9, 8, 7])).digest('hex')}`;
   const transport = {
     async getBlob(requestedHash: string) {
       assert.equal(requestedHash, blobHash);

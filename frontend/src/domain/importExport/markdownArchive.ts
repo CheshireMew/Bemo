@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 
 import type { NoteMeta } from '../notes/notesTypes.js';
 import { applyBackupPayload, buildBackupPayload } from './backupPayload.js';
+import { validateBackupPayload } from './backupValidation.js';
 import {
   buildArchiveNotePath,
   buildMarkdownArchiveDocument,
@@ -21,6 +22,7 @@ type ArchiveManifest = {
 
 export async function buildMarkdownArchiveBlob() {
   const payload = await buildBackupPayload();
+  validateBackupPayload(payload);
   const notes = Array.isArray(payload.notes) ? payload.notes : [];
   const trash = Array.isArray(payload.trash) ? payload.trash : [];
   const attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
@@ -59,7 +61,7 @@ export async function buildMarkdownArchiveBlob() {
 }
 
 export async function parseMarkdownArchive(file: File) {
-  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const zip = await JSZip.loadAsync(await file.arrayBuffer(), { checkCRC32: true });
   const manifestText = await zip.file('manifest.json')?.async('string');
   if (!manifestText) {
     throw new Error('Markdown 归档 zip 缺少 manifest.json');
@@ -96,6 +98,9 @@ export async function parseMarkdownArchive(file: File) {
     }
   }
 
+  if (manifest.notes !== notes.length || manifest.trash !== trash.length || manifest.attachments !== attachments.length) {
+    throw new Error('Markdown 归档文件数与清单不一致，未修改现有数据。');
+  }
   return { notes, trash, attachments };
 }
 

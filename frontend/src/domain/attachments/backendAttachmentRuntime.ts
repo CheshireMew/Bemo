@@ -1,8 +1,8 @@
 import { collectSyncAttachments } from './attachmentBlobRuntime.js';
 import { uploadBackendAttachment } from './backendAttachmentsApi.js';
 
-export async function prepareBackendAttachments(content: string, noteId?: string) {
-  const attachments = await collectSyncAttachments(content, { noteId });
+export async function prepareBackendAttachments(content: string, noteId?: string, source: 'primary' | 'import' = 'primary') {
+  const attachments = await collectSyncAttachments(content, { noteId, source });
   const uploaded = new Map<string, { filename: string; blob_hash: string; mime_type: string }>();
 
   for (const attachment of attachments) {

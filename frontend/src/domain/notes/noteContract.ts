@@ -31,6 +31,7 @@ export function normalizeNoteRevision(value: unknown, fallback = 1) {
 }
 
 export function normalizeIsoTimestamp(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return new Date(value * 1000).toISOString();
   return typeof value === 'string' ? value : undefined;
 }
 

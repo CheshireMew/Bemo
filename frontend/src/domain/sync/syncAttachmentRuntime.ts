@@ -2,6 +2,8 @@ import { collectSyncAttachments, ensureBlobIndexValid, ensureLocalAttachment } f
 import type { ChangeRecord } from './mutationLogStorage.js';
 import { buildSyncTransport } from './syncTransportBuilder.js';
 import type { SyncChange } from './syncTransport.js';
+import { shouldUseBackendAppStore } from '../runtime/appStoreRuntime.js';
+import { uploadBackendAttachment } from '../attachments/backendAttachmentsApi.js';
 
 function changeToRemoteShape(change: ChangeRecord) {
   return {
@@ -71,8 +73,16 @@ export async function hydrateInboundAttachments(
       const filename = typeof attachment?.filename === 'string' ? attachment.filename : '';
       const mimeType = typeof attachment?.mime_type === 'string' ? attachment.mime_type : 'application/octet-stream';
       if (!blobHash || !filename) continue;
-      if (await ensureBlobIndexValid(blobHash)) continue;
+      if (!shouldUseBackendAppStore() && await ensureBlobIndexValid(blobHash)) continue;
       const data = await transport.getBlob(blobHash);
+      const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(data));
+      const actualHash = `sha256:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')}`;
+      if (actualHash !== blobHash) throw new Error(`同步附件校验失败：${filename}`);
+      if (shouldUseBackendAppStore()) {
+        const stored = await uploadBackendAttachment({ filename, data: Uint8Array.from(data).buffer, mimeType });
+        if (stored.blob_hash !== blobHash || stored.filename !== filename) throw new Error(`主存储未能保存同步附件：${filename}`);
+        continue;
+      }
       await ensureLocalAttachment(filename, data, blobHash, mimeType);
     }
   }

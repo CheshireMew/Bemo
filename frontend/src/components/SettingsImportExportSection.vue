@@ -19,7 +19,8 @@
 
       <article class="settings-card">
         <h4>完整恢复</h4>
-        <p>从完整备份解压并覆盖本机数据（此操作将重置本地的同步历史与基线状态）。</p>
+        <p v-if="remoteAppData">从备份替换后端主存储中的笔记、回收站和附件；使用同一后端的其他设备也会受到影响。</p>
+        <p v-else>从备份替换此设备上的笔记、回收站和附件，并重置同步历史与基线状态。</p>
         <div class="button-row">
           <button type="button" class="primary-btn" @click="triggerZipImport">导入完整备份 ZIP / JSON</button>
         </div>
@@ -27,7 +28,7 @@
 
       <article class="settings-card">
         <h4>Markdown 归档</h4>
-        <p>导入或导出通用结构的 Markdown 规范文件夹集（含本地引用附件关联）。</p>
+        <p>导出通用 Markdown 归档；导入时会按“完整恢复”的范围替换当前数据，并恢复引用附件。</p>
         <div class="button-row">
           <button type="button" class="secondary-btn" @click="exportMarkdownArchive">导出归档包</button>
           <button type="button" class="secondary-btn" @click="triggerMarkdownArchiveImport">导入归档包</button>
@@ -52,7 +53,8 @@
       </article>
       <article class="settings-card danger-card">
         <h4>清空工作区</h4>
-        <p>一次性删去本地所有笔记、附件及同步记录，为您保留各种界面预设配置。</p>
+        <p v-if="remoteAppData">删除后端主存储中的全部笔记、回收站、附件和同步残留，并清理本机缓存；使用同一后端的设备都会受到影响，界面设置会保留。</p>
+        <p v-else>删除此设备上的全部笔记、回收站、附件和同步记录，界面设置会保留。</p>
         <div class="button-row">
           <button type="button" class="danger-btn" @click="clearAllExperimentData">删除全部记录</button>
         </div>
@@ -60,7 +62,8 @@
 
       <article class="settings-card danger-card">
         <h4>深度重置</h4>
-        <p>彻底抹除本机的所有核心内容与环境参数，将应用强制恢复至刚安装的纯净初态。</p>
+        <p v-if="remoteAppData">只重置当前设备的缓存、同步配置、主题和本地设置；后端主存储中的笔记和附件不会删除。</p>
+        <p v-else>删除此设备上的笔记、回收站、附件、同步配置和本地设置，恢复到首次安装状态。</p>
         <div class="button-row">
           <button type="button" class="danger-btn subtle-danger-btn" @click="resetToFirstInstallState">回到初始安装状态</button>
         </div>
@@ -76,12 +79,14 @@
 <script setup lang="ts">
 import { useImportExport } from '../composables/useImportExport';
 import { canRestoreFromSyncDirectory } from '../domain/runtime/platformCapabilities.js';
+import { usesRemoteAppData } from '../domain/appStore/dataAdapter.js';
 
 const emit = defineEmits<{
   imported: [];
 }>();
 
 const canRestoreSyncDirectory = canRestoreFromSyncDirectory();
+const remoteAppData = usesRemoteAppData();
 
 const {
   isImporting,

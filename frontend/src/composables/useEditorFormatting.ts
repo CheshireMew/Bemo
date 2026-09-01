@@ -1,6 +1,7 @@
-import type { Ref } from 'vue';
+import { nextTick, type Ref } from 'vue';
 import { useEditorMarkdownFormatting } from './useEditorMarkdownFormatting.js';
 import { useEditorPreviewFormatting } from './useEditorPreviewFormatting.js';
+import { requestTextInput } from '../store/dialogs.js';
 
 type UseEditorFormattingOptions = {
   content: Ref<string>;
@@ -69,13 +70,34 @@ export function useEditorFormatting(options: UseEditorFormattingOptions) {
     wrapSelection('~~', '~~', '删除线');
   };
 
-  const insertLink = () => {
+  const insertLink = async () => {
     if (options.showPreview.value) {
-      const url = prompt('请输入链接地址:', 'https://');
+      const selection = window.getSelection();
+      const preview = options.previewRef.value;
+      const activeRange = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      const savedRange = activeRange && preview?.contains(activeRange.commonAncestorContainer) ? activeRange.cloneRange() : null;
+      const selected = savedRange?.toString() || '';
+      const url = await requestTextInput({
+        title: '插入链接',
+        message: '输入完整链接地址。当前选中的文字会作为链接文字。',
+        inputLabel: '链接地址',
+        inputValue: 'https://',
+        inputPlaceholder: 'https://example.com',
+        validate: value => {
+          try {
+            const parsed = new URL(value);
+            return ['http:', 'https:', 'mailto:', 'tel:'].includes(parsed.protocol) ? '' : '请输入网页、邮件或电话链接。';
+          } catch { return '请输入完整链接，例如 https://example.com。'; }
+        },
+      });
+      await nextTick();
+      preview?.focus();
+      if (savedRange && preview?.contains(savedRange.commonAncestorContainer)) {
+        selection?.removeAllRanges();
+        selection?.addRange(savedRange);
+      }
       if (url) {
-        const selection = window.getSelection();
-        const selected = selection?.toString() || '';
-        const safeUrl = url.replace(/"/g, '&quot;');
+        const safeUrl = url.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
         const safeText = (selected || '链接文字')
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
@@ -165,7 +187,7 @@ export function useEditorFormatting(options: UseEditorFormattingOptions) {
           break;
         case 'k':
           e.preventDefault();
-          insertLink();
+          void insertLink();
           break;
         case '`':
           e.preventDefault();

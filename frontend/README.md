@@ -4,7 +4,7 @@
 
 当前前端需要同时承担两类事情：
 
-- 共享产品语义：笔记、附件、同步、导入导出、AI、编辑器数据 contract
+- 共享产品语义：笔记、附件、同步、导入导出、编辑器数据 contract
 - 分平台交互外壳：Web / Desktop shell 与 Mobile shell
 
 所以读这个目录时，不要再默认“移动端只是桌面端加几个适配分支”。
@@ -15,7 +15,6 @@
 
 - UI 与交互
 - 编辑器流程
-- AI 功能与设置
 - 导入导出格式语义
 - 同步流程与 WebDAV 客户端语义
 - 运行时适配入口
@@ -44,7 +43,7 @@
 
 ## 运行时配置
 
-当前运行时仍通过环境变量解析：
+Web 和 Mobile 通过以下环境变量解析配置。Web 未指定服务地址时使用同源地址；桌面由原生启动流程在加载产品模块前注入后端就绪地址：
 
 - `VITE_WEB_API_BASE_URL` / `VITE_API_BASE_URL`
 - `VITE_ANDROID_API_BASE_URL` / `VITE_API_BASE_URL`
@@ -75,8 +74,8 @@
 
 开发 Android 时，请结合：
 
-- [ANDROID_RELEASE_GUIDE.md](E:/Work/Code/Bemo/ANDROID_RELEASE_GUIDE.md)
-- [ANDROID_PRELAUNCH_CHECKLIST.md](E:/Work/Code/Bemo/ANDROID_PRELAUNCH_CHECKLIST.md)
+- [ANDROID_RELEASE_GUIDE.md](../ANDROID_RELEASE_GUIDE.md)
+- [ANDROID_PRELAUNCH_CHECKLIST.md](../ANDROID_PRELAUNCH_CHECKLIST.md)
 
 ## 改代码时怎么判断
 
@@ -86,4 +85,4 @@
 
 如果你改的是页面组织、导航、编辑器交互、设置结构，允许 Web / Desktop 与 Mobile 分开实现，不要强行共用一个外壳。
 
-更完整的当前架构说明请看 [CURRENT_ARCHITECTURE.md](E:/Work/Code/Bemo/CURRENT_ARCHITECTURE.md)。
+更完整的当前架构说明请看 [CURRENT_ARCHITECTURE.md](../CURRENT_ARCHITECTURE.md)，桌面运行与正式发布入口见 [运维说明](../docs/operations.md)。

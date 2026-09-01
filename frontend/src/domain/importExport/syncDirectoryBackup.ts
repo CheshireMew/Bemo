@@ -1,4 +1,5 @@
 import type { BackupAttachment, BackupPayload } from './backupPayload.js';
+import { validateBackupPayload } from './backupValidation.js';
 import { deriveNoteTitle, normalizeNoteRevision, normalizeNoteTags, normalizeNoteTimestampSeconds } from '../notes/noteContract.js';
 import type { NoteMeta } from '../notes/notesTypes.js';
 
@@ -127,29 +128,32 @@ async function buildBackupPayloadFromCandidateRoot(
   }
 
   const snapshot = await readJsonFile<SyncSnapshot>(snapshotFile);
-  if (!snapshot.notes || typeof snapshot.notes !== 'object') {
+  if (!snapshot.notes || typeof snapshot.notes !== 'object' || Array.isArray(snapshot.notes)) {
     throw new Error(`快照 ${latestSnapshotName} 的格式不正确`);
   }
 
   const notes: NoteMeta[] = [];
   const trash: NoteMeta[] = [];
-  const attachmentMeta = new Map<string, { filename: string; mime_type: string }>();
+  const attachmentMeta = new Map<string, { blob_hash: string; filename: string; mime_type: string }>();
 
   for (const value of Object.values(snapshot.notes as Record<string, unknown>)) {
     const note = toSnapshotNoteRecord(value);
-    if (!note) continue;
+    if (!note || typeof note.content !== 'string' || !Array.isArray(note.tags) || !note.tags.every(tag => typeof tag === 'string')) throw new Error('同步快照包含无效笔记。');
 
     const normalizedNote = toNoteRecord(note);
-    if (!normalizedNote) continue;
+    if (!normalizedNote) throw new Error('同步快照缺少笔记 ID 或文件名。');
 
     const attachments = Array.isArray(note.attachments) ? note.attachments : [];
     for (const item of attachments) {
       const attachment = toSnapshotNoteRecord(item);
-      if (!attachment) continue;
+      if (!attachment) throw new Error('同步快照包含无效附件。');
       const blobHash = String(attachment.blob_hash || '').trim();
       const filename = String(attachment.filename || '').trim();
-      if (!blobHash || !filename) continue;
-      attachmentMeta.set(blobHash, {
+      if (!blobHash || !filename) throw new Error('同步快照附件缺少内容标识或文件名。');
+      const previous = attachmentMeta.get(filename);
+      if (previous && previous.blob_hash !== blobHash) throw new Error(`同步快照附件文件名冲突：${filename}`);
+      attachmentMeta.set(filename, {
+        blob_hash: blobHash,
         filename,
         mime_type: String(attachment.mime_type || 'application/octet-stream').trim() || 'application/octet-stream',
       });
@@ -163,9 +167,9 @@ async function buildBackupPayloadFromCandidateRoot(
   }
 
   const attachments: BackupAttachment[] = [];
-  for (const [blobHash, meta] of attachmentMeta) {
-    const blobFile = fileMap.get(joinRelativePath(root, getBlobRelativePath(blobHash)));
-    if (!blobFile) continue;
+  for (const meta of attachmentMeta.values()) {
+    const blobFile = fileMap.get(joinRelativePath(root, getBlobRelativePath(meta.blob_hash)));
+    if (!blobFile) throw new Error(`同步目录缺少附件：${meta.filename}`);
     attachments.push({
       filename: meta.filename,
       mime_type: meta.mime_type,
@@ -173,7 +177,7 @@ async function buildBackupPayloadFromCandidateRoot(
     });
   }
 
-  return {
+  const payload: BackupPayload = {
     format: 'bemo-backup',
     version: 3,
     exported_at: new Date().toISOString(),
@@ -181,6 +185,8 @@ async function buildBackupPayloadFromCandidateRoot(
     trash,
     attachments,
   };
+  validateBackupPayload(payload);
+  return payload;
 }
 
 export async function buildBackupPayloadFromSyncDirectoryFiles(files: Iterable<File>): Promise<BackupPayload> {

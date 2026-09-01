@@ -1,6 +1,8 @@
 mod native_http;
+#[cfg(not(mobile))]
+mod backend;
 
-use tauri_plugin_shell::ShellExt;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -9,9 +11,7 @@ pub fn run() {
     .setup(|app| {
       #[cfg(not(mobile))]
       {
-        let sidecar_command = app.shell().sidecar("bemo-api").expect("failed to setup sidecar");
-        let (_receiver, _child) = sidecar_command.spawn().expect("failed to spawn sidecar");
-        println!("🚀 Bemo Backend Sidecar started!");
+        app.manage(backend::Backend::start(app.handle()));
       }
 
       if cfg!(debug_assertions) {
@@ -23,7 +23,16 @@ pub fn run() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![native_http::native_http_request])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .invoke_handler({
+      #[cfg(not(mobile))]
+      { tauri::generate_handler![native_http::native_http_request, backend::backend_connection] }
+      #[cfg(mobile)]
+      { tauri::generate_handler![native_http::native_http_request] }
+    })
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application")
+    .run(|app, event| {
+      #[cfg(not(mobile))]
+      if matches!(event, tauri::RunEvent::Exit) { app.state::<backend::Backend>().stop(); }
+    });
 }

@@ -14,7 +14,6 @@ export default defineConfig({
           if (id.includes('node_modules/jszip')) return 'vendor-archive'
           if (id.includes('/src/domain/sync/webdav/')) return 'sync-webdav'
           if (id.includes('/src/domain/sync/')) return 'sync-core'
-          if (id.includes('/src/components/AiChatModal.vue') || id.includes('/src/composables/useAi')) return 'feature-ai'
           if (id.includes('/src/components/Editor.vue') || id.includes('/src/composables/useEditor')) return 'feature-editor'
           return undefined
         },
@@ -24,6 +23,7 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    strictPort: true,
     watch: {
       usePolling: true,
     },

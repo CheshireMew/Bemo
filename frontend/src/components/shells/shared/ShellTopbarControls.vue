@@ -1,27 +1,28 @@
 <template>
   <div class="topbar-row topbar-row-main">
-    <button v-if="showSidebarToggle" class="icon-btn menu-btn" title="打开导航" @click="emit('openSidebar')">
+    <button v-if="showSidebarToggle" type="button" class="icon-btn menu-btn" title="打开导航" aria-label="打开导航" @click="emit('openSidebar')">
       <PanelLeftOpen :size="18" />
     </button>
     <div class="search-box">
       <Search class="search-icon" :size="16" />
-      <input type="text" v-model="searchQuery" :placeholder="searchPlaceholder" />
-      <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">×</button>
+      <input ref="searchInputRef" type="search" aria-label="搜索笔记" aria-keyshortcuts="Control+K Meta+K" v-model="searchQuery" :placeholder="searchPlaceholder" />
+      <button v-if="searchQuery" type="button" class="search-clear" aria-label="清空搜索" @click="searchQuery = ''">×</button>
     </div>
     <div class="topbar-actions">
       <button
         class="icon-btn"
+        type="button"
         :class="{ active: sortOrder === 'asc' }"
         :title="sortOrder === 'desc' ? '当前从新到旧，点击切换为从旧到新' : '当前从旧到新，点击切换为从新到旧'"
         @click="toggleSortOrder"
       >
         <ArrowUpDown :size="18" />
       </button>
-      <button class="icon-btn" :title="isDarkMode ? '切换浅色模式' : '切换深色模式'" @click="toggleTheme">
+      <button class="icon-btn" type="button" :aria-label="isDarkMode ? '切换浅色模式' : '切换深色模式'" :title="isDarkMode ? '切换浅色模式' : '切换深色模式'" @click="toggleTheme">
         <Sun v-if="isDarkMode" :size="20" />
         <Moon v-else :size="20" />
       </button>
-      <button class="icon-btn" title="设置" @click="emit('openSettings')">
+      <button class="icon-btn" type="button" title="设置" aria-label="打开设置" @click="emit('openSettings')">
         <Settings :size="20" />
       </button>
     </div>
@@ -29,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-import { watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Search, Settings, ArrowUpDown, PanelLeftOpen, Sun, Moon } from 'lucide-vue-next';
 import { searchQuery, performSearch, sortOrder, toggleSortOrder } from '../../../store/notes';
 import { isDarkMode, toggleTheme } from '../../../store/ui';
@@ -46,6 +47,24 @@ const emit = defineEmits<{
   openSettings: [];
   openSidebar: [];
 }>();
+
+const searchInputRef = ref<HTMLInputElement | null>(null);
+
+const handleGlobalSearchShortcut = (event: KeyboardEvent) => {
+  if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'k') return;
+  if (document.querySelector('[aria-modal="true"]')) return;
+  const target = event.target as HTMLElement | null;
+  const isEditing = target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+    || target?.isContentEditable;
+  if (isEditing) return;
+  event.preventDefault();
+  searchInputRef.value?.focus();
+  searchInputRef.value?.select();
+};
+
+onMounted(() => window.addEventListener('keydown', handleGlobalSearchShortcut));
+onBeforeUnmount(() => window.removeEventListener('keydown', handleGlobalSearchShortcut));
 
 watch(searchQuery, (q) => {
   performSearch(q);
@@ -88,7 +107,7 @@ watch(searchQuery, (q) => {
   outline: none;
   width: 100%;
   min-width: 0;
-  font-size: 0.94rem;
+  font-size: 0.9375rem;
   color: var(--text-primary);
 }
 
@@ -149,7 +168,7 @@ watch(searchQuery, (q) => {
 @media (max-width: 767px) {
   .topbar-row {
     flex-wrap: nowrap;
-    gap: 8px;
+    gap: 6px;
   }
 
   .menu-btn {
@@ -157,24 +176,33 @@ watch(searchQuery, (q) => {
   }
 
   .search-box {
-    padding: 7px 12px;
-    border-radius: 16px;
+    height: 44px;
+    box-sizing: border-box;
+    padding: 0 12px;
+    border-radius: 14px;
     gap: 8px;
   }
 
   .search-box input {
-    font-size: 0.88rem;
+    height: 100%;
+    min-height: 0 !important;
+    padding: 0;
+    font-size: var(--font-size-body);
   }
 
   .topbar-actions {
     justify-content: flex-end;
-    gap: 4px;
+    gap: 0;
     margin-left: 0;
+    padding: 0;
+    background: transparent;
   }
 
   .icon-btn {
-    width: 34px;
-    height: 34px;
+    width: 40px;
+    height: 40px;
+    min-width: 40px !important;
+    min-height: 40px !important;
   }
 }
 </style>

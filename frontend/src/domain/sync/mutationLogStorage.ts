@@ -1,4 +1,4 @@
-import { openIndexedDb } from '../storage/indexedDb.js';
+import { readStore, writeStore, withIndexedDb } from '../storage/transactions.js';
 
 export type NoteMutationType =
   | 'note.create'
@@ -53,13 +53,9 @@ export async function enqueueChange(input: {
     payload: input.payload,
     createdAt: Date.now(),
   };
-  const db = await openIndexedDb();
-  const tx = db.transaction('mutationLog', 'readwrite');
-  const store = tx.objectStore('mutationLog');
-  const request = store.add(entry);
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve({ ...entry, id: Number(request.result) });
-    request.onerror = () => reject(request.error);
+  return withIndexedDb('mutationLog', 'readwrite', tx => {
+    const request = tx.objectStore('mutationLog').add(entry);
+    return () => ({ ...entry, id: Number(request.result) });
   });
 }
 
@@ -69,47 +65,27 @@ export function filterMutationLogByTarget(items: ChangeRecord[], target?: SyncTa
 }
 
 export async function getMutationLog(target?: SyncTarget): Promise<ChangeRecord[]> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('mutationLog', 'readonly');
-  const store = tx.objectStore('mutationLog');
-  return new Promise((resolve) => {
-    const req = store.getAll();
-    req.onsuccess = () => {
-      const items = (req.result || []) as ChangeRecord[];
-      resolve(filterMutationLogByTarget(items, target));
-    };
-  });
+  return filterMutationLogByTarget(await readStore('mutationLog', store => store.getAll()), target);
 }
 
 export async function claimLegacyMutationTargets(target: SyncTarget): Promise<number> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('mutationLog', 'readwrite');
-  const store = tx.objectStore('mutationLog');
-
-  return new Promise((resolve) => {
+  return withIndexedDb('mutationLog', 'readwrite', tx => {
+    const store = tx.objectStore('mutationLog');
+    let count = 0;
     const req = store.getAll();
     req.onsuccess = () => {
       const items = (req.result || []) as ChangeRecord[];
       const legacyItems = items.filter((item) => !item.target);
-      if (legacyItems.length === 0) {
-        resolve(0);
-        return;
-      }
-
-      claimMutationLogTargets(legacyItems, target).forEach((item) => {
-        store.put(item);
-      });
-
-      tx.oncomplete = () => resolve(legacyItems.length);
+      count = legacyItems.length;
+      try { claimMutationLogTargets(legacyItems, target).forEach(item => store.put(item)); }
+      catch { tx.abort(); }
     };
+    return () => count;
   });
 }
 
 export async function removeMutation(id: number): Promise<void> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('mutationLog', 'readwrite');
-  tx.objectStore('mutationLog').delete(id);
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+  return writeStore('mutationLog', store => { store.delete(id); });
 }
 
 export async function getPendingCount(): Promise<number> {
@@ -129,8 +105,5 @@ export async function getPendingCountsByTarget(): Promise<Record<SyncTarget, num
 }
 
 export async function clearMutationLog(): Promise<void> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('mutationLog', 'readwrite');
-  tx.objectStore('mutationLog').clear();
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+  return writeStore('mutationLog', store => { store.clear(); });
 }

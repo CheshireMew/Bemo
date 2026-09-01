@@ -60,7 +60,8 @@ function resolveApiBase() {
     return shared || '';
   }
 
-  return web || shared || '';
+  const origin = typeof location !== 'undefined' && /^https?:$/.test(location.protocol) ? location.origin : '';
+  return web || shared || origin;
 }
 
 function resolveAppStorageMode(): AppStorageMode {

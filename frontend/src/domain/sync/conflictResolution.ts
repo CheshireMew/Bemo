@@ -22,7 +22,8 @@ export function isRemoteDeleteConflict(detail: ConflictDetail) {
   if (!remoteSnapshot || typeof remoteSnapshot !== 'object') {
     return false;
   }
-  return Boolean((remoteSnapshot as Record<string, unknown>).deleted);
+  const snapshot = remoteSnapshot as Record<string, unknown>;
+  return Boolean(snapshot.deleted || snapshot.trashed);
 }
 
 export function canAcceptRemoteDeleteConflict(conflict: ConflictRecordLike) {

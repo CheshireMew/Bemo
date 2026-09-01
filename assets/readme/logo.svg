@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 180 180"
+     role="img"
+     aria-labelledby="bemo-logo-title bemo-logo-desc">
+  <title id="bemo-logo-title">Bemo</title>
+  <desc id="bemo-logo-desc">A rounded green B drawn as two connected note entries on a vertical timeline.</desc>
+
+  <defs>
+    <linearGradient id="bemo-surface" x1="24" y1="20" x2="156" y2="164" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f663a" />
+      <stop offset="0.58" stop-color="#147a46" />
+      <stop offset="1" stop-color="#15985a" />
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="164" height="164" rx="46" fill="url(#bemo-surface)" />
+  <rect x="9" y="9" width="162" height="162" rx="45" fill="none" stroke="#5ee29a" stroke-opacity="0.28" stroke-width="2" />
+
+  <g id="timeline-b" fill="none" stroke="#f4f5f7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M52 37V147" stroke-width="17" />
+    <path d="M62 44H96C116 44 129 53 129 68C129 83 116 92 96 92H62" stroke-width="15" />
+    <path d="M62 92H102C123 92 137 102 137 119C137 136 123 146 102 146H62" stroke-width="15" />
+  </g>
+</svg>

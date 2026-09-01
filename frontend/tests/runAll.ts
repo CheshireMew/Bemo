@@ -5,10 +5,21 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const specs = readdirSync(currentDir, { withFileTypes: true })
-  .filter((entry) => entry.isFile() && entry.name.endsWith('.spec.js'))
-  .map((entry) => entry.name)
+const args = process.argv.slice(2);
+const listOnly = args.includes('--list');
+const selected = args.filter((arg) => arg !== '--list');
+const specs = readdirSync(path.resolve(currentDir, '../../tests'), { withFileTypes: true })
+  .filter((entry) => entry.isFile() && entry.name.endsWith('.spec.ts'))
+  .map((entry) => entry.name.replace(/\.ts$/, '.js'))
+  .filter((name) => selected.length === 0 || selected.includes(name.replace(/\.js$/, '')))
   .sort((left, right) => left.localeCompare(right));
+
+assert.ok(specs.length > 0, 'No matching test specs');
+for (const name of selected) assert.ok(specs.includes(`${name}.js`), `Unknown test spec: ${name}`);
+if (listOnly) {
+  console.log(specs.join('\n'));
+  process.exit(0);
+}
 
 for (const spec of specs) {
   const specPath = path.join(currentDir, spec);

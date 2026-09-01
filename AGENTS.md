@@ -16,7 +16,7 @@ When reading or modifying this repo, assume:
 
 - Web / Desktop use backend app storage as the primary source of truth
 - Mobile uses local app storage as the primary source of truth
-- frontend owns product semantics, UI shells, sync flow, AI, and import/export semantics
+- frontend owns product semantics, UI shells, sync flow, and import/export semantics
 - backend owns Web / Desktop app storage plus sync and browser-proxy capabilities
 - Mobile is not just a reduced Web shell; it may need distinct UI and runtime handling
 
@@ -24,7 +24,7 @@ When reading or modifying this repo, assume:
 
 Keep these concerns shared when possible:
 
-- note, attachment, sync, import/export, and AI contracts
+- note, attachment, sync, and import/export contracts
 - normalization rules
 - sync protocol and conflict semantics
 

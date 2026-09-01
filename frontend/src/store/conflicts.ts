@@ -19,6 +19,11 @@ import {
 } from '../domain/notes/localNoteQueries';
 import { fetchNotes } from './notes';
 import { requestSyncNow } from '../domain/sync/syncCoordinator.js';
+import { shouldUseBackendAppStore } from '../domain/runtime/appStoreRuntime.js';
+import { editBackendReplica } from '../domain/appStore/syncReplicaAdapter.js';
+import { readSyncConfigSnapshot } from '../domain/sync/syncConfig.js';
+import { getOrCreateDeviceId } from '../domain/storage/deviceIdentity.js';
+import type { ChangeRecord } from '../domain/sync/mutationLogStorage.js';
 
 export interface ConflictItem {
   id: number;
@@ -69,6 +74,27 @@ export async function keepLocalAndResync(id: number) {
   const remoteBaseRevision = getRemoteRevision(conflict.detail);
 
   if (conflict.reason === 'revision_conflict' && conflictCopyFilename) {
+    if (shouldUseBackendAppStore()) {
+      const sync = readSyncConfigSnapshot();
+      const deviceId = await getOrCreateDeviceId();
+      const outbox: ChangeRecord[] = [];
+      await editBackendReplica(async (store, active) => {
+        outbox.length = 0;
+        const canonical = active.get(noteId);
+        const conflictCopy = [...active.values()].find(note => note.filename === conflictCopyFilename);
+        if (!canonical || !conflictCopy) throw new Error('未找到冲突副本或原始笔记');
+        const resolution = buildKeepLocalResyncPayload({ noteId, canonical, conflictCopy, remoteRevision: remoteBaseRevision });
+        const updated = await store.updateLocalNoteById(noteId, current => ({ ...current,
+          ...resolution.updatedNote, revision: current.revision + 1, updated_at: Math.floor(Date.now() / 1000) }));
+        if (sync.mode !== 'local' && updated) outbox.push({ operation_id: `op_${crypto.randomUUID()}`, device_id: deviceId,
+          entity_id: noteId, target: sync.mode, type: 'note.update', base_revision: resolution.baseRevision,
+          timestamp: new Date().toISOString(), createdAt: Date.now(), payload: { ...resolution.payload, revision: updated.revision } });
+      }, { outbox });
+      if (outbox.length) requestSyncNow();
+      await fetchNotes();
+      await dismissConflict(id);
+      return;
+    }
     const [conflictCopy, canonical] = await Promise.all([
       findLocalNoteByFilename(conflictCopyFilename),
       findLocalNoteById(noteId),
@@ -112,6 +138,14 @@ export async function recreateFromRemoteConflict(id: number) {
     throw new Error('当前冲突不支持按远端重建');
   }
 
+  if (shouldUseBackendAppStore()) {
+    await editBackendReplica(async (store, active) => {
+      if (!active.has(conflict.note_id)) await store.applyRemoteActiveState(conflict.note_id, buildRemoteRecreationInput(conflict));
+    });
+    await fetchNotes();
+    await dismissConflict(id);
+    return;
+  }
   const existing = await findLocalNoteById(conflict.note_id);
   if (!existing) {
     await createLocalNoteFromSync(buildRemoteRecreationInput(conflict));
@@ -126,6 +160,13 @@ export async function acceptRemoteDeleteConflict(id: number) {
   if (!conflict) return;
   if (!canAcceptRemoteDeleteConflict(conflict)) {
     throw new Error('当前冲突不支持接受远端删除');
+  }
+
+  if (shouldUseBackendAppStore()) {
+    await editBackendReplica(async store => { await store.moveLocalNoteToTrashById(conflict.note_id); });
+    await fetchNotes();
+    await dismissConflict(id);
+    return;
   }
 
   const existing = await findLocalNoteById(conflict.note_id);

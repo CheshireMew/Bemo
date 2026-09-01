@@ -10,11 +10,17 @@ class ValidationError(ServiceError):
     pass
 
 
+class ConflictError(ServiceError):
+    pass
+
+
 class UpstreamServiceError(ServiceError):
     pass
 
 
 def to_status_code(error: ServiceError) -> int:
+    if isinstance(error, ConflictError):
+        return 409
     if isinstance(error, NotFoundError):
         return 404
     if isinstance(error, ValidationError):

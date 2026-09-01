@@ -3,19 +3,26 @@
     <div
       ref="heatmapContainer"
       class="heatmap"
+      aria-label="笔记活跃日历，使用方向键浏览日期，回车筛选"
+      @keydown="handleHeatmapKeydown"
       :style="{
         '--heatmap-cell-size': `${cellSize}px`,
         '--heatmap-gap': `${heatmapGap}px`,
       }"
     >
-      <div 
+      <button
         v-for="(day, index) in heatmapData" 
         :key="index"
+        type="button"
         class="heatmap-cell"
         :class="[`level-${day.level}`, { today: day.isToday }]"
         :title="day.empty ? '' : `${day.date.toLocaleDateString()} : ${day.count} 篇笔记`"
+        :aria-label="day.empty ? undefined : `${day.date.toLocaleDateString()}，${day.count} 篇笔记`"
+        :disabled="day.empty"
+        :tabindex="!day.empty && index === focusIndex ? 0 : -1"
+        @focus="focusedIndex = index"
         @click="!day.empty && handleDateSelect(day.date)"
-      ></div>
+      ></button>
     </div>
     <!-- Months -->
     <div class="heatmap-months">
@@ -25,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useHeatmap } from '../../composables/useHeatmap';
 import { selectDate } from '../../store/notes';
 
@@ -34,6 +41,25 @@ const emit = defineEmits<{
 }>();
 
 const { heatmapData, heatmapMonths } = useHeatmap();
+const focusedIndex = ref(-1);
+const focusIndex = computed(() => {
+  const focusedDay = heatmapData.value[focusedIndex.value];
+  if (focusedDay && !focusedDay.empty) return focusedIndex.value;
+  const today = heatmapData.value.findIndex(day => day.isToday);
+  return today >= 0 ? today : heatmapData.value.findIndex(day => !day.empty);
+});
+const handleHeatmapKeydown = async (event: KeyboardEvent) => {
+  const offsets: Record<string, number> = { ArrowLeft: -7, ArrowRight: 7, ArrowUp: -1, ArrowDown: 1 };
+  const amount = offsets[event.key];
+  if (amount === undefined) return;
+  event.preventDefault();
+  let target = focusIndex.value + amount;
+  while (target >= 0 && target < heatmapData.value.length && heatmapData.value[target]?.empty) target += Math.sign(amount);
+  if (target < 0 || target >= heatmapData.value.length) return;
+  focusedIndex.value = target;
+  await nextTick();
+  heatmapContainer.value?.querySelector<HTMLButtonElement>('[tabindex="0"]')?.focus();
+};
 const heatmapContainer = ref<HTMLElement | null>(null);
 const cellSize = ref(12);
 const viewportWidth = ref(typeof window === 'undefined' ? 1024 : window.innerWidth);
@@ -125,8 +151,13 @@ onBeforeUnmount(() => {
   aspect-ratio: 1 / 1;
   border-radius: 2px;
   cursor: help;
+  border: none;
+  padding: 0;
 }
+.heatmap-cell:not(:disabled) { cursor: pointer; }
+.heatmap-cell:disabled { cursor: default; }
 .heatmap-cell.today { outline: 2px solid var(--accent-color); outline-offset: -1px; }
+.heatmap-cell:focus-visible { outline: 3px solid var(--text-primary); outline-offset: 1px; z-index: 1; }
 .heatmap-cell.level-0 { background-color: var(--heatmap-0); }
 .heatmap-cell.level-1 { background-color: var(--heatmap-1); }
 .heatmap-cell.level-2 { background-color: var(--heatmap-2); }
@@ -136,7 +167,8 @@ onBeforeUnmount(() => {
 .heatmap-months { 
   display: flex; 
   justify-content: space-between; 
-  font-size: 0.75rem; 
+  font-size: var(--font-size-caption);
+  font-weight: 400;
   color: var(--text-secondary); 
   padding: 0 2px; 
 }

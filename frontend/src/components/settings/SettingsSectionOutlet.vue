@@ -6,7 +6,6 @@
     <SettingsImportExportSection v-else-if="activeTab === 'import-export'" @imported="emit('notesImported')" />
     <SettingsEditorSection v-else-if="activeTab === 'editor'" />
     <SettingsShortcutsSection v-else-if="activeTab === 'shortcuts'" />
-    <SettingsAiSection v-else-if="activeTab === 'ai'" />
     <SettingsTrashSection v-else-if="activeTab === 'trash'" />
     <SettingsConflictsSection v-else />
   </div>
@@ -14,7 +13,6 @@
 
 <script setup lang="ts">
 import SettingsAppearanceSection from '../SettingsAppearanceSection.vue';
-import SettingsAiSection from '../SettingsAiSection.vue';
 import SettingsAttachmentsSection from '../SettingsAttachmentsSection.vue';
 import SettingsConflictsSection from '../SettingsConflictsSection.vue';
 import SettingsEditorSection from '../SettingsEditorSection.vue';
@@ -35,6 +33,7 @@ const emit = defineEmits<{
 
 <style scoped>
 .settings-content {
+  container: settings / inline-size;
   min-width: 0;
   padding: 24px 24px 32px 20px;
   overflow-y: auto;
@@ -43,11 +42,11 @@ const emit = defineEmits<{
   gap: 24px;
   flex: 1;
   border-left: 1px solid var(--border-color, #eaeaea);
-  scrollbar-width: none;
+  scrollbar-width: thin;
 }
 
 .settings-content::-webkit-scrollbar {
-  display: none;
+  width: 6px;
 }
 
 @media (max-width: 767px) {

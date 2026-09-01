@@ -1,6 +1,4 @@
 export type {
-  AiPromptPreset,
-  AiProvider,
   AppSettings,
   CopyFormat,
   EditorMode,

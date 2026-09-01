@@ -4,6 +4,8 @@ import { gfm } from 'turndown-plugin-gfm';
 import { settings } from '../store/settings';
 import { removeEditorAttachment } from '../utils/editorAttachments';
 import { saveLocalAttachmentFile } from '../domain/attachments/localAttachmentDrafts.js';
+import { pushNotification } from '../store/notifications.js';
+import { toUserErrorMessage } from '../utils/errorMessage.js';
 
 type UseEditorImagesOptions = {
   attachmentSessionKey: Ref<string>;
@@ -26,6 +28,7 @@ markdownPasteTurndown.use(gfm);
 export function useEditorImages(options: UseEditorImagesOptions) {
   const fileInput = ref<HTMLInputElement | null>(null);
   const isUploading = ref(false);
+  const uploadError = ref('');
   const allowedTags = new Set([
     'A', 'B', 'BLOCKQUOTE', 'BR', 'CODE', 'EM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
     'I', 'LI', 'OL', 'P', 'PRE', 'S', 'STRONG', 'UL',
@@ -255,11 +258,15 @@ export function useEditorImages(options: UseEditorImagesOptions) {
   };
 
   const uploadFile = async (file: File) => {
-    if (!file.type.startsWith('image/')) return;
-    const uploadTarget = await compressImage(file);
-
+    if (isUploading.value) return;
+    if (!file.type.startsWith('image/')) {
+      uploadError.value = '请选择图片文件。';
+      return;
+    }
     try {
       isUploading.value = true;
+      uploadError.value = '';
+      const uploadTarget = await compressImage(file);
       const saved = await saveLocalAttachmentFile(uploadTarget, {
         draftSessionKey: options.attachmentSessionKey.value,
       });
@@ -271,6 +278,9 @@ export function useEditorImages(options: UseEditorImagesOptions) {
       }
     } catch (err) {
       console.error('Failed to upload image', err);
+      const message = toUserErrorMessage(err, '图片上传失败，请稍后重试。');
+      uploadError.value = message;
+      pushNotification(message, 'error', 5200);
     } finally {
       isUploading.value = false;
     }
@@ -343,6 +353,7 @@ export function useEditorImages(options: UseEditorImagesOptions) {
     handleImageUpload,
     handlePaste,
     isUploading,
+    uploadError,
     removeAttachedImage,
     triggerImageUpload,
   };

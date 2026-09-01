@@ -1,0 +1,8 @@
+{
+  "build": {
+    "beforeBuildCommand": "npm run prepare:sidecar && npm run build"
+  },
+  "bundle": {
+    "externalBin": ["binaries/bemo-api"]
+  }
+}

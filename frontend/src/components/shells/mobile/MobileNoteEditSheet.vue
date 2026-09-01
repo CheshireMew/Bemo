@@ -23,7 +23,6 @@ import MobileEditorSheet from './MobileEditorSheet.vue';
 import type { EditorSubmitPayload } from '../../Editor.vue';
 import type { NoteMeta } from '../../../store/notes';
 import { updateNoteContent } from '../../../store/notes';
-import { pushNotification } from '../../../store/notifications';
 
 const props = defineProps<{
   open: boolean;
@@ -37,13 +36,7 @@ const emit = defineEmits<{
 
 const saveEdit = async (payload: EditorSubmitPayload) => {
   if (!props.note) return;
-  try {
-    await updateNoteContent(props.note, payload);
-  } catch (e) {
-    console.error(e);
-    pushNotification('保存失败', 'error');
-    throw e;
-  }
+  await updateNoteContent(props.note, payload);
 };
 
 const handleSaved = () => {

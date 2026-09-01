@@ -1,0 +1,77 @@
+html.bemo-mobile {
+  height: 100%;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html.bemo-mobile body,
+html.bemo-mobile #app {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html.bemo-mobile button,
+html.bemo-mobile a,
+html.bemo-mobile select,
+html.bemo-mobile input,
+html.bemo-mobile textarea,
+html.bemo-mobile [role='button'] {
+  touch-action: manipulation;
+}
+
+html.bemo-mobile button:not(.note-image-card):not(.heatmap-cell):not(.cal-day),
+html.bemo-mobile [role='button'],
+html.bemo-mobile .nav-item {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+html.bemo-mobile input:not([type='checkbox']):not([type='radio']):not([type='file']),
+html.bemo-mobile select,
+html.bemo-mobile textarea,
+html.bemo-mobile [contenteditable='true'] {
+  min-height: 44px;
+  font-size: 16px;
+}
+
+html.bemo-mobile .surface-scroll,
+html.bemo-mobile .settings-nav-mobile,
+html.bemo-mobile .toolbar-icons {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+html.bemo-mobile .surface-scroll::-webkit-scrollbar,
+html.bemo-mobile .settings-nav-mobile::-webkit-scrollbar,
+html.bemo-mobile .toolbar-icons::-webkit-scrollbar {
+  display: none;
+}
+
+html.bemo-mobile .cal-day {
+  min-width: 0;
+  min-height: 40px;
+}
+
+html.bemo-mobile .note-tag {
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-sidebar-bg) 72%, transparent);
+}
+
+@media (hover: none) and (pointer: coarse) {
+  html.bemo-mobile button:not(:disabled),
+  html.bemo-mobile a,
+  html.bemo-mobile [role='button'] {
+    transition: opacity 0.12s ease, background-color 0.12s ease, color 0.12s ease;
+  }
+
+  html.bemo-mobile button:not(:disabled):active,
+  html.bemo-mobile a:active,
+  html.bemo-mobile [role='button']:active {
+    opacity: 0.72;
+  }
+}

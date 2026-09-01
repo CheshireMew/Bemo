@@ -1,4 +1,4 @@
-param(
+﻿param(
   [switch]$WithSyncServer,
   [switch]$FrontendOnly,
   [int]$BackendPort = 8000,
@@ -70,20 +70,36 @@ if ($WithSyncServer) {
 }
 
 if ($startSyncServer) {
-  Write-Host "[1/2] Starting optional Python sync-server (in a new window)..." -ForegroundColor Cyan
+  Write-Host "[1/2] Starting the app-storage backend..." -ForegroundColor Cyan
   $syncServerScript = Join-Path $PSScriptRoot "backend\start-sync-server.ps1"
   $devSyncToken = "bemo-local-dev-sync-token"
-  Start-Process powershell -ArgumentList @(
-    "-NoExit",
+  $shellExecutable = (Get-Process -Id $PID).Path
+  $backendProcess = Start-Process -FilePath $shellExecutable -WindowStyle Hidden -PassThru -ArgumentList @(
+    "-NoProfile",
     "-ExecutionPolicy", "Bypass",
-    "-File", $syncServerScript,
+    "-File", ('"' + $syncServerScript + '"'),
     "-SyncToken", $devSyncToken,
     "-CorsOrigins", $devCorsOrigins,
     "-Port", $resolvedBackendPort.ToString()
   )
-  Write-Host "Backend enabled for this run on $backendOrigin" -ForegroundColor Yellow
+  $backendReady = $false
+  for ($attempt = 0; $attempt -lt 60; $attempt++) {
+    if ($backendProcess.HasExited) { throw '后端启动失败，请先检查 BEMO_PYTHON 和已安装的依赖。' }
+    try {
+      $health = Invoke-RestMethod -Uri "$backendOrigin/" -TimeoutSec 1
+      if ($health.mode -eq 'app') { $backendReady = $true; break }
+    } catch {}
+    Start-Sleep -Milliseconds 250
+  }
+  if (!$backendReady) {
+    if (!$backendProcess.HasExited) {
+      & taskkill /PID $backendProcess.Id /T /F | Out-Null
+    }
+    throw '后端未在限定时间内就绪。'
+  }
+  Write-Host "Backend ready on $backendOrigin" -ForegroundColor Yellow
 } else {
-  Write-Host "[1/1] Sync-server not started. Pass -WithSyncServer to force-enable it." -ForegroundColor Yellow
+  Write-Host "Frontend-only UI debugging: backend-backed note operations are unavailable." -ForegroundColor Yellow
 }
 
 Write-Host "Starting Vue frontend (in current window)..." -ForegroundColor Cyan
@@ -94,4 +110,11 @@ $env:VITE_WEB_API_BASE_URL = $backendApiBase
 $env:VITE_API_BASE_URL = $backendApiBase
 $env:VITE_WEB_SYNC_PROXY_TOKEN = "bemo-local-dev-sync-token"
 $env:VITE_SYNC_PROXY_TOKEN = "bemo-local-dev-sync-token"
-npm run dev -- --host 127.0.0.1 --port $resolvedFrontendPort
+try {
+  npm run dev -- --host 127.0.0.1 --port $resolvedFrontendPort
+} finally {
+  if ($backendProcess -and !$backendProcess.HasExited) {
+    # Only this launcher-owned process tree; never terminate another user's backend.
+    & taskkill /PID $backendProcess.Id /T /F | Out-Null
+  }
+}

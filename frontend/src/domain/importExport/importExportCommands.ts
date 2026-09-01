@@ -4,6 +4,7 @@ import { clearCurrentAppData, clearLocalReplicaState, usesRemoteAppData } from '
 import { downloadBlob } from './importExportShared.js';
 import { buildMarkdownArchiveBlob, importMarkdownArchive } from './markdownArchive.js';
 import { buildBackupPayloadFromSyncDirectoryFiles } from './syncDirectoryBackup.js';
+import { withSyncPaused } from '../sync/syncCoordinator.js';
 
 export async function exportBackupArchive() {
   const archive = await buildBackupArchiveBlob();
@@ -15,11 +16,11 @@ export async function importBackupArchive(file: File) {
   const payload = isZip
     ? await parseBackupArchive(file)
     : JSON.parse(await file.text()) as Partial<BackupPayload>;
-  const result = await applyBackupPayload(payload);
-  if (usesRemoteAppData()) {
-    await clearLocalReplicaState();
-  }
-  return result;
+  return withSyncPaused(async () => {
+    const result = await applyBackupPayload(payload);
+    if (usesRemoteAppData()) await clearLocalReplicaState();
+    return result;
+  });
 }
 
 export async function exportMarkdownArchive() {
@@ -28,28 +29,29 @@ export async function exportMarkdownArchive() {
 }
 
 export async function importMarkdownArchiveZip(file: File) {
-  const result = await importMarkdownArchive(file);
-  if (usesRemoteAppData()) {
-    await clearLocalReplicaState();
-  }
-  return result;
+  return withSyncPaused(async () => {
+    const result = await importMarkdownArchive(file);
+    if (usesRemoteAppData()) await clearLocalReplicaState();
+    return result;
+  });
 }
 
 export async function importBackupFromSyncDirectoryFiles(files: Iterable<File>) {
   const payload = await buildBackupPayloadFromSyncDirectoryFiles(files);
-  const result = await applyBackupPayload(payload);
-  if (usesRemoteAppData()) {
-    await clearLocalReplicaState();
-  }
-  return result;
+  return withSyncPaused(async () => {
+    const result = await applyBackupPayload(payload);
+    if (usesRemoteAppData()) await clearLocalReplicaState();
+    return result;
+  });
 }
 
 export async function clearCurrentWorkspaceData() {
-  return clearCurrentAppData();
+  return withSyncPaused(clearCurrentAppData);
 }
 
 export async function resetCurrentInstallState() {
-  await clearCurrentWorkspaceData();
+  return withSyncPaused(async () => {
+  await clearLocalReplicaState();
 
   if (typeof localStorage !== 'undefined') {
     const keysToRemove: string[] = [];
@@ -66,4 +68,5 @@ export async function resetCurrentInstallState() {
   return {
     reset_completed: true,
   };
+  }, false);
 }

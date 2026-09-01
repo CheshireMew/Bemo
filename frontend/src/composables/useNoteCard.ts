@@ -2,7 +2,7 @@ import { computed, ref, toValue, watch, type MaybeRefOrGetter } from 'vue';
 
 import type { NoteMeta } from '../store/notes';
 import { pushNotification } from '../store/notifications';
-import { openAiChat, openImagePreview as openImagePreviewOverlay } from '../store/ui';
+import { openImagePreview as openImagePreviewOverlay } from '../store/ui';
 import { settings } from '../store/settings';
 import { resolveAttachmentUrl } from '../domain/attachments/attachmentUrlResolver';
 import {
@@ -38,14 +38,6 @@ export function useNoteCard(noteSource: MaybeRefOrGetter<NoteMeta>) {
   const audioAttachments = computed(() => splitContent.value.attachments.filter((attachment) => getEditorAttachmentDisplayKind(attachment) === 'audio'));
   const videoAttachments = computed(() => splitContent.value.attachments.filter((attachment) => getEditorAttachmentDisplayKind(attachment) === 'video'));
   const fileAttachments = computed(() => splitContent.value.attachments.filter((attachment) => getEditorAttachmentDisplayKind(attachment) === 'file'));
-
-  const openNoteAiChat = () => {
-    const firstLine = (note.value.content || '').trim().split('\n')[0]?.replace(/^#+\s*/, '').trim() || '';
-    openAiChat({
-      noteId: note.value.note_id,
-      noteLabel: firstLine || note.value.title || '当前笔记',
-    });
-  };
 
   const startEdit = () => {
     localStorage.removeItem(editDraftStorageKey.value);
@@ -159,7 +151,6 @@ export function useNoteCard(noteSource: MaybeRefOrGetter<NoteMeta>) {
     audioAttachments,
     videoAttachments,
     fileAttachments,
-    openNoteAiChat,
     startEdit,
     cancelEdit,
     handleEditSaved,

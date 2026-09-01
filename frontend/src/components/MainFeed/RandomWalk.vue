@@ -6,11 +6,11 @@
         随机漫步
       </h3>
       <div class="random-walk-actions">
-        <button class="btn-random-next" @click="pickRandomNote">
+        <button class="btn-random-next" :disabled="notes.length < 2" :title="notes.length < 2 ? '至少需要两条笔记才能换一篇' : '随机查看另一条笔记'" @click="pickRandomNote">
           <Shuffle :size="14" />
           换一篇
         </button>
-        <button class="btn-random-close" @click="closeView">
+        <button class="btn-random-close" aria-label="关闭随机漫步" @click="closeView">
           <X :size="16" />
         </button>
       </div>
@@ -41,8 +41,11 @@ const pickRandomNote = () => {
     randomNote.value = null;
     return;
   }
-  const idx = Math.floor(Math.random() * notes.value.length);
-  randomNote.value = notes.value[idx];
+  const candidates = notes.value.length > 1 && randomNote.value
+    ? notes.value.filter((note) => note.note_id !== randomNote.value?.note_id)
+    : notes.value;
+  const idx = Math.floor(Math.random() * candidates.length);
+  randomNote.value = candidates[idx];
 };
 
 const closeView = () => {
@@ -72,12 +75,13 @@ watch([randomWalkNonce, notes], () => {
 .btn-random-next {
   background: var(--accent-sidebar-bg); color: var(--accent-color); border: none;
   padding: 6px 14px; border-radius: var(--radius-md); cursor: pointer;
-  font-size: 0.8rem; font-weight: 500; transition: all 0.15s;
+  font-size: var(--font-size-small); font-weight: 500; transition: all 0.15s;
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
-.btn-random-next:hover { background: var(--accent-color); color: white; }
+.btn-random-next:hover:not(:disabled) { background: var(--accent-color); color: var(--accent-foreground, white); }
+.btn-random-next:disabled { cursor: default; opacity: 0.6; }
 .btn-random-close {
   background: none; border: none; color: var(--text-secondary);
   cursor: pointer; padding: 6px; border-radius: 6px; line-height: 1;
@@ -86,5 +90,5 @@ watch([randomWalkNonce, notes], () => {
   justify-content: center;
 }
 .btn-random-close:hover { background: var(--bg-main); }
-.trash-empty { text-align: center; color: #ccc; padding: 40px; font-size: 0.9rem; }
+.trash-empty { text-align: center; color: var(--text-secondary); padding: 40px; font-size: var(--font-size-supporting); }
 </style>

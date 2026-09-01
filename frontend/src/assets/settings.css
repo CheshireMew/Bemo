@@ -38,8 +38,8 @@
 .field-hint {
   margin: 6px 0 0;
   color: var(--text-secondary, #71717a);
-  font-size: 0.92rem;
-  line-height: 1.5;
+  font-size: var(--font-size-supporting);
+  line-height: 1.6;
 }
 
 .section-badge {
@@ -47,7 +47,7 @@
   color: var(--accent-color, #31d279);
   padding: 6px 10px;
   border-radius: 999px;
-  font-size: 0.85rem;
+  font-size: var(--font-size-small);
   font-weight: 600;
   align-self: flex-start;
   white-space: nowrap;
@@ -85,7 +85,7 @@
 
 .danger-card {
   border-color: color-mix(in srgb, #dc2626 28%, var(--border-color, #e4e4e7));
-  background: color-mix(in srgb, #fff5f5 72%, var(--bg-card, #ffffff));
+  background: color-mix(in srgb, var(--danger-color) 8%, var(--bg-card));
 }
 
 .danger-card:hover {
@@ -108,6 +108,7 @@
 
 .field-label {
   display: block;
+  font-size: var(--font-size-body);
   font-weight: 600;
   color: var(--text-primary, #18181b);
 }
@@ -173,7 +174,7 @@
 
 .primary-btn {
   background: var(--accent-color, #31d279);
-  color: #fff;
+  color: var(--accent-foreground, #fff);
 }
 .primary-btn:hover:not(:disabled) {
   filter: brightness(0.95);
@@ -218,11 +219,11 @@
   color: var(--text-primary, #18181b);
 }
 
-.helper-panel strong { font-size: 0.92rem; }
-.helper-panel span { color: var(--text-secondary, #71717a); font-size: 0.9rem; line-height: 1.5; }
-.helper-panel-muted { background: color-mix(in srgb, var(--accent-sidebar-bg, #e6f7ef) 28%, white); }
-.helper-panel-warning { margin-top: 16px; border-color: color-mix(in srgb, #f59e0b 28%, var(--border-color, #e4e4e7)); background: #fff8eb; }
-.helper-panel-danger { border-color: color-mix(in srgb, #dc2626 28%, var(--border-color, #e4e4e7)); background: #fff6f6; }
+.helper-panel strong { font-size: var(--font-size-supporting); }
+.helper-panel span { color: var(--text-secondary, #71717a); font-size: var(--font-size-supporting); line-height: 1.6; }
+.helper-panel-muted { background: color-mix(in srgb, var(--accent-sidebar-bg) 28%, var(--bg-card)); }
+.helper-panel-warning { margin-top: 16px; border-color: color-mix(in srgb, #f59e0b 28%, var(--border-color, #e4e4e7)); background: color-mix(in srgb, #f59e0b 10%, var(--bg-card)); }
+.helper-panel-danger { border-color: color-mix(in srgb, var(--danger-color) 28%, var(--border-color, #e4e4e7)); background: color-mix(in srgb, var(--danger-color) 10%, var(--bg-card)); }
 
 
 /* Custom Toggle Switch (replaces native checkbox) */
@@ -236,9 +237,13 @@
 
 .toggle-switch-wrapper input[type="checkbox"] {
   opacity: 0;
-  width: 0;
-  height: 0;
+  width: 100%;
+  height: 100%;
   position: absolute;
+  inset: 0;
+  z-index: 1;
+  margin: 0;
+  cursor: pointer;
 }
 
 .toggle-switch-slider {
@@ -281,20 +286,142 @@
 
 /* Base Responsive */
 @media (max-width: 768px) {
+  .settings-section {
+    gap: 12px;
+  }
+
+  .section-header {
+    gap: 12px;
+    padding: 0 2px;
+  }
+
+  .section-header h3 {
+    font-size: 1.2rem;
+  }
+
+  .section-header p,
+  .settings-card p,
+  .field-hint {
+    line-height: 1.5;
+  }
+
   .card-grid.two-up,
   .card-grid.three-up {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
-  .toggle-row,
+
+  .settings-card {
+    padding: 16px;
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
+  }
+
+  .settings-card:hover {
+    border-color: color-mix(in srgb, var(--border-color, #e4e4e7) 80%, transparent);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
+  }
+
+  .form-card {
+    gap: 0;
+  }
+
+  .form-card > .field-row,
+  .form-card > .toggle-row {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .form-card > :first-child {
+    padding-top: 0;
+  }
+
+  .form-card > :last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
   .field-row,
   .section-inline-header {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
   }
+
+  .toggle-row {
+    width: 100%;
+    min-height: 48px;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .toggle-row > div:first-child {
+    min-width: 0;
+    flex: 1;
+  }
+
   .field-row input,
   .field-row select,
   .field-input,
   .field-input-stack {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
   }
+
+  .field-row input,
+  .field-row select {
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  .with-suffix {
+    width: 100%;
+  }
+
+  .with-suffix input {
+    width: auto;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .button-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .primary-btn,
+  .secondary-btn,
+  .danger-btn {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 14px;
+  }
+
+  .toggle-switch-wrapper {
+    width: 50px;
+    height: 30px;
+  }
+
+  .toggle-switch-slider {
+    border-radius: 30px;
+  }
+
+  .toggle-switch-slider::before {
+    width: 26px;
+    height: 26px;
+  }
+
+  .toggle-switch-wrapper input:checked + .toggle-switch-slider::before {
+    transform: translateX(20px);
+  }
+}
+
+@container settings (max-width: 640px) {
+  .card-grid.two-up, .card-grid.three-up { grid-template-columns: 1fr; }
+  .field-row, .section-inline-header { flex-direction: column; align-items: stretch; }
+  .field-row input, .field-row select, .field-input, .field-input-stack { min-width: 0; width: 100%; max-width: 100%; }
+  .toggle-row > div:first-child { min-width: 0; }
+  .settings-card { min-width: 0; overflow-wrap: anywhere; }
 }

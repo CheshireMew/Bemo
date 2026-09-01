@@ -6,15 +6,25 @@
       class="notification-item"
       :class="[`notification-${item.level}`]"
     >
-      <span>{{ item.message }}</span>
-      <button type="button" class="notification-close" @click="removeNotification(item.id)">×</button>
+      <span class="notification-message">{{ item.message }}</span>
+      <div class="notification-actions">
+        <button
+          v-if="item.action"
+          type="button"
+          class="notification-action"
+          @click="runNotificationAction(item)"
+        >
+          {{ item.action.label }}
+        </button>
+        <button type="button" class="notification-close" aria-label="关闭通知" @click="removeNotification(item.id)">×</button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { notifications, removeNotification } from '../../store/notifications';
+import { notifications, removeNotification, runNotificationAction } from '../../store/notifications';
 
 const props = withDefaults(defineProps<{
   shell?: 'web-desktop' | 'mobile';
@@ -64,18 +74,44 @@ const stackClass = computed(() => (
   box-shadow: 0 10px 24px rgba(24, 24, 27, 0.12);
 }
 
+.notification-message {
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.notification-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.notification-action {
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  padding: 5px 9px;
+  font: inherit;
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .notification-success {
   border-color: color-mix(in srgb, var(--accent-color, #31d279) 45%, #d4d4d8);
 }
 
 .notification-error {
-  border-color: #f5c2c7;
-  background: #fff5f5;
+  border-color: color-mix(in srgb, var(--danger-color) 42%, var(--border-color));
+  background: color-mix(in srgb, var(--danger-color) 12%, var(--bg-card));
+  color: var(--danger-text);
 }
 
 .notification-info {
-  border-color: #bfdbfe;
-  background: #f8fbff;
+  border-color: color-mix(in srgb, var(--info-color) 38%, var(--border-color));
+  background: color-mix(in srgb, var(--info-color) 10%, var(--bg-card));
+  color: var(--info-text);
 }
 
 .notification-close {
@@ -85,6 +121,6 @@ const stackClass = computed(() => (
   cursor: pointer;
   font-size: 1rem;
   line-height: 1;
-  padding: 0;
+  padding: 4px;
 }
 </style>

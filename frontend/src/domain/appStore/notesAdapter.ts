@@ -31,25 +31,27 @@ import {
 import type { NoteMeta } from '../notes/notesTypes.js';
 import { shouldUseBackendAppStore } from '../runtime/appStoreRuntime.js';
 import { enqueueRemoteNoteChange } from '../sync/noteSyncOutbox.js';
+import { readSyncConfigSnapshot } from '../sync/syncConfig.js';
 
-export async function listDisplayNotes(): Promise<NoteMeta[]> {
+function finishNoteMutation(input: Parameters<typeof enqueueRemoteNoteChange>[0]) {
+  // Backend mutations commit their outbox record in the same SQLite transaction.
+  return shouldUseBackendAppStore()
+    ? Promise.resolve(readSyncConfigSnapshot().mode !== 'local')
+    : enqueueRemoteNoteChange(input);
+}
+
+export type NotesReadResult = { notes: NoteMeta[]; source: 'primary' | 'cache'; error: string };
+
+export async function listDisplayNotes(): Promise<NotesReadResult> {
   try {
     const notes = shouldUseBackendAppStore()
       ? await listBackendNotes()
       : await listLocalNotes();
-    storeCachedNotes(notes).catch(() => {});
-    return notes;
+    if (shouldUseBackendAppStore()) await storeCachedNotes(notes).catch(() => {});
+    return { notes, source: 'primary', error: '' };
   } catch (error) {
-    console.error('Failed to fetch notes, falling back to cache...', error);
-    try {
-      const cached = await loadCachedNotes();
-      if (cached.length > 0) {
-        return cached;
-      }
-    } catch (cacheError) {
-      console.error('Failed to load notes from cache either.', cacheError);
-    }
-    return [];
+    const cached = await loadCachedNotes().catch(() => []);
+    return { notes: cached, source: 'cache', error: error instanceof Error ? error.message : '无法读取笔记。' };
   }
 }
 
@@ -71,7 +73,7 @@ export async function createNote(input: { content: string; tags: string[] }) {
       ...input,
       attachments: await prepareBackendAttachments(input.content),
     });
-    const syncQueued = await enqueueRemoteNoteChange({
+    const syncQueued = await finishNoteMutation({
       entityId: created.note_id,
       type: 'note.create',
       baseRevision: 0,
@@ -88,7 +90,7 @@ export async function createNote(input: { content: string; tags: string[] }) {
   }
 
   const created = await createLocalNote(input);
-  const syncQueued = await enqueueRemoteNoteChange({
+  const syncQueued = await finishNoteMutation({
     entityId: created.note_id,
     type: 'note.create',
     baseRevision: 0,
@@ -110,7 +112,7 @@ export async function updateNote(note: NoteMeta, input: { content: string; tags:
       ...input,
       attachments: await prepareBackendAttachments(input.content, note.note_id),
     });
-    return enqueueRemoteNoteChange({
+    return finishNoteMutation({
       entityId: note.note_id,
       type: 'note.update',
       baseRevision: note.revision,
@@ -123,7 +125,7 @@ export async function updateNote(note: NoteMeta, input: { content: string; tags:
   }
 
   await updateLocalNote(note.note_id, input);
-  return enqueueRemoteNoteChange({
+  return finishNoteMutation({
     entityId: note.note_id,
     type: 'note.update',
     baseRevision: note.revision,
@@ -139,7 +141,7 @@ export async function togglePinned(note: NoteMeta) {
   if (shouldUseBackendAppStore()) {
     await patchBackendNote(note.note_id, { pinned: !note.pinned });
     const nextPinned = !note.pinned;
-    return enqueueRemoteNoteChange({
+    return finishNoteMutation({
       entityId: note.note_id,
       type: 'note.patch',
       baseRevision: note.revision,
@@ -152,7 +154,7 @@ export async function togglePinned(note: NoteMeta) {
 
   const nextPinned = !note.pinned;
   await patchLocalNote(note.note_id, { pinned: nextPinned });
-  return enqueueRemoteNoteChange({
+  return finishNoteMutation({
     entityId: note.note_id,
     type: 'note.patch',
     baseRevision: note.revision,
@@ -166,7 +168,7 @@ export async function togglePinned(note: NoteMeta) {
 export async function moveNoteToTrash(note: NoteMeta) {
   if (shouldUseBackendAppStore()) {
     await trashBackendNote(note.note_id);
-    return enqueueRemoteNoteChange({
+    return finishNoteMutation({
       entityId: note.note_id,
       type: 'note.trash',
       baseRevision: note.revision,
@@ -182,7 +184,7 @@ export async function moveNoteToTrash(note: NoteMeta) {
   }
 
   await deleteLocalNote(note.note_id);
-  return enqueueRemoteNoteChange({
+  return finishNoteMutation({
     entityId: note.note_id,
     type: 'note.trash',
     baseRevision: note.revision,
@@ -206,7 +208,7 @@ export async function listDisplayTrash(): Promise<NoteMeta[]> {
 export async function restoreTrashNote(noteId: string) {
   if (shouldUseBackendAppStore()) {
     const restored = await restoreBackendTrashNote(noteId);
-    return enqueueRemoteNoteChange({
+    return finishNoteMutation({
       entityId: restored.note_id,
       type: 'note.restore',
       baseRevision: restored.revision - 1,
@@ -222,7 +224,7 @@ export async function restoreTrashNote(noteId: string) {
   }
 
   const restored = await restoreLocalTrashNote(noteId);
-  return enqueueRemoteNoteChange({
+  return finishNoteMutation({
     entityId: restored.note_id,
     type: 'note.restore',
     baseRevision: restored.revision - 1,
@@ -240,7 +242,7 @@ export async function restoreTrashNote(noteId: string) {
 export async function purgeTrashNote(noteId: string) {
   if (shouldUseBackendAppStore()) {
     await purgeBackendTrashNote(noteId);
-    return enqueueRemoteNoteChange({
+    return finishNoteMutation({
       entityId: noteId,
       type: 'note.purge',
       baseRevision: 0,
@@ -252,7 +254,7 @@ export async function purgeTrashNote(noteId: string) {
 
   const deleted = await permanentlyDeleteLocalTrashNote(noteId);
   if (!deleted) return false;
-  return enqueueRemoteNoteChange({
+  return finishNoteMutation({
     entityId: deleted.note_id,
     type: 'note.purge',
     baseRevision: deleted.revision,
@@ -265,20 +267,14 @@ export async function purgeTrashNote(noteId: string) {
 
 export async function clearTrash() {
   if (shouldUseBackendAppStore()) {
-    const deletedCount = await emptyBackendTrash();
-    if (deletedCount > 0) {
-      // NOTE: We don't have the individual note IDs to queue note.purge when emptying backend trash.
-      // Ideally backend would queue it, but since we rely on local queue, we can't do it easily here.
-      // We will let WebDAV cleanup handle it or ignore for now, this is a known limitation.
-      // A proper fix would list backend trash first before emptying.
-    }
-    return false;
+    const deleted = await emptyBackendTrash();
+    return deleted.length > 0 && readSyncConfigSnapshot().mode !== 'local';
   }
 
   const deleted = await emptyLocalTrashNotes();
   let queuedAny = false;
   for (const note of deleted) {
-    queuedAny = await enqueueRemoteNoteChange({
+    queuedAny = await finishNoteMutation({
       entityId: note.note_id,
       type: 'note.purge',
       baseRevision: note.revision,
@@ -301,19 +297,20 @@ export async function importExternalNotes(notes: NoteMeta[]) {
   }
 
   if (shouldUseBackendAppStore()) {
-    const importedNoteRecords = notes.map(toImportedNoteRecord);
+    const importedNoteRecords: ReturnType<typeof toImportedNoteRecord>[] = [];
     for (const note of notes) {
-      await createBackendNote({
+      const saved = await createBackendNote({
         content: note.content,
         tags: note.tags,
-        attachments: await prepareBackendAttachments(note.content),
+        attachments: await prepareBackendAttachments(note.content, undefined, 'import'),
         created_at: new Date(note.created_at * 1000).toISOString(),
         pinned: note.pinned,
         revision: note.revision,
       });
+      importedNoteRecords.push(toImportedNoteRecord(saved));
     }
 
-    const sync_queued = await enqueueImportedNotes(importedNoteRecords);
+    const sync_queued = readSyncConfigSnapshot().mode !== 'local';
     return {
       imported_count: notes.length,
       imported_note_records: importedNoteRecords,

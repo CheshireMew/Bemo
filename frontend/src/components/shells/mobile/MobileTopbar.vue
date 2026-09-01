@@ -34,7 +34,7 @@ const hasFilters = computed(() => Boolean(selectedTag.value || selectedDate.valu
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: calc(12px + var(--safe-top)) 0 14px;
+  padding: calc(8px + var(--safe-top)) 0 10px;
   background: color-mix(in srgb, var(--bg-main) 92%, transparent);
   backdrop-filter: blur(16px);
 }
@@ -51,7 +51,7 @@ const hasFilters = computed(() => Boolean(selectedTag.value || selectedDate.valu
   padding: 6px 10px;
   background: var(--accent-sidebar-bg, #e6f7ef);
   color: var(--accent-color, #31d279);
-  font-size: 0.75rem;
+  font-size: var(--font-size-caption);
   font-weight: 600;
   cursor: pointer;
 }

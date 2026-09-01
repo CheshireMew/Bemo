@@ -1,5 +1,5 @@
-import { fetchTrash, selectedDate } from '../store/notes';
-import { currentView, openAiChat, openRandomWalk, setView } from '../store/ui';
+import { clearSearch, clearSelectedFilters } from '../store/notes';
+import { currentView, openRandomWalk, setView } from '../store/ui';
 
 export function usePrimaryNavigation(onNavigate?: () => void) {
   const navigate = () => {
@@ -8,7 +8,8 @@ export function usePrimaryNavigation(onNavigate?: () => void) {
 
   const openAllNotes = () => {
     setView('all');
-    selectedDate.value = null;
+    clearSelectedFilters();
+    clearSearch();
     navigate();
   };
 
@@ -17,14 +18,8 @@ export function usePrimaryNavigation(onNavigate?: () => void) {
     navigate();
   };
 
-  const openTrashView = async () => {
+  const openTrashView = () => {
     setView('trash');
-    await fetchTrash();
-    navigate();
-  };
-
-  const openDefaultAiChat = () => {
-    openAiChat();
     navigate();
   };
 
@@ -33,6 +28,5 @@ export function usePrimaryNavigation(onNavigate?: () => void) {
     openAllNotes,
     openRandomWalkView,
     openTrashView,
-    openDefaultAiChat,
   };
 }

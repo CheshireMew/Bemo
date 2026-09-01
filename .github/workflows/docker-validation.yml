@@ -1,0 +1,18 @@
+name: Manual Docker deployment validation
+on:
+  workflow_dispatch:
+jobs:
+  deployment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create test-only authentication file
+        run: |
+          docker run --rm httpd:2.4-alpine htpasswd -nb bemo-test bemo-test-only > "$RUNNER_TEMP/bemo.htpasswd"
+          echo "BEMO_AUTH_FILE=$RUNNER_TEMP/bemo.htpasswd" >> "$GITHUB_ENV"
+      - name: Validate isolated deployment
+        shell: pwsh
+        env:
+          BEMO_TEST_USER: bemo-test
+          BEMO_TEST_PASSWORD: bemo-test-only
+        run: ./scripts/verify-docker.ps1 -ConfirmTestDeployment

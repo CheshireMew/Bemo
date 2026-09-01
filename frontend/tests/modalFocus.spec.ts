@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import { JSDOM } from 'jsdom';
+import { attachModalFocus } from '../src/utils/modalFocus.js';
+
+const dom = new JSDOM('<button id="trigger">设置</button><section role="dialog"><button id="first">first</button><button id="last">last</button></section>');
+const doc = dom.window.document;
+const trigger = doc.querySelector<HTMLElement>('#trigger')!;
+const panel = doc.querySelector<HTMLElement>('section')!;
+const first = doc.querySelector<HTMLElement>('#first')!;
+const last = doc.querySelector<HTMLElement>('#last')!;
+trigger.focus();
+let closed = false;
+const release = attachModalFocus(panel, () => { closed = true; }, trigger);
+assert.equal(doc.activeElement, first);
+assert.equal(trigger.inert, true);
+last.focus();
+last.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+assert.equal(doc.activeElement, first);
+first.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+assert.equal(doc.activeElement, last);
+last.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+assert.equal(closed, true);
+release();
+assert.equal(doc.activeElement, trigger);
+assert.ok(!trigger.inert);
+dom.window.close();
+console.log('PASS 015 modal entry, Tab cycle, Escape, background isolation and return focus');

@@ -1,0 +1,7 @@
+venv
+data
+build
+dist
+__pycache__
+tests/.tmp
+*.pyc

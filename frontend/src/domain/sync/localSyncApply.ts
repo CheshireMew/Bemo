@@ -77,7 +77,17 @@ function getRemoteRevision(payload: Record<string, unknown>, fallback: number) {
   return normalizeNoteContentPayload(payload, fallback).revision;
 }
 
-export async function applyChangesLocally(changes: SyncChange[]) {
+export const localSyncStore = {
+  createLocalConflictCopy, moveLocalNoteToTrashById, purgeLocalNoteById,
+  restoreLocalTrashNote, updateLocalNoteById, findLocalNoteById,
+  findLocalTrashNoteById, applyRemoteActiveState, applyRemoteTrashState,
+};
+export type SyncNoteStore = typeof localSyncStore;
+
+export async function applyChangesLocally(changes: SyncChange[], store: SyncNoteStore = localSyncStore) {
+  const { createLocalConflictCopy, moveLocalNoteToTrashById, purgeLocalNoteById,
+    restoreLocalTrashNote, updateLocalNoteById, findLocalNoteById,
+    findLocalTrashNoteById, applyRemoteActiveState, applyRemoteTrashState } = store;
   const applied: Array<Record<string, unknown>> = [];
   const conflicts: Array<Record<string, unknown>> = [];
 

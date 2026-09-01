@@ -1,6 +1,7 @@
 import { resolveAttachmentSourceUrl } from '../appStore/attachmentUrlAdapter.js';
 import { extractAttachmentFilename } from './attachmentLinks.js';
 import { getAttachmentBlobRecord, getDraftAttachmentBlobRecord } from './blobStorage.js';
+import { shouldUseBackendAppStore } from '../runtime/appStoreRuntime.js';
 
 type CachedAttachmentUrl = {
   objectUrl: string;
@@ -43,7 +44,7 @@ export async function resolveAttachmentUrl(url: string): Promise<string> {
     return resolveAttachmentSourceUrl(url);
   }
 
-  const record = await getAttachmentBlobRecord(filename);
+  const record = shouldUseBackendAppStore() ? null : await getAttachmentBlobRecord(filename);
   const draftRecord = record ? null : await getDraftAttachmentBlobRecord(filename);
   const resolvedRecord = record || draftRecord;
   const cached = objectUrlCache.get(filename);

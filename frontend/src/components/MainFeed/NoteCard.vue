@@ -5,6 +5,7 @@
     :isTrash="isTrash"
     @restore="emit('restore')"
     @permanentDelete="emit('permanentDelete')"
+    @editing-change="emit('editingChange', $event)"
   />
 </template>
 
@@ -23,6 +24,7 @@ defineProps<{
 const emit = defineEmits<{
   restore: [];
   permanentDelete: [];
+  editingChange: [editing: boolean];
 }>();
 
 const noteCardComponent = computed(() => (

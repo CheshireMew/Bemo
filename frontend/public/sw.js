@@ -1,66 +1,40 @@
-const CACHE_NAME = 'bemo-v2';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-];
-
-// Install: cache static assets
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
-  );
-  self.skipWaiting();
-});
-
-// Activate: clean old caches
+const CACHE_NAME = 'bemo-shell-v3';
+self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((key) => key.startsWith('bemo-') && key !== CACHE_NAME).map((key) => caches.delete(key)));
+    await self.clients.claim();
+  })());
 });
-
-// Fetch: network-first for API, cache-first for static
+// Only the application shell and fingerprinted assets belong in this cache.
+// Notes, attachments, API failures and other sites must never be cached here.
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // API requests: network-first
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request))
-    );
-    return;
-  }
-
-  // Bypassing Vite dev server internal files and HMR paths
-  if (
-    url.pathname.startsWith('/@') || 
-    url.pathname.includes('/node_modules/') || 
-    url.searchParams.has('import') ||
-    url.pathname.includes('ws') ||
-    url.pathname.includes('hot') ||
-    event.request.headers.get('accept')?.includes('text/event-stream')
-  ) {
-    return;
-  }
-
-  // Static assets: cache-first, fallback to network
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        // Cache successful GET responses, but only for http/https schemes
-        if (response.ok && event.request.method === 'GET') {
-          if (url.protocol.startsWith('http')) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-        }
+  const request = event.request;
+  const url = new URL(request.url);
+  if (request.method !== 'GET' || url.origin !== self.location.origin ||
+      url.pathname.startsWith('/api/') || url.pathname.startsWith('/images/')) return;
+  if (request.mode === 'navigate') {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      try {
+        const response = await fetch(request, { cache: 'no-cache' });
+        if (response.ok) await cache.put('/', response.clone());
         return response;
-      });
-    }).catch(() => caches.match('/'))
-  );
+      } catch (error) {
+        const shell = await cache.match('/');
+        if (shell) return shell;
+        throw error;
+      }
+    })());
+  } else if (/^\/assets\/.*-[\w-]{8,}\.(js|css|woff2?|png|svg|webp)$/.test(url.pathname)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(request);
+      if (cached) return cached;
+      const response = await fetch(request);
+      if (response.ok) await cache.put(request, response.clone());
+      return response;
+    })());
+  }
 });

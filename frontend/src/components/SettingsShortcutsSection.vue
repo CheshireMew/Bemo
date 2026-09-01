@@ -15,14 +15,14 @@
         <div><kbd>Ctrl/⌘ + Shift + Z</kbd><span>重做（macOS / 通用）</span></div>
         <div><kbd>Ctrl/⌘ + B</kbd><span>加粗</span></div>
         <div><kbd>Ctrl/⌘ + I</kbd><span>斜体</span></div>
-        <div><kbd>Ctrl/⌘ + K</kbd><span>插入链接</span></div>
+        <div><kbd>Ctrl/⌘ + K</kbd><span>编辑器内插入链接；编辑器外聚焦搜索</span></div>
         <div><kbd>Ctrl/⌘ + `</kbd><span>行内代码</span></div>
         <div><kbd>Ctrl/⌘ + \</kbd><span>清除格式</span></div>
         <div><kbd>Ctrl/⌘ + Shift + X</kbd><span>删除线</span></div>
         <div><kbd>Ctrl/⌘ + Shift + L</kbd><span>列表</span></div>
         <div><kbd>Ctrl/⌘ + Shift + O</kbd><span>序号列表</span></div>
         <div><kbd>Ctrl/⌘ + Shift + T</kbd><span>任务清单</span></div>
-        <div><kbd>Ctrl/⌘ + Shift + P</kbd><span>切换预览</span></div>
+        <div><kbd>Ctrl/⌘ + Shift + P</kbd><span>切换富文本编辑 / Markdown 源码</span></div>
       </div>
     </div>
   </section>
@@ -35,7 +35,8 @@ kbd {
   border-bottom-width: 2px;
   border-radius: 8px;
   padding: 6px 10px;
-  font-size: 0.85rem;
+  font-size: var(--font-size-small);
+  font-weight: 600;
 }
 
 .shortcut-list {

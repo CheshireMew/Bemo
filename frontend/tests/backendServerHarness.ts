@@ -1,6 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -107,14 +106,12 @@ export async function withBackendServer<T>(
   run: (context: BackendServerContext) => Promise<T>,
 ) {
   const port = await getFreePort();
-  const dataDir = mkdtempSync(path.join(tmpdir(), `bemo-${mode}-`));
+  const testRoot = path.join(backendDir, 'tests', '.tmp');
+  mkdirSync(testRoot, { recursive: true });
+  const dataDir = mkdtempSync(path.join(testRoot, `bemo-${mode}-`));
   const logs: string[] = [];
   const target = mode === 'server' ? 'sync_server:app' : 'main:app';
-  const pythonExecutable = [
-    path.join(backendDir, 'venv', 'Scripts', 'python.exe'),
-    path.join(repoRoot, 'venv', 'Scripts', 'python.exe'),
-    'python',
-  ].find((candidate) => candidate === 'python' || existsSync(candidate)) || 'python';
+  const pythonExecutable = process.env.BEMO_PYTHON || 'python';
   const child = spawn(
     pythonExecutable,
     ['-m', 'uvicorn', target, '--host', '127.0.0.1', '--port', String(port)],
@@ -146,6 +143,6 @@ export async function withBackendServer<T>(
     });
   } finally {
     await stopServer(child);
-    await removeDirWithRetry(dataDir);
+    if (process.env.BEMO_TEST_KEEP_DATA !== '1') await removeDirWithRetry(dataDir);
   }
 }

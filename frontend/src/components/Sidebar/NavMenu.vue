@@ -7,8 +7,8 @@
       <a href="#" class="nav-item" :class="{ active: currentView === 'random' }" @click.prevent="handleRandomWalk">
         <Dices class="icon" :size="18" /> 随机漫步
       </a>
-      <a href="#" class="nav-item" @click.prevent="openDefaultAiChat">
-        <MessagesSquare class="icon" :size="18" /> AI 对话
+      <a href="#" class="nav-item" :class="{ active: currentView === 'trash' }" @click.prevent="openTrashView">
+        <Trash2 class="icon" :size="18" /> 回收站
       </a>
     </nav>
 
@@ -18,9 +18,7 @@
 </template>
 
 <script setup lang="ts">
-import { 
-  LayoutGrid, Dices, MessagesSquare
-} from 'lucide-vue-next';
+import { LayoutGrid, Dices, Trash2 } from 'lucide-vue-next';
 import { usePrimaryNavigation } from '../../composables/usePrimaryNavigation';
 
 const emit = defineEmits<{
@@ -31,7 +29,7 @@ const {
   currentView,
   openAllNotes: handleAllNotes,
   openRandomWalkView: handleRandomWalk,
-  openDefaultAiChat,
+  openTrashView,
 } = usePrimaryNavigation(() => emit('navigate'));
 </script>
 
@@ -40,12 +38,12 @@ const {
 .nav-item {
   display: flex; align-items: center; gap: 10px; padding: 8px 12px;
   text-decoration: none; color: var(--text-secondary); border-radius: var(--radius-md); 
-  font-size: 0.95rem; font-weight: 500;
+  font-size: 0.9375rem; font-weight: 500;
   transition: all 0.15s ease;
 }
 .nav-item:hover { background-color: var(--border-color); color: var(--text-primary); }
-.nav-item.active { background-color: var(--accent-color); color: white; font-weight: 600;}
-.nav-item.active .icon { color: white; }
+.nav-item.active { background-color: var(--accent-color); color: var(--accent-foreground, white); font-weight: 600;}
+.nav-item.active .icon { color: var(--accent-foreground, white); }
 .icon { color: var(--text-secondary); }
 
 </style>

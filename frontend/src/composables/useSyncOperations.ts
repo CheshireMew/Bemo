@@ -1,6 +1,6 @@
 import { onMounted, ref } from 'vue';
 import { summarizePendingChange } from '../domain/sync/pendingQueueSummary.js';
-import { getMutationLog } from '../domain/sync/mutationLogStorage.js';
+import { getPendingChanges as getMutationLog } from '../domain/sync/syncQueue.js';
 import {
   encodeBasicAuth,
   formatWebDavError,

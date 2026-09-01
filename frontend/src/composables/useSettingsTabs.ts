@@ -1,9 +1,10 @@
 import { ref, watch, type Component } from 'vue';
-import { Cloud, Paperclip, Download, PenTool, Keyboard, Bot, Palette, ShieldAlert, Trash2 } from 'lucide-vue-next';
+import { Cloud, Paperclip, Download, PenTool, Keyboard, Palette, ShieldAlert, Trash2 } from 'lucide-vue-next';
 
 import { settings } from '../store/settings';
 import { saveSettings } from '../services/localSettings';
 import { canShowShortcutSettingsTab } from '../domain/runtime/platformCapabilities.js';
+import { requestedSettingsTab, settingsRequestNonce } from '../store/ui.js';
 
 export type SettingsTabId =
   | 'sync'
@@ -13,7 +14,6 @@ export type SettingsTabId =
   | 'import-export'
   | 'editor'
   | 'shortcuts'
-  | 'ai'
   | 'trash';
 
 export type SettingsTab = {
@@ -30,7 +30,6 @@ const allSettingsTabs: SettingsTab[] = [
   { id: 'import-export', label: '导入导出', icon: Download },
   { id: 'editor', label: '编辑器', icon: PenTool },
   { id: 'shortcuts', label: '快捷键', icon: Keyboard },
-  { id: 'ai', label: 'AI', icon: Bot },
   { id: 'trash', label: '回收站', icon: Trash2 },
 ];
 
@@ -39,6 +38,13 @@ export function useSettingsTabs() {
   const tabs = canShowShortcutSettingsTab()
     ? allSettingsTabs
     : allSettingsTabs.filter((tab) => tab.id !== 'shortcuts');
+
+  watch(settingsRequestNonce, () => {
+    const requested = requestedSettingsTab.value;
+    if (requested && tabs.some((tab) => tab.id === requested)) {
+      activeTab.value = requested as SettingsTabId;
+    }
+  }, { immediate: true });
 
   watch(activeTab, (tab) => {
     if (tab === 'import-export') {

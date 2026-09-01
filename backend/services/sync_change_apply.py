@@ -8,8 +8,7 @@ from services.note_contract import (
     normalize_note_tags,
     now_iso,
 )
-from services.sync_store_repository import connect, ensure_sync_store, has_blob_record, get_blob_record
-from services import app_store_repository
+from services.sync_store_repository import connect, ensure_sync_store
 
 
 def apply_remote_change(change: dict[str, Any]) -> dict[str, Any]:
@@ -303,71 +302,10 @@ def _applied_result(
     revision: int,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    _project_to_app_store(str(change.get("type") or ""), note_id, payload, revision)
     stored_change = dict(change)
     stored_change["payload"] = payload
     return {"status": "applied", "note_id": note_id, "revision": revision, "change": stored_change}
 
-
-def _project_to_app_store(
-    change_type: str,
-    note_id: str,
-    payload: dict[str, Any],
-    revision: int,
-) -> None:
-    if not note_id:
-        return
-    if change_type == "note.purge":
-        app_store_repository.delete_note(note_id)
-        return
-
-    attachments = normalize_note_attachments(payload.get("attachments"))
-    _ensure_app_attachments(attachments)
-
-    content = str(payload.get("content") or "")
-    created_at = str(payload.get("created_at") or now_iso())
-    deleted_at = now_iso() if change_type == "note.trash" else None
-    app_store_repository.upsert_note(
-        {
-            "note_id": note_id,
-            "filename": str(payload.get("filename") or ""),
-            "title": derive_note_title(content),
-            "content": content,
-            "tags_json": json.dumps(normalize_note_tags(payload.get("tags")), ensure_ascii=False),
-            "attachments_json": json.dumps(attachments, ensure_ascii=False),
-            "pinned": bool(payload.get("pinned")),
-            "revision": revision,
-            "created_at": created_at,
-            "updated_at": now_iso(),
-            "deleted_at": deleted_at,
-        }
-    )
-
-
-def _ensure_app_attachments(attachments: list[dict[str, Any]] | None) -> None:
-    if not attachments:
-        return
-    for item in attachments:
-        filename = str(item.get("filename") or "")
-        blob_hash = str(item.get("blob_hash") or "")
-        mime_type = str(item.get("mime_type") or "application/octet-stream")
-        if not filename or not blob_hash:
-            continue
-
-        if not app_store_repository.has_blob_record(blob_hash):
-            if has_blob_record(blob_hash):
-                data = get_blob_record(blob_hash)
-                app_store_repository.put_blob_record(blob_hash, data)
-
-        record = app_store_repository.get_attachment_record(filename)
-        size = 0
-        if not record or record.get("blob_hash") != blob_hash:
-            if app_store_repository.has_blob_record(blob_hash):
-                data = app_store_repository.get_blob_record(blob_hash)
-                size = len(data)
-            app_store_repository.upsert_attachment_record(
-                filename, blob_hash, mime_type, size, now_iso()
-            )
 
 
 def _revision_conflict(operation_id: str, note_id: str, current_revision: int) -> dict[str, Any]:

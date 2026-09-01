@@ -8,6 +8,17 @@
     </div>
 
     <div class="settings-card form-card">
+      <label class="field-row">
+        <span>
+          <span class="field-label">默认编辑模式</span>
+          <span class="field-hint">富文本适合直接排版；Markdown 源码适合输入和检查语法。</span>
+        </span>
+        <select v-model="settings.editor.preferredMode" @change="persistSettings">
+          <option value="rich-text">富文本编辑</option>
+          <option value="markdown">Markdown 源码</option>
+        </select>
+      </label>
+
       <label class="toggle-row">
         <div>
           <span class="field-label">自动保存草稿</span>

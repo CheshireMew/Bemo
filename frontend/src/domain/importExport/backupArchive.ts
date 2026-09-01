@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 
 import { buildBackupPayload, type BackupAttachment, type BackupPayload } from './backupPayload.js';
+import { validateBackupPayload } from './backupValidation.js';
 
 type BackupArchiveManifest = Omit<BackupPayload, 'attachments'> & {
   version: 3;
@@ -13,6 +14,7 @@ type BackupArchiveManifest = Omit<BackupPayload, 'attachments'> & {
 
 export async function buildBackupArchiveBlob() {
   const payload = await buildBackupPayload();
+  validateBackupPayload(payload);
   const notes = Array.isArray(payload.notes) ? payload.notes : [];
   const trash = Array.isArray(payload.trash) ? payload.trash : [];
   const archiveAttachments = Array.isArray(payload.attachments) ? payload.attachments : [];
@@ -41,7 +43,7 @@ export async function buildBackupArchiveBlob() {
 }
 
 export async function parseBackupArchive(file: File): Promise<BackupPayload> {
-  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const zip = await JSZip.loadAsync(await file.arrayBuffer(), { checkCRC32: true });
   const manifestText = await zip.file('manifest.json')?.async('string');
   if (!manifestText) {
     throw new Error('备份 zip 缺少 manifest.json');
@@ -51,15 +53,18 @@ export async function parseBackupArchive(file: File): Promise<BackupPayload> {
   if (manifest.format !== 'bemo-backup' || manifest.version !== 3) {
     throw new Error('不支持的备份 zip 格式');
   }
+  if (!Array.isArray(manifest.notes) || !Array.isArray(manifest.trash) || !Array.isArray(manifest.attachments)) {
+    throw new Error('备份清单不完整，未修改现有数据。');
+  }
 
   const attachments: BackupAttachment[] = [];
-  for (const item of (manifest.attachments || [])) {
+  for (const item of manifest.attachments) {
     if (!item || typeof item.path !== 'string' || typeof item.filename !== 'string' || typeof item.mime_type !== 'string') {
-      continue;
+      throw new Error('备份附件清单无效。');
     }
 
     const entry = zip.file(item.path);
-    if (!entry) continue;
+    if (!entry) throw new Error(`备份缺少附件：${item.filename}`);
     attachments.push({
       filename: item.filename,
       mime_type: item.mime_type,
@@ -67,12 +72,14 @@ export async function parseBackupArchive(file: File): Promise<BackupPayload> {
     });
   }
 
-  return {
+  const payload: BackupPayload = {
     format: 'bemo-backup',
     version: 3,
     exported_at: typeof manifest.exported_at === 'string' ? manifest.exported_at : new Date().toISOString(),
-    notes: Array.isArray(manifest.notes) ? manifest.notes : [],
-    trash: Array.isArray(manifest.trash) ? manifest.trash : [],
+    notes: manifest.notes,
+    trash: manifest.trash,
     attachments,
   };
+  validateBackupPayload(payload);
+  return payload;
 }

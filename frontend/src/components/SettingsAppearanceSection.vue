@@ -16,7 +16,7 @@
         </div>
         <div class="toggle-switch-wrapper">
           <label class="switch">
-            <input type="checkbox" :checked="isDarkMode" @change="toggleTheme">
+            <input type="checkbox" aria-label="深色模式" :checked="isDarkMode" @change="toggleTheme">
             <span class="toggle-switch-slider"></span>
           </label>
         </div>
@@ -31,6 +31,7 @@
         <button 
           class="theme-card" 
           :class="{ active: currentSkin === 'default' }" 
+          :aria-pressed="currentSkin === 'default'"
           @click="setSkin('default')"
         >
           <div class="theme-preview preview-light">
@@ -47,6 +48,7 @@
         <button 
           class="theme-card" 
           :class="{ active: currentSkin === 'nord' }" 
+          :aria-pressed="currentSkin === 'nord'"
           @click="setSkin('nord')"
         >
           <div class="theme-preview preview-nord">
@@ -63,6 +65,7 @@
         <button 
           class="theme-card" 
           :class="{ active: currentSkin === 'sepia' }" 
+          :aria-pressed="currentSkin === 'sepia'"
           @click="setSkin('sepia')"
         >
           <div class="theme-preview preview-sepia">
@@ -107,7 +110,6 @@ import { currentSkin, setSkin, isDarkMode, toggleTheme } from '../store/ui';
   padding: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
-  outline: none;
 }
 
 .theme-card:hover {
@@ -172,6 +174,25 @@ import { currentSkin, setSkin, isDarkMode, toggleTheme } from '../store/ui';
 @media (max-width: 600px) {
   .theme-grid {
     grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .theme-card {
+    min-height: 82px;
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 14px;
+    padding: 10px;
+    text-align: left;
+  }
+
+  .theme-preview {
+    width: 96px;
+  }
+
+  .theme-card span {
+    font-size: var(--font-size-supporting);
   }
 }
 </style>

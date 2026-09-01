@@ -14,9 +14,12 @@
         </div>
       </div>
 
-      <div class="mode-switcher" role="radiogroup" aria-label="同步模式">
+      <div class="mode-switcher" role="radiogroup" aria-label="同步模式" @keydown="handleModeKeydown">
         <button
           type="button"
+          role="radio"
+          :aria-checked="syncSettings.mode === 'local'"
+          :tabindex="syncSettings.mode === 'local' ? 0 : -1"
           class="mode-pill"
           :class="{ active: syncSettings.mode === 'local' }"
           @click="syncSettings.mode = 'local'"
@@ -25,6 +28,9 @@
         </button>
         <button
           type="button"
+          role="radio"
+          :aria-checked="syncSettings.mode === 'server'"
+          :tabindex="syncSettings.mode === 'server' ? 0 : -1"
           class="mode-pill"
           :class="{ active: syncSettings.mode === 'server' }"
           @click="syncSettings.mode = 'server'"
@@ -33,6 +39,9 @@
         </button>
         <button
           type="button"
+          role="radio"
+          :aria-checked="syncSettings.mode === 'webdav'"
+          :tabindex="syncSettings.mode === 'webdav' ? 0 : -1"
           class="mode-pill"
           :class="{ active: syncSettings.mode === 'webdav' }"
           @click="syncSettings.mode = 'webdav'"
@@ -288,6 +297,21 @@ const currentModeTitle = computed(() => {
   return '本地模式';
 });
 
+const handleModeKeydown = (event: KeyboardEvent) => {
+  const buttons = Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+  const current = buttons.indexOf(event.target as HTMLButtonElement);
+  if (current < 0) return;
+  let next = current;
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (current + 1) % buttons.length;
+  else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (current - 1 + buttons.length) % buttons.length;
+  else if (event.key === 'Home') next = 0;
+  else if (event.key === 'End') next = buttons.length - 1;
+  else return;
+  event.preventDefault();
+  buttons[next]?.focus();
+  buttons[next]?.click();
+};
+
 const currentModeTag = computed(() => {
   if (syncSettings.mode === 'server') return '完整双向';
   if (syncSettings.mode === 'webdav') return shouldProxyWebDavThroughBackend() ? '经同步服务器' : '原生直连';
@@ -381,7 +405,7 @@ const {
 
 .mode-pill.active {
   background: var(--accent-color, #31d279);
-  color: #fff;
+  color: var(--accent-foreground, #fff);
   font-weight: 600;
 }
 
@@ -412,7 +436,7 @@ const {
   border-radius: 999px;
   background: var(--accent-sidebar-bg, #e6f7ef);
   color: var(--accent-color, #31d279);
-  font-size: 0.82rem;
+  font-size: var(--font-size-caption);
   font-weight: 700;
 }
 
@@ -436,7 +460,7 @@ const {
   padding: 18px;
   border-radius: 16px;
   border: 1px solid var(--border-color, #e4e4e7);
-  background: color-mix(in srgb, var(--bg-main, #f4f5f7) 72%, white);
+  background: color-mix(in srgb, var(--bg-main) 72%, var(--bg-card));
 }
 
 .device-card input {
@@ -469,13 +493,13 @@ const {
   padding: 18px;
   border-radius: 16px;
   border: 1px solid var(--border-color, #e4e4e7);
-  background: color-mix(in srgb, var(--bg-main, #f4f5f7) 72%, white);
+  background: color-mix(in srgb, var(--bg-main) 72%, var(--bg-card));
   min-height: 120px;
 }
 
 .status-label {
   color: var(--text-secondary, #71717a);
-  font-size: 0.9rem;
+  font-size: var(--font-size-supporting);
 }
 
 .status-metric strong {
@@ -492,7 +516,8 @@ const {
 
 .status-metric small {
   color: var(--text-secondary, #71717a);
-  font-size: 0.84rem;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-readable);
 }
 
 .queue-card {
@@ -514,7 +539,7 @@ const {
 
 .queue-empty {
   color: var(--text-secondary, #71717a);
-  font-size: 0.9rem;
+  font-size: var(--font-size-supporting);
 }
 
 .queue-list {
@@ -535,13 +560,19 @@ const {
   background: var(--bg-card, #ffffff);
   border: 1px solid var(--border-color, #e4e4e7);
   color: var(--text-secondary, #71717a);
-  font-size: 0.88rem;
+  font-size: var(--font-size-small);
   word-break: break-word;
 }
 
 .queue-item strong {
   color: var(--text-primary, #18181b);
-  font-size: 0.92rem;
+  font-size: var(--font-size-supporting);
+}
+
+@container settings (max-width: 640px) {
+  .overview-grid { grid-template-columns: 1fr; }
+  .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mode-pill { min-width: 0; flex-basis: 140px; }
 }
 
 @media (max-width: 768px) {
@@ -552,12 +583,21 @@ const {
 
   .mode-switcher {
     flex-direction: column;
+    gap: 4px;
+    padding: 4px;
   }
 
-  .mode-pill,
   .mode-summary-head,
   .sync-hero-main {
     width: 100%;
+  }
+
+  .mode-pill {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    flex: 0 0 auto;
+    padding: 12px 14px;
   }
 
   .mode-summary-head {

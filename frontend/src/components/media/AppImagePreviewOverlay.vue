@@ -1,7 +1,7 @@
 <template>
   <teleport to="body">
     <div v-if="isImagePreviewOpen && currentItem" class="preview-overlay" @click.self="closeImagePreview">
-      <section class="preview-panel" role="dialog" aria-modal="true" aria-label="图片预览">
+      <section v-modal-focus="closeImagePreview" class="preview-panel" role="dialog" aria-modal="true" aria-label="图片预览">
         <header class="preview-header">
           <div class="preview-meta">
             <h2>{{ currentItem.label || '图片预览' }}</h2>
@@ -40,6 +40,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted } from 'vue';
+import { vModalFocus } from '../../directives/modalFocus';
 import {
   closeImagePreview,
   imagePreviewIndex,
@@ -56,10 +57,6 @@ useScrollLock(isImagePreviewOpen);
 
 const handleKeydown = (event: KeyboardEvent) => {
   if (!isImagePreviewOpen.value) return;
-  if (event.key === 'Escape') {
-    closeImagePreview();
-    return;
-  }
   if (event.key === 'ArrowLeft') {
     showPreviousPreviewImage();
     return;
@@ -124,7 +121,7 @@ onBeforeUnmount(() => {
 
 .preview-meta p {
   margin: 4px 0 0;
-  font-size: 0.85rem;
+  font-size: var(--font-size-small);
   color: rgba(255, 255, 255, 0.72);
 }
 

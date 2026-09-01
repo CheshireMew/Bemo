@@ -1,8 +1,10 @@
 import {
   cleanupBackendOrphanAttachments,
   getBackendAttachmentSummary,
+  uploadBackendAttachment,
 } from '../attachments/backendAttachmentsApi.js';
-import { getAllAttachmentBlobRecords, getAllDraftAttachmentBlobRecords } from '../attachments/blobStorage.js';
+import { getAllAttachmentBlobRecords, getAllDraftAttachmentBlobRecords, getDraftAttachmentBlobRecordsForSession } from '../attachments/blobStorage.js';
+import { extractAttachmentFilenames } from '../attachments/attachmentRefParser.js';
 import { getAttachmentReferenceSummary } from '../attachments/attachmentRefStorage.js';
 import { promoteDraftAttachmentsForContent } from '../attachments/localAttachmentDrafts.js';
 import { cleanupOrphanAttachments } from '../attachments/orphanAttachmentCleanup.js';
@@ -21,6 +23,10 @@ export type AttachmentSummary = {
 
 export async function finalizeDraftAttachments(sessionKey: string, content: string) {
   if (shouldUseBackendAppStore()) {
+    const referenced = new Set(extractAttachmentFilenames(content));
+    for (const draft of await getDraftAttachmentBlobRecordsForSession(sessionKey)) {
+      if (referenced.has(draft.filename)) await uploadBackendAttachment({ filename: draft.filename, data: await draft.blob.arrayBuffer(), mimeType: draft.mime_type });
+    }
     return;
   }
   await promoteDraftAttachmentsForContent(sessionKey, content);

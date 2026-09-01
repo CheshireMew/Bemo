@@ -7,14 +7,12 @@ import {
   clearSelectedFilters,
 } from '../../store/notes.js';
 import {
-  closeAiChat,
   closeImagePreview,
   closeMobileCompose,
   closeMobileNoteEditor,
   closeMobileSettings,
   closeSidebar,
   currentView,
-  isAiChatOpen,
   isImagePreviewOpen,
   isMobileComposeOpen,
   isMobileSettingsOpen,
@@ -69,14 +67,6 @@ const builtinMobileBackHandlers: MobileBackHandler[] = [
     canHandle: () => isImagePreviewOpen.value,
     handle: () => {
       closeImagePreview();
-    },
-  },
-  {
-    id: 'ai-chat',
-    priority: 340,
-    canHandle: () => isAiChatOpen.value,
-    handle: () => {
-      closeAiChat();
     },
   },
   {

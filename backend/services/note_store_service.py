@@ -130,11 +130,12 @@ def purge_note(note_id: str) -> None:
     app_store_repository.delete_note(note_id)
 
 
-def empty_trash() -> int:
-    trash = list_trash_notes()
-    for note in trash:
-        app_store_repository.delete_note(str(note["note_id"]))
-    return len(trash)
+def empty_trash() -> list[dict[str, Any]]:
+    with app_store_repository.transaction():
+        trash = list_trash_notes()
+        for note in trash:
+            app_store_repository.delete_note(str(note["note_id"]))
+    return trash
 
 
 def _require_note(note_id: str, *, expect_deleted: bool = False) -> dict[str, Any]:
@@ -189,7 +190,7 @@ def _slugify_title(content: str) -> str:
 
 
 def _build_filename(content: str) -> str:
-    return f"{_unix_timestamp_seconds()}-{_slugify_title(content)}.md"
+    return f"{_unix_timestamp_seconds()}-{_slugify_title(content)}-{uuid.uuid4().hex[:12]}.md"
 
 
 def _note_id() -> str:

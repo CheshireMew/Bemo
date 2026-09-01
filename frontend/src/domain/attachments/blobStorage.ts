@@ -1,4 +1,4 @@
-import { openIndexedDb } from '../storage/indexedDb.js';
+import { readStore, writeStore } from '../storage/transactions.js';
 
 export interface BlobIndexRecord {
   blob_hash: string;
@@ -19,146 +19,46 @@ export interface DraftAttachmentBlobRecord extends AttachmentBlobRecord {
   session_key: string;
 }
 
+
 export async function getBlobIndexRecord(blobHash: string): Promise<BlobIndexRecord | null> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('blobIndex', 'readonly');
-  return new Promise((resolve) => {
-    const req = tx.objectStore('blobIndex').get(blobHash);
-    req.onsuccess = () => resolve((req.result as BlobIndexRecord | undefined) ?? null);
-  });
+  return (await readStore<BlobIndexRecord | undefined>('blobIndex', store => store.get(blobHash))) ?? null;
 }
-
-export async function getAllBlobIndexRecords(): Promise<BlobIndexRecord[]> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('blobIndex', 'readonly');
-  return new Promise((resolve) => {
-    const req = tx.objectStore('blobIndex').getAll();
-    req.onsuccess = () => resolve((req.result || []) as BlobIndexRecord[]);
-  });
+export function getAllBlobIndexRecords(): Promise<BlobIndexRecord[]> {
+  return readStore('blobIndex', store => store.getAll());
 }
-
-export async function hasBlobIndexRecord(blobHash: string): Promise<boolean> {
-  return Boolean(await getBlobIndexRecord(blobHash));
+export async function hasBlobIndexRecord(blobHash: string) { return Boolean(await getBlobIndexRecord(blobHash)); }
+export function putBlobIndexRecord(input: { blobHash: string; filename: string; mimeType?: string; size: number }): Promise<void> {
+  return writeStore('blobIndex', store => { store.put({ blob_hash: input.blobHash, filename: input.filename, mime_type: input.mimeType || 'application/octet-stream', size: input.size, updatedAt: Date.now() }); });
 }
-
-export async function putBlobIndexRecord(input: {
-  blobHash: string;
-  filename: string;
-  mimeType?: string;
-  size: number;
-}): Promise<void> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('blobIndex', 'readwrite');
-  tx.objectStore('blobIndex').put({
-    blob_hash: input.blobHash,
-    filename: input.filename,
-    mime_type: input.mimeType || 'application/octet-stream',
-    size: input.size,
-    updatedAt: Date.now(),
-  } as BlobIndexRecord);
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+export function deleteBlobIndexRecord(blobHash: string): Promise<void> {
+  return writeStore('blobIndex', store => { store.delete(blobHash); });
 }
-
-export async function deleteBlobIndexRecord(blobHash: string): Promise<void> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('blobIndex', 'readwrite');
-  tx.objectStore('blobIndex').delete(blobHash);
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+export function putAttachmentBlob(input: { filename: string; blob: Blob; mimeType?: string }): Promise<void> {
+  return writeStore('attachmentBlobs', store => { store.put({ filename: input.filename, blob: input.blob, mime_type: input.mimeType || input.blob.type || 'application/octet-stream', updatedAt: Date.now() }); });
 }
-
-export async function putAttachmentBlob(input: {
-  filename: string;
-  blob: Blob;
-  mimeType?: string;
-}): Promise<void> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('attachmentBlobs', 'readwrite');
-  tx.objectStore('attachmentBlobs').put({
-    filename: input.filename,
-    blob: input.blob,
-    mime_type: input.mimeType || input.blob.type || 'application/octet-stream',
-    updatedAt: Date.now(),
-  } as AttachmentBlobRecord);
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
-}
-
 export async function getAttachmentBlobRecord(filename: string): Promise<AttachmentBlobRecord | null> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('attachmentBlobs', 'readonly');
-  return new Promise((resolve) => {
-    const req = tx.objectStore('attachmentBlobs').get(filename);
-    req.onsuccess = () => resolve((req.result as AttachmentBlobRecord | undefined) ?? null);
-  });
+  return (await readStore<AttachmentBlobRecord | undefined>('attachmentBlobs', store => store.get(filename))) ?? null;
 }
-
-export async function getAttachmentBlob(filename: string): Promise<Blob | null> {
-  return (await getAttachmentBlobRecord(filename))?.blob ?? null;
+export async function getAttachmentBlob(filename: string): Promise<Blob | null> { return (await getAttachmentBlobRecord(filename))?.blob ?? null; }
+export function putDraftAttachmentBlob(input: { sessionKey: string; filename: string; blob: Blob; mimeType?: string }): Promise<void> {
+  return writeStore('draftAttachmentBlobs', store => { store.put({ session_key: input.sessionKey, filename: input.filename, blob: input.blob, mime_type: input.mimeType || input.blob.type || 'application/octet-stream', updatedAt: Date.now() }); });
 }
-
-export async function putDraftAttachmentBlob(input: {
-  sessionKey: string;
-  filename: string;
-  blob: Blob;
-  mimeType?: string;
-}): Promise<void> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('draftAttachmentBlobs', 'readwrite');
-  tx.objectStore('draftAttachmentBlobs').put({
-    session_key: input.sessionKey,
-    filename: input.filename,
-    blob: input.blob,
-    mime_type: input.mimeType || input.blob.type || 'application/octet-stream',
-    updatedAt: Date.now(),
-  } as DraftAttachmentBlobRecord);
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
-}
-
 export async function getDraftAttachmentBlobRecord(filename: string): Promise<DraftAttachmentBlobRecord | null> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('draftAttachmentBlobs', 'readonly');
-  return new Promise((resolve) => {
-    const req = tx.objectStore('draftAttachmentBlobs').get(filename);
-    req.onsuccess = () => resolve((req.result as DraftAttachmentBlobRecord | undefined) ?? null);
-  });
+  return (await readStore<DraftAttachmentBlobRecord | undefined>('draftAttachmentBlobs', store => store.get(filename))) ?? null;
 }
-
-export async function getDraftAttachmentBlob(filename: string): Promise<Blob | null> {
-  return (await getDraftAttachmentBlobRecord(filename))?.blob ?? null;
+export async function getDraftAttachmentBlob(filename: string): Promise<Blob | null> { return (await getDraftAttachmentBlobRecord(filename))?.blob ?? null; }
+export function getAllAttachmentBlobRecords(): Promise<AttachmentBlobRecord[]> {
+  return readStore('attachmentBlobs', store => store.getAll());
 }
-
-export async function getAllAttachmentBlobRecords(): Promise<AttachmentBlobRecord[]> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('attachmentBlobs', 'readonly');
-  return new Promise((resolve) => {
-    const req = tx.objectStore('attachmentBlobs').getAll();
-    req.onsuccess = () => resolve((req.result || []) as AttachmentBlobRecord[]);
-  });
+export function deleteAttachmentBlob(filename: string): Promise<void> {
+  return writeStore('attachmentBlobs', store => { store.delete(filename); });
 }
-
-export async function deleteAttachmentBlob(filename: string): Promise<void> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('attachmentBlobs', 'readwrite');
-  tx.objectStore('attachmentBlobs').delete(filename);
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+export function getAllDraftAttachmentBlobRecords(): Promise<DraftAttachmentBlobRecord[]> {
+  return readStore('draftAttachmentBlobs', store => store.getAll());
 }
-
-export async function getAllDraftAttachmentBlobRecords(): Promise<DraftAttachmentBlobRecord[]> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('draftAttachmentBlobs', 'readonly');
-  return new Promise((resolve) => {
-    const req = tx.objectStore('draftAttachmentBlobs').getAll();
-    req.onsuccess = () => resolve((req.result || []) as DraftAttachmentBlobRecord[]);
-  });
-}
-
 export async function getDraftAttachmentBlobRecordsForSession(sessionKey: string): Promise<DraftAttachmentBlobRecord[]> {
-  const rows = await getAllDraftAttachmentBlobRecords();
-  return rows.filter((row) => row.session_key === sessionKey);
+  return (await getAllDraftAttachmentBlobRecords()).filter(row => row.session_key === sessionKey);
 }
-
-export async function deleteDraftAttachmentBlob(filename: string): Promise<void> {
-  const db = await openIndexedDb();
-  const tx = db.transaction('draftAttachmentBlobs', 'readwrite');
-  tx.objectStore('draftAttachmentBlobs').delete(filename);
-  return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+export function deleteDraftAttachmentBlob(filename: string): Promise<void> {
+  return writeStore('draftAttachmentBlobs', store => { store.delete(filename); });
 }

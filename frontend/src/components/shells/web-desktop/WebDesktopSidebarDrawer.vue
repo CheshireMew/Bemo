@@ -1,7 +1,7 @@
 <template>
   <teleport to="body">
     <div v-if="open" class="sidebar-overlay" @click.self="emit('close')">
-      <aside class="sidebar sidebar-drawer surface-scroll">
+      <aside v-modal-focus="() => emit('close')" class="sidebar sidebar-drawer surface-scroll" role="dialog" aria-modal="true" aria-label="导航">
         <SidebarContent show-close @close="emit('close')" @navigate="emit('close')" />
       </aside>
     </div>
@@ -10,6 +10,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { vModalFocus } from '../../../directives/modalFocus';
 import SidebarContent from '../shared/SidebarContent.vue';
 import { useScrollLock } from '../../../composables/useScrollLock';
 

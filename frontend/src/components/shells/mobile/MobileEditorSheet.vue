@@ -1,8 +1,23 @@
 <template>
   <teleport to="body">
     <div v-if="open" class="sheet-overlay" :style="overlayStyle" @click.self="emit('close')">
-      <section class="sheet-panel" :style="panelStyle" role="dialog" aria-modal="true" :aria-label="title">
-        <header class="sheet-header">
+      <section
+        v-modal-focus="() => emit('close')"
+        class="sheet-panel"
+        :class="{ 'is-touch-dragging': sheetDragging }"
+        :style="panelStyle"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="title"
+        @click.capture="handleSheetClickCapture"
+      >
+        <header
+          class="sheet-header"
+          @pointerdown="handleSheetPointerDown"
+          @pointermove="handleSheetPointerMove"
+          @pointerup="handleSheetPointerUp"
+          @pointercancel="handleSheetPointerCancel"
+        >
           <div class="sheet-handle" aria-hidden="true"></div>
           <div class="sheet-heading">
             <h2>{{ title }}</h2>
@@ -34,11 +49,13 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { vModalFocus } from '../../../directives/modalFocus';
 import MobileEditor from '../../editor/MobileEditor.vue';
 import type { EditorSubmitPayload } from '../../Editor.vue';
 import { mobileKeyboardInset } from '../../../domain/runtime/mobileKeyboardInsets.js';
 import { isAndroidNativePlatform } from '../../../domain/runtime/platformCapabilities.js';
 import { useScrollLock } from '../../../composables/useScrollLock';
+import { useTouchSwipe } from '../../../composables/useTouchSwipe';
 
 // On Android, the native side now consumes IME insets so the WebView does
 // NOT shrink when the keyboard opens. JS handles compensation exclusively
@@ -171,7 +188,7 @@ const overlayStyle = computed(() => {
   return style;
 });
 
-const panelStyle = computed(() => {
+const panelMetricsStyle = computed(() => {
   if (isAndroidNative) {
     // Android: overlay is full-screen with keyboard padding, panel just
     // needs to fill the remaining space.
@@ -194,6 +211,34 @@ const panelStyle = computed(() => {
 
   return style;
 });
+
+const {
+  offset: sheetOffset,
+  dragging: sheetDragging,
+  handlePointerDown: handleSheetPointerDown,
+  handlePointerMove: handleSheetPointerMove,
+  handlePointerUp: handleSheetPointerUp,
+  handlePointerCancel: handleSheetPointerCancel,
+  handleClickCapture: handleSheetClickCapture,
+} = useTouchSwipe({
+  axis: 'y',
+  enabled: computed(() => props.open),
+  threshold: 88,
+  maxDistance: 180,
+  canStart: (event) => {
+    const target = event.target;
+    return !(target instanceof Element && target.closest('button'));
+  },
+  allowsDirection: (direction) => direction === 'positive',
+  onSwipe: () => emit('close'),
+});
+
+const panelStyle = computed(() => ({
+  ...panelMetricsStyle.value,
+  ...(sheetOffset.value > 0
+    ? { transform: `translate3d(0, ${sheetOffset.value}px, 0)` }
+    : {}),
+}));
 
 watch(() => props.open, (open) => {
   if (!open) {
@@ -253,6 +298,12 @@ onBeforeUnmount(() => {
   border-radius: 28px 28px 0 0;
   box-shadow: 0 -18px 48px rgba(15, 23, 42, 0.16);
   overflow: hidden;
+  transition: transform 0.2s ease;
+  will-change: transform;
+}
+
+.sheet-panel.is-touch-dragging {
+  transition: none;
 }
 
 .sheet-header {
@@ -265,11 +316,13 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--border-color, #e4e4e7);
   background: color-mix(in srgb, var(--bg-main) 96%, transparent);
   backdrop-filter: blur(16px);
+  touch-action: none;
+  user-select: none;
 }
 
 .sheet-handle {
-  width: 42px;
-  height: 5px;
+  width: 48px;
+  height: 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--border-color, #e4e4e7) 80%, var(--text-secondary, #71717a));
   align-self: center;
@@ -289,7 +342,8 @@ onBeforeUnmount(() => {
 .sheet-header p {
   margin: 4px 0 0;
   color: var(--text-secondary);
-  font-size: 0.82rem;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-readable);
   line-height: 1.5;
 }
 

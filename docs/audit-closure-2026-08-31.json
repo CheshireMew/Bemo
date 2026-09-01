@@ -1,0 +1,1187 @@
+{
+  "schema": "project-steward-findings-closure/v2",
+  "claim": "all-findings-resolved",
+  "original_findings": [
+    {
+      "id": "BEMO-AUD-001",
+      "title": "P1：Web/Desktop 同步拉取没有写回主存储。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在同步流程与运行时存储适配边界。修复应让初始化、远端应用、冲突解决和补发都使用当前主存储，并处理“主存储写入成功、浏览器同步队列写入失败”的恢复。完成时应证明远端新增、修改和删除在刷新后仍然存在于正确的主存储中。",
+          "evidence_scope": "backend-primary-sync",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-002",
+      "title": "P1：Flomo 导入的后端记录与同步记录不是同一个 ID。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在导入适配层。应统一导入后的正式记录身份，并以实际保存结果生成同步事件。完成条件是导入、同步、刷新、再次编辑后，仍只有一条具有相同 ID 的笔记。",
+          "evidence_scope": "canonical-import-identity",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-003",
+      "title": "P1：清空回收站的路由被覆盖，且批量删除没有同步记录。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任覆盖回收站 API 与同步事件生成。完成条件是正式清空入口成功删除准确集合，并让远端收到对应永久删除记录，其他设备不会重新保留这些笔记。",
+          "evidence_scope": "trash-purge-sync",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-004",
+      "title": "P1：备份恢复先覆盖数据，失败后没有回滚。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在各运行时的恢复实现。应先完整验证，再进行可恢复的替换。完成条件是无效备份、附件失败或中断均不会留下“旧数据已消失、新数据只恢复一半”的状态。Markdown 归档也使用这条恢复路径，需要一起处理。",
+          "evidence_scope": "atomic-backup-restore",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-005",
+      "title": "P1：“恢复首次安装状态”实际会清空后端主存储。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在数据管理命令与界面语义。应把“重置当前设备”和“清空主存储”分开。完成条件是前者不改变后端数据，后者明确展示真实影响范围。",
+          "evidence_scope": "device-reset-scope",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-006",
+      "title": "P1：桌面后端的构建、启动和连接没有形成可靠流程。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在桌面运行时。应统一当前源码构建、服务启动、地址传递、可写数据目录和退出清理。完成条件是 Windows 正式入口能够连接当前版本后端，重启后数据保留，退出后不留下失控子进程。",
+          "evidence_scope": "windows-desktop-entry",
+          "required_evidence_kinds": [
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-007",
+      "title": "P1：默认 Docker 配置没有接通前端与应用后端。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在部署配置与运行时配置。完成条件应是按仓库公开入口启动后，浏览器能创建、读取并在重启后保留笔记，而不只是两个容器都在运行。",
+          "evidence_scope": "docker-data-chain",
+          "required_evidence_kinds": [
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-008",
+      "title": "P1：Web 缓存策略可能让升级长期停留在旧版本。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在 Web 更新流程。完成条件是已有缓存的用户访问新部署后能够取得新版本，同时保留明确的离线行为，而不依赖手动清站点数据。",
+          "evidence_scope": "web-shell-upgrade",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-009",
+      "title": "P2：后端失败被包装成正常的缓存列表或空列表。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在数据读取结果与界面状态。完成条件是后端异常时保留现有内容、明确说明数据状态，并提供可见的重试结果。",
+          "evidence_scope": "stale-read-retry",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-010",
+      "title": "P1：笔记 HTML 渲染缺少统一过滤。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在共享内容渲染边界。应保留支持的 Markdown，同时过滤可执行属性和危险地址。这里只针对项目实际接收外部内容的路径，不扩展成通用安全改造。",
+          "evidence_scope": "markdown-render-boundary",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-011",
+      "title": "P1，网络部署条件下：应用数据接口没有访问限制。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在网络部署边界。无需为本地桌面版引入复杂账号系统，但网络部署必须明确由哪一层限制访问，并证明非授权访问不能读取或清空数据。",
+          "evidence_scope": "network-access-boundary",
+          "required_evidence_kinds": [
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-012",
+      "title": "P2：部分 IndexedDB 失败不能正常结束操作。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在本地存储基础层。完成条件是事务成功、失败和中止都能结束调用，写入成功只在事务提交后成立，错误能够传到用户操作层。",
+          "evidence_scope": "indexeddb-transactions",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-013",
+      "title": "P2：依赖环境和大量中间产物仍被 Git 跟踪。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在依赖安装与仓库交付边界。应区分可重建文件和真正的发行输入；Tauri 消费的 sidecar 不能简单按“二进制”删除。任何取消跟踪、归档、删除或历史清理都应另行确认，本轮没有处理这些文件。",
+          "evidence_scope": "repository-inputs",
+          "required_evidence_kinds": [
+            "manual-review"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-014",
+      "title": "P2：现有测试没有覆盖已经改变的主存储边界。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在测试对象与正式用户入口的对应关系。应随选中的修复增加准确边界测试，而不是单纯扩大测试总量；本轮不要求补跑全平台矩阵。",
+          "evidence_scope": "targeted-regression-entrypoints",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-015",
+      "title": "P2：模态窗口和笔记操作的键盘路径不完整。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在共享交互组件与各界面外壳。完成条件是键盘用户能辨认当前位置、操作当前窗口，并在关闭后返回合理位置。真实视觉效果仍需 Windows 窗口验证。",
+          "evidence_scope": "windows-modal-keyboard",
+          "required_evidence_kinds": [
+            "runtime"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-016",
+      "title": "P2：旧文档仍在描述另一套产品。",
+      "source": {
+        "reference": "本任务原始只读审查报告；main@83ab007974982b274d92a3b34f56f27a08a7f55c（2026-08-31）",
+        "content_identity": "sha256:500cb04d558784370447fa7a73487203d2de32bdae5e218098663b01b7bc796f"
+      },
+      "conditions": [
+        {
+          "id": "C1",
+          "text": "责任在项目当前事实的维护。应明确哪些文档仍有效、哪些仅为历史材料，并让启动说明、功能状态和实际运行时一致；没有必要重写所有文档。",
+          "evidence_scope": "current-project-documentation",
+          "required_evidence_kinds": [
+            "manual-review"
+          ]
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "BEMO-AUD-001",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "E001-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "backend-primary-sync",
+              "expected_test_identity": "backendAppStore.spec.js",
+              "collected_test_identity": "backendAppStore.spec.js"
+            },
+            {
+              "id": "E001-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "backend-primary-sync",
+              "expected_test_identity": "test_api_remediation.AppDataRemediationTests.test_001_outbox_failure_rolls_back_primary_mutation",
+              "collected_test_identity": "test_api_remediation.AppDataRemediationTests.test_001_outbox_failure_rolls_back_primary_mutation"
+            },
+            {
+              "id": "E001-3",
+              "kind": "manual-review",
+              "status": "pass",
+              "scope": "backend-primary-sync"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-002",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "E002-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "canonical-import-identity",
+              "expected_test_identity": "backendAppStore.spec.js",
+              "collected_test_identity": "backendAppStore.spec.js"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-003",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "E003-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "trash-purge-sync",
+              "expected_test_identity": "test_api_remediation.AppDataRemediationTests.test_003_clear_trash_returns_exact_deleted_notes",
+              "collected_test_identity": "test_api_remediation.AppDataRemediationTests.test_003_clear_trash_returns_exact_deleted_notes"
+            },
+            {
+              "id": "E003-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "trash-purge-sync",
+              "expected_test_identity": "backendAppStore.spec.js",
+              "collected_test_identity": "backendAppStore.spec.js"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-004",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "E004-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "atomic-backup-restore",
+              "expected_test_identity": "test_api_remediation.AppDataRemediationTests.test_004_write_failure_rolls_back_replacement",
+              "collected_test_identity": "test_api_remediation.AppDataRemediationTests.test_004_write_failure_rolls_back_replacement"
+            },
+            {
+              "id": "E004-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "atomic-backup-restore",
+              "expected_test_identity": "indexedDbTransactions.spec.js",
+              "collected_test_identity": "indexedDbTransactions.spec.js"
+            },
+            {
+              "id": "E004-3",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "atomic-backup-restore",
+              "expected_test_identity": "archiveValidation.spec.js",
+              "collected_test_identity": "archiveValidation.spec.js"
+            },
+            {
+              "id": "E004-4",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "atomic-backup-restore",
+              "expected_test_identity": "localImportExport.spec.js",
+              "collected_test_identity": "localImportExport.spec.js"
+            },
+            {
+              "id": "E004-5",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "atomic-backup-restore",
+              "expected_test_identity": "markdownArchive.spec.js",
+              "collected_test_identity": "markdownArchive.spec.js"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-005",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "E005-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "device-reset-scope",
+              "expected_test_identity": "backendAppStore.spec.js",
+              "collected_test_identity": "backendAppStore.spec.js"
+            },
+            {
+              "id": "E005-2",
+              "kind": "manual-review",
+              "status": "pass",
+              "scope": "device-reset-scope"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-006",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "unverified",
+          "last_evidence": [
+            {
+              "id": "E006-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "windows-desktop-entry",
+              "expected_test_identity": "test_desktop_lifecycle.DesktopLifecycleTests.test_006_ready_persistence_and_parent_pipe_shutdown",
+              "collected_test_identity": "test_desktop_lifecycle.DesktopLifecycleTests.test_006_ready_persistence_and_parent_pipe_shutdown"
+            },
+            {
+              "id": "E006-2",
+              "kind": "static-check",
+              "status": "pass",
+              "scope": "windows-desktop-entry"
+            },
+            {
+              "id": "E006-3",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "windows-desktop-entry",
+              "expected_test_identity": "displayBoundary.spec.js",
+              "collected_test_identity": "displayBoundary.spec.js"
+            }
+          ],
+          "unverified_boundaries": [
+            "隔离数据目录下的 Windows 调试窗口已成功加载，但用户随后要求停止电脑操控；窗口内保存、重启保留与退出清理没有继续验收。",
+            "本轮没有构建安装包或 PyInstaller sidecar，正式发行入口和产物未验收。"
+          ],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-007",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "unverified",
+          "last_evidence": [
+            {
+              "id": "E007-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "docker-data-chain",
+              "expected_test_identity": "webDeployment.spec.js",
+              "collected_test_identity": "webDeployment.spec.js"
+            }
+          ],
+          "unverified_boundaries": [
+            "本机没有 Docker；公开 Compose 入口的真实浏览器 CRUD、附件与容器重启保留尚未运行。"
+          ],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-008",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "E008-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "web-shell-upgrade",
+              "expected_test_identity": "webDeployment.spec.js",
+              "collected_test_identity": "webDeployment.spec.js"
+            },
+            {
+              "id": "E008-2",
+              "kind": "manual-review",
+              "status": "pass",
+              "scope": "web-shell-upgrade"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-009",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "E009-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "stale-read-retry",
+              "expected_test_identity": "displayBoundary.spec.js",
+              "collected_test_identity": "displayBoundary.spec.js"
+            },
+            {
+              "id": "E009-2",
+              "kind": "manual-review",
+              "status": "pass",
+              "scope": "stale-read-retry"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-010",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "E010-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "markdown-render-boundary",
+              "expected_test_identity": "displayBoundary.spec.js",
+              "collected_test_identity": "displayBoundary.spec.js"
+            },
+            {
+              "id": "E010-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "markdown-render-boundary",
+              "expected_test_identity": "attachmentUrls.spec.js",
+              "collected_test_identity": "attachmentUrls.spec.js"
+            },
+            {
+              "id": "E010-3",
+              "kind": "manual-review",
+              "status": "pass",
+              "scope": "markdown-render-boundary"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-011",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "unverified",
+          "last_evidence": [
+            {
+              "id": "E011-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "network-access-boundary",
+              "expected_test_identity": "webDeployment.spec.js",
+              "collected_test_identity": "webDeployment.spec.js"
+            },
+            {
+              "id": "E011-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "network-access-boundary",
+              "expected_test_identity": "test_api_remediation.AppDataRemediationTests.test_011_unconfigured_sync_token_rejects_even_empty_bearer",
+              "collected_test_identity": "test_api_remediation.AppDataRemediationTests.test_011_unconfigured_sync_token_rejects_even_empty_bearer"
+            }
+          ],
+          "unverified_boundaries": [
+            "Basic 代理鉴权与无宿主后端端口已配置，但未在真实 Docker 部署验证未授权读取、清空与附件访问。"
+          ],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-012",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "E012-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "indexeddb-transactions",
+              "expected_test_identity": "indexedDbTransactions.spec.js",
+              "collected_test_identity": "indexedDbTransactions.spec.js"
+            },
+            {
+              "id": "E012-2",
+              "kind": "manual-review",
+              "status": "pass",
+              "scope": "indexeddb-transactions"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-013",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "E013-1",
+              "kind": "static-check",
+              "status": "pass",
+              "scope": "repository-inputs"
+            },
+            {
+              "id": "E013-2",
+              "kind": "manual-review",
+              "status": "pass",
+              "scope": "repository-inputs"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": false
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-014",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "E014-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "targeted-regression-entrypoints",
+              "expected_test_identity": "backendAppStore.spec.js",
+              "collected_test_identity": "backendAppStore.spec.js"
+            },
+            {
+              "id": "E014-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "targeted-regression-entrypoints",
+              "expected_test_identity": "test_desktop_lifecycle.DesktopLifecycleTests.test_006_ready_persistence_and_parent_pipe_shutdown",
+              "collected_test_identity": "test_desktop_lifecycle.DesktopLifecycleTests.test_006_ready_persistence_and_parent_pipe_shutdown"
+            },
+            {
+              "id": "E014-3",
+              "kind": "manual-review",
+              "status": "pass",
+              "scope": "targeted-regression-entrypoints"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-015",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "unverified",
+          "last_evidence": [
+            {
+              "id": "E015-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "windows-modal-keyboard",
+              "expected_test_identity": "modalFocus.spec.js",
+              "collected_test_identity": "modalFocus.spec.js"
+            },
+            {
+              "id": "E015-2",
+              "kind": "manual-review",
+              "status": "pass",
+              "scope": "windows-modal-keyboard"
+            }
+          ],
+          "unverified_boundaries": [
+            "焦点工具已通过 jsdom 测试；真实调试窗口能够加载，但用户要求停止电脑操控后，Windows 窗口内的完整键盘路径和焦点返回未继续验收。"
+          ],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-AUD-016",
+      "conditions": [
+        {
+          "id": "C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "E016-1",
+              "kind": "manual-review",
+              "status": "pass",
+              "scope": "current-project-documentation"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": false
+        }
+      ]
+    }
+  ],
+  "validation_events": [
+    {
+      "id": "E001-1",
+      "status": "pass",
+      "scope": "backend-primary-sync",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "app 与 sync 独立进程，主存储增改删、冲突副本与重放、导入身份、游标丢失补拉。"
+    },
+    {
+      "id": "E001-2",
+      "status": "pass",
+      "scope": "backend-primary-sync",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "出站队列失败时主存储事务回滚。"
+    },
+    {
+      "id": "E001-3",
+      "status": "pass",
+      "scope": "backend-primary-sync",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "初始化、入站、冲突解决和补发调用当前运行时适配器；backend 队列与笔记同事务。"
+    },
+    {
+      "id": "E002-1",
+      "status": "pass",
+      "scope": "canonical-import-identity",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "Flomo 导入正式 ID 与队列一致；独立同步、重新读取和编辑仍只有同一条正式笔记。"
+    },
+    {
+      "id": "E003-1",
+      "status": "pass",
+      "scope": "trash-purge-sync",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "正式 DELETE /trash 命中正确路由，删除准确集合。"
+    },
+    {
+      "id": "E003-2",
+      "status": "pass",
+      "scope": "trash-purge-sync",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "永久删除入队、推送成功、游标重置重放不复活。"
+    },
+    {
+      "id": "E004-1",
+      "status": "pass",
+      "scope": "atomic-backup-restore",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "后端第二条写入失败保留原数据；同文件其余三项覆盖输入和附件故障。"
+    },
+    {
+      "id": "E004-2",
+      "status": "pass",
+      "scope": "atomic-backup-restore",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "本地无效备份拒绝，跨存储事务中止后旧笔记保留。"
+    },
+    {
+      "id": "E004-3",
+      "status": "pass",
+      "scope": "atomic-backup-restore",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "备份 ZIP 缺数组、缺声明附件、Markdown 清单与内容不一致均拒绝。"
+    },
+    {
+      "id": "E004-4",
+      "status": "pass",
+      "scope": "atomic-backup-restore",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "本地完整恢复正向回归。"
+    },
+    {
+      "id": "E004-5",
+      "status": "pass",
+      "scope": "atomic-backup-restore",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "Markdown 归档正向回归。"
+    },
+    {
+      "id": "E005-1",
+      "status": "pass",
+      "scope": "device-reset-scope",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "重置设备后 backend 笔记仍存在。"
+    },
+    {
+      "id": "E005-2",
+      "status": "pass",
+      "scope": "device-reset-scope",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "useImportExport 的清空与重置确认按 runtime 区分范围；reset 不调用清空 backend。"
+    },
+    {
+      "id": "E006-1",
+      "status": "pass",
+      "scope": "windows-desktop-entry",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "Windows Python 真实子进程就绪、HTTP CRUD、重启保留、shutdown 与父管道 EOF 退出通过。"
+    },
+    {
+      "id": "E006-2",
+      "status": "pass",
+      "scope": "windows-desktop-entry",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "cargo check --locked 与 cargo build --locked 调试编译通过，未启动 GUI；release 配置和摘要校验已接线。"
+    },
+    {
+      "id": "E006-3",
+      "status": "pass",
+      "scope": "windows-desktop-entry",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "appRequest 使用 same-origin 凭据模式，兼容回环跨域和同源代理鉴权。"
+    },
+    {
+      "id": "E007-1",
+      "status": "pass",
+      "scope": "docker-data-chain",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "仅验证 Nginx 代理、数据卷、鉴权文件和端口的源码约束，不代表容器运行。"
+    },
+    {
+      "id": "E008-1",
+      "status": "pass",
+      "scope": "web-shell-upgrade",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "执行真实 sw.js 的缓存场景：在线取新外壳、离线回退新外壳、API/附件不缓存。"
+    },
+    {
+      "id": "E008-2",
+      "status": "pass",
+      "scope": "web-shell-upgrade",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "仅注册 Web SW；native 跳过；注册主动更新，HTML/SW 代理禁止旧入口缓存。"
+    },
+    {
+      "id": "E009-1",
+      "status": "pass",
+      "scope": "stale-read-retry",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "503 返回带错误的缓存，恢复后返回 primary、清除错误并读取新内容。"
+    },
+    {
+      "id": "E009-2",
+      "status": "pass",
+      "scope": "stale-read-retry",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "NotesFeed 显示错误/过期提示及重试按钮；notes store 失败保留内容，重试有 loading 状态。"
+    },
+    {
+      "id": "E010-1",
+      "status": "pass",
+      "scope": "markdown-render-boundary",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "事件属性、SVG 和 javascript 链接被过滤，粗体 Markdown 保留。"
+    },
+    {
+      "id": "E010-2",
+      "status": "pass",
+      "scope": "markdown-render-boundary",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "安全附件 URL 和共享 Markdown 引用回归。"
+    },
+    {
+      "id": "E010-3",
+      "status": "pass",
+      "scope": "markdown-render-boundary",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "共享 markdownRenderer 统一 DOMPurify 过滤，自定义属性转义，危险协议拒绝。"
+    },
+    {
+      "id": "E011-1",
+      "status": "pass",
+      "scope": "network-access-boundary",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "仅验证部署代理鉴权及不发布 backend 端口的源码约束。"
+    },
+    {
+      "id": "E011-2",
+      "status": "pass",
+      "scope": "network-access-boundary",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "不配置同步令牌时空 Bearer 也返回 401；同步 API 与 Basic app API 责任区分。"
+    },
+    {
+      "id": "E012-1",
+      "status": "pass",
+      "scope": "indexeddb-transactions",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "请求成功后事务 abort 仍拒绝，写入等事务提交，恢复中止回滚。"
+    },
+    {
+      "id": "E012-2",
+      "status": "pass",
+      "scope": "indexeddb-transactions",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "七类 IndexedDB 存储统一事务封装，失败传到读取状态/操作提示；blocked/versionchange 有处理。"
+    },
+    {
+      "id": "E013-1",
+      "status": "pass",
+      "scope": "repository-inputs",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "requirements 全版本固定；安装与运行分离；D 盘缓存；忽略规则已补。"
+    },
+    {
+      "id": "E013-2",
+      "status": "pass",
+      "scope": "repository-inputs",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "用户明确确认仅取消 Git 跟踪、保留本地文件。venv、backend/venv、frontend/.npm-cache、backend/build、backend/dist 共 6,127 个索引条目已取消跟踪；五个目录均仍存在、命中忽略规则且 git ls-files 计数为 0。"
+    },
+    {
+      "id": "E014-1",
+      "status": "pass",
+      "scope": "targeted-regression-entrypoints",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "backend 主存储与独立同步目标定向集成测试加入正式 runner。"
+    },
+    {
+      "id": "E014-2",
+      "status": "pass",
+      "scope": "targeted-regression-entrypoints",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "Windows 后端进程生命周期测试加入 CI 显式入口。"
+    },
+    {
+      "id": "E014-3",
+      "status": "pass",
+      "scope": "targeted-regression-entrypoints",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "CI 配置 Windows 与 Python 前置依赖；Docker 真实链检查脚本及手动工作流已添加，不自动构建镜像；实际远端 CI 未执行。"
+    },
+    {
+      "id": "E015-1",
+      "status": "pass",
+      "scope": "windows-modal-keyboard",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "jsdom 验证焦点进入、Tab/Shift-Tab 环绕、Escape、inert 背景隔离和返回原控件。"
+    },
+    {
+      "id": "E015-2",
+      "status": "pass",
+      "scope": "windows-modal-keyboard",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "七个覆盖层接入共享指令；笔记 focus-within 可见、搜索独立名称、当前设置页 aria-current。"
+    },
+    {
+      "id": "E016-1",
+      "status": "pass",
+      "scope": "current-project-documentation",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "当前架构、同步设计历史身份、功能状态、Windows/Docker 操作说明、子 README 链接和 Tauri 元数据已逐项对照修改。"
+    },
+    {
+      "id": "R-INITIAL-DATA",
+      "status": "fail",
+      "scope": "pre-fix-data-regressions",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "001/002/003/004/005/009/010/012 的修复前定向回归失败；后续同 selector 已通过。"
+    },
+    {
+      "id": "R-ARCHIVE",
+      "status": "fail",
+      "scope": "atomic-backup-restore",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "压缩包缺项和不完整清单原被接受，新增三项正式失败后修复并通过。"
+    },
+    {
+      "id": "R-CONFLICT-RECREATE",
+      "status": "fail",
+      "scope": "backend-primary-sync",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "修复期间从回收站重建远端冲突留下重复 ID，被真实 backend 集成测试复现；现已删除另一列表中的同 ID 并通过。"
+    },
+    {
+      "id": "R-CREDENTIAL-MODE",
+      "status": "fail",
+      "scope": "windows-desktop-entry",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "修复期间 appRequest 强制 include 与桌面回环跨域不一致，契约测试失败后改为 same-origin 并通过；不是原生 GUI 证据。"
+    },
+    {
+      "id": "R-DESKTOP-ENTRY",
+      "status": "fail",
+      "scope": "windows-desktop-entry",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "原始桌面无有效 HTTP 进程入口，新增生命周期测试先失败，源码入口实现后通过。"
+    },
+    {
+      "id": "R-SW",
+      "status": "fail",
+      "scope": "web-shell-upgrade",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "旧 SW 返回旧外壳；修复时一次脚本括号错误被 runner 捕获并修正，最终同测试通过。"
+    },
+    {
+      "id": "V-TEST-FIXTURES",
+      "status": "fail",
+      "scope": "verification-harness",
+      "classification": "verifier",
+      "blocking": false,
+      "relevance": "过程中修正严格 TypeScript 参数/Uint8Array 类型、HTTP 尾斜杠重定向、旧本地 runtime 与附件哈希/完整备份测试夹具；没有删除断言或跳过失败用例。"
+    },
+    {
+      "id": "V-CARGO-OFFLINE",
+      "status": "fail",
+      "scope": "windows-rust-build",
+      "classification": "environment",
+      "blocking": false,
+      "relevance": "首次离线缺少 Rust crate；随后使用 D 盘 Cargo 缓存下载，check 与 debug build 已通过。"
+    },
+    {
+      "id": "V-CRLF",
+      "status": "fail",
+      "scope": "git-whitespace",
+      "classification": "verifier",
+      "blocking": false,
+      "relevance": "关闭 CRLF 归一化使历史 Windows 行尾被误当空白问题；改为单次 core.autocrlf=input 后 diff --check 通过，未批量重写文件。"
+    },
+    {
+      "id": "V-DIFF-FINAL",
+      "status": "pass",
+      "scope": "git-whitespace",
+      "classification": "other",
+      "blocking": false,
+      "relevance": "Git diff --check（CRLF 归一化）通过；最终文档补齐后再次执行。"
+    },
+    {
+      "id": "V-TYPES",
+      "status": "pass",
+      "scope": "frontend-typecheck",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "vue-tsc --noEmit -p tsconfig.app.json 通过。"
+    },
+    {
+      "id": "V-SCRIPT-SYNTAX",
+      "status": "pass",
+      "scope": "launch-and-ci-syntax",
+      "classification": "product",
+      "blocking": false,
+      "relevance": "4 个 PowerShell 文件 AST 与 Compose/2个workflow YAML 解析通过。"
+    },
+    {
+      "id": "V-WINDOWS-UI",
+      "status": "blocked",
+      "scope": "windows-modal-keyboard",
+      "classification": "scope",
+      "blocking": true,
+      "relevance": "用户曾确认真实窗口验收，隔离数据目录下的调试窗口成功加载；在执行键盘、保存与重启步骤前，用户要求停止电脑操控。调试实例和 Vite 服务已退出，未继续操作或绕过该要求。"
+    },
+    {
+      "id": "V-DESKTOP-RELEASE",
+      "status": "not-run",
+      "scope": "windows-desktop-entry",
+      "classification": "scope",
+      "blocking": true,
+      "relevance": "用户未要求打包，未运行 PyInstaller、Tauri release 或安装包验收。"
+    },
+    {
+      "id": "V-DOCKER",
+      "status": "not-run",
+      "scope": "docker-data-chain",
+      "classification": "environment",
+      "blocking": true,
+      "relevance": "本机没有 Docker；没有安装 Docker、运行镜像构建或调度远端工作流。"
+    }
+  ]
+}

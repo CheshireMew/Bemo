@@ -1,7 +1,7 @@
 import type { ChangeRecord, SyncTarget } from './mutationLogStorage.js';
-import { getMutationLog } from './mutationLogStorage.js';
+import { getPendingChanges as getMutationLog } from './syncQueue.js';
 import { getSyncTargetLabel, readSyncConfigSnapshot } from './syncConfig.js';
-import { refreshSyncPendingCounts, setSyncState } from './syncStatusBus.js';
+import { refreshSyncPendingCounts, setSyncState, reportSyncError } from './syncStatusBus.js';
 import {
   clearScheduledSync,
   maybeSyncOnForeground,
@@ -27,7 +27,7 @@ export function registerSyncWindowEvents(input: {
     });
     resetRetryDelay();
     scheduleNextSync(input.requestSyncNow);
-    void refreshSyncPendingCounts(0).then(() => input.flushPendingQueue());
+    void refreshSyncPendingCounts(0).then(() => input.flushPendingQueue()).catch(reportSyncError);
   });
 
   window.addEventListener('offline', () => {
@@ -39,7 +39,7 @@ export function registerSyncWindowEvents(input: {
     clearScheduledSync();
     const syncMode = syncConfig.mode;
     const queueTarget = syncMode === 'local' ? undefined : syncMode as SyncTarget;
-    void getMutationLog(queueTarget).then((queue: ChangeRecord[]) => refreshSyncPendingCounts(queue.length));
+    void getMutationLog(queueTarget).then((queue: ChangeRecord[]) => refreshSyncPendingCounts(queue.length)).catch(reportSyncError);
   });
 
   document.addEventListener('visibilitychange', () => {

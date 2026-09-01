@@ -18,6 +18,7 @@
         type="text"
         class="tag-search"
         placeholder="搜索标签"
+        aria-label="搜索标签"
       />
     </div>
 
@@ -28,6 +29,7 @@
         type="button"
         class="tag-badge"
         :class="{ active: selectedTag === tag.name }"
+        :aria-pressed="selectedTag === tag.name"
         :title="`#${tag.name} (${tag.count})`"
         @click="handleTagClick(tag.name)"
       >
@@ -100,8 +102,8 @@ const handleTagClick = (tagName: string) => {
 }
 
 .nav-section-title {
-  font-size: 0.8rem;
-  color: #d0a56e;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
@@ -109,7 +111,8 @@ const handleTagClick = (tagName: string) => {
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 0.78rem;
+  font-size: var(--font-size-caption);
+  font-weight: 500;
   cursor: pointer;
   padding: 0;
 }
@@ -130,7 +133,8 @@ const handleTagClick = (tagName: string) => {
   border-radius: 10px;
   padding: 8px 10px;
   font: inherit;
-  font-size: 0.84rem;
+  font-size: var(--font-size-small);
+  font-weight: 400;
 }
 
 .tag-search:focus {
@@ -153,7 +157,8 @@ const handleTagClick = (tagName: string) => {
   justify-content: space-between;
   gap: 10px;
   text-align: left;
-  font-size: 0.78rem;
+  font-size: var(--font-size-small);
+  font-weight: 400;
   color: var(--accent-color);
   background: var(--accent-sidebar-bg);
   padding: 7px 10px;
@@ -164,12 +169,12 @@ const handleTagClick = (tagName: string) => {
 
 .tag-badge:hover {
   background: var(--accent-color);
-  color: white;
+  color: var(--accent-foreground, white);
 }
 
 .tag-badge.active {
   background: var(--accent-color);
-  color: white;
+  color: var(--accent-foreground, white);
   font-weight: 600;
 }
 
@@ -182,13 +187,14 @@ const handleTagClick = (tagName: string) => {
 
 .tag-count {
   flex-shrink: 0;
-  font-size: 0.72rem;
-  opacity: 0.75;
+  font-size: var(--font-size-caption);
+  font-weight: 500;
 }
 
 .tag-empty {
-  font-size: 0.75rem;
-  color: #ccc;
+  font-size: var(--font-size-caption);
+  font-weight: 400;
+  color: var(--text-secondary);
   padding: 4px 2px 0;
 }
 </style>

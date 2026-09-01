@@ -1,6 +1,9 @@
 import os
 import shutil
 import sqlite3
+import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -8,9 +11,12 @@ from core.paths import APP_BLOBS_DIR, APP_DB_PATH, SYNC_BLOBS_DIR, SYNC_DB_PATH
 from services.note_contract import now_iso
 
 APP_STORE_BOOTSTRAP_VERSION = 1
+_transaction_connection: ContextVar[sqlite3.Connection | None] = ContextVar("app_transaction", default=None)
 
 
 def ensure_app_store() -> None:
+    if _transaction_connection.get() is not None:
+        return
     os.makedirs(APP_BLOBS_DIR, exist_ok=True)
     with connect() as conn:
         conn.executescript(
@@ -40,10 +46,35 @@ def ensure_app_store() -> None:
         _bootstrap_legacy_sync_store(conn)
 
 
-def connect() -> sqlite3.Connection:
+@contextmanager
+def connect():
+    current = _transaction_connection.get()
+    if current is not None:
+        yield current
+        return
     conn = sqlite3.connect(APP_DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def transaction():
+    """One commit for all app metadata changes, including nested repository calls."""
+    if _transaction_connection.get() is not None:
+        yield
+        return
+    ensure_app_store()
+    with connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        token = _transaction_connection.set(conn)
+        try:
+            yield
+        finally:
+            _transaction_connection.reset(token)
 
 
 def _bootstrap_legacy_sync_store(conn: sqlite3.Connection) -> None:
@@ -374,15 +405,29 @@ def clear_all_data() -> None:
     with connect() as conn:
         conn.execute("DELETE FROM notes_current")
         conn.execute("DELETE FROM attachment_files")
+        clear_replication_state(conn)
     if os.path.isdir(APP_BLOBS_DIR):
         shutil.rmtree(APP_BLOBS_DIR)
     os.makedirs(APP_BLOBS_DIR, exist_ok=True)
 
 
+def clear_replication_state(conn: sqlite3.Connection) -> None:
+    for table in ("sync_outbox", "sync_inbox"):
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+            conn.execute(f"DELETE FROM {table}")
+
+
 def put_blob_record(blob_hash: str, data: bytes) -> None:
     path = _blob_path(blob_hash)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
+    if path.exists() and path.read_bytes() == data:
+        return
+    staged = path.with_name(f".{path.name}.{uuid.uuid4().hex}.pending")
+    with staged.open("xb") as output:
+        output.write(data)
+        output.flush()
+        os.fsync(output.fileno())
+    os.replace(staged, path)
 
 
 def get_blob_record(blob_hash: str) -> bytes:
