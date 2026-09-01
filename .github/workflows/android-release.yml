@@ -1,0 +1,96 @@
+name: Android Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-apk:
+    name: Signed Release APK
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install Android SDK 36
+        shell: pwsh
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Restore signing material
+        shell: pwsh
+        env:
+          BEMO_KEYSTORE_BASE64: ${{ secrets.BEMO_KEYSTORE_BASE64 }}
+          BEMO_KEYSTORE_PASSWORD: ${{ secrets.BEMO_KEYSTORE_PASSWORD }}
+          BEMO_KEY_ALIAS: ${{ secrets.BEMO_KEY_ALIAS }}
+          BEMO_KEY_PASSWORD: ${{ secrets.BEMO_KEY_PASSWORD }}
+        run: |
+          $keyPath = Join-Path $env:RUNNER_TEMP 'bemo-release.jks'
+          [IO.File]::WriteAllBytes(
+            $keyPath,
+            [Convert]::FromBase64String($env:BEMO_KEYSTORE_BASE64)
+          )
+
+          $gradleKeyPath = $keyPath.Replace('\', '/')
+          $properties = @(
+            "storeFile=$gradleKeyPath"
+            "storePassword=$env:BEMO_KEYSTORE_PASSWORD"
+            "keyAlias=$env:BEMO_KEY_ALIAS"
+            "keyPassword=$env:BEMO_KEY_PASSWORD"
+          )
+          $properties | Set-Content frontend/android/keystore.properties -Encoding utf8NoBOM
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build signed Release APK
+        working-directory: frontend
+        run: npm run android:release
+
+      - name: Verify APK signature and checksum
+        shell: pwsh
+        run: |
+          $apkPath = 'frontend/android/app/build/outputs/apk/release/app-release.apk'
+          if (-not (Test-Path -LiteralPath $apkPath -PathType Leaf)) {
+            throw "Release APK was not generated: $apkPath"
+          }
+
+          $buildTools = Get-ChildItem "$env:ANDROID_HOME/build-tools" -Directory |
+            Sort-Object { [version]$_.Name } -Descending |
+            Select-Object -First 1
+          $apkSigner = Join-Path $buildTools.FullName 'apksigner.bat'
+          & $apkSigner verify --verbose --print-certs $apkPath
+          if ($LASTEXITCODE -ne 0) {
+            throw 'APK signature verification failed.'
+          }
+
+          $hash = (Get-FileHash -LiteralPath $apkPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  app-release.apk" |
+            Set-Content 'frontend/android/app/build/outputs/apk/release/app-release.apk.sha256' -Encoding ascii
+
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bemo-release-apk
+          path: |
+            frontend/android/app/build/outputs/apk/release/app-release.apk
+            frontend/android/app/build/outputs/apk/release/app-release.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
