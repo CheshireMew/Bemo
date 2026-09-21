@@ -111,7 +111,7 @@ watch(isEditing, editing => emit('editingChange', editing));
 }
 
 .note-date-pin {
-  color: var(--accent-color);
+  color: var(--accent-text);
   flex-shrink: 0;
 }
 
@@ -154,12 +154,12 @@ watch(isEditing, editing => emit('editingChange', editing));
 }
 
 .btn-action.copied {
-  color: var(--accent-color);
+  color: var(--accent-text);
   background: color-mix(in srgb, var(--accent-color) 12%, transparent);
 }
 
 .pin-active {
-  color: var(--accent-color) !important;
+  color: var(--accent-text) !important;
 }
 
 :root.dark .btn-action:hover {
@@ -167,6 +167,6 @@ watch(isEditing, editing => emit('editingChange', editing));
 }
 
 .note-actions .btn-restore {
-  color: var(--accent-color) !important;
+  color: var(--accent-text) !important;
 }
 </style>

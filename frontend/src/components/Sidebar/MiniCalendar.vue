@@ -212,7 +212,7 @@ const handleCalendarKeydown = async (event: KeyboardEvent) => {
 .cal-today-btn {
   background: none;
   border: none;
-  color: var(--accent-color);
+  color: var(--accent-text);
   font-size: var(--font-size-caption);
   font-weight: 600;
   cursor: pointer;
@@ -281,7 +281,7 @@ const handleCalendarKeydown = async (event: KeyboardEvent) => {
   font-family: inherit;
 }
 .cal-day:hover { background: var(--accent-sidebar-bg); }
-.cal-day.today { font-weight: 700; color: var(--accent-color); }
+.cal-day.today { font-weight: 700; color: var(--accent-text); }
 .cal-day.selected { background: var(--accent-color); color: var(--accent-foreground, white); font-weight: 600; }
 .cal-day.has-notes { position: relative; }
 .cal-day.has-notes::after { content: ''; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--accent-color); }

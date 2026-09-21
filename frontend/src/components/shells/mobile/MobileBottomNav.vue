@@ -71,7 +71,7 @@ const {
 }
 
 .nav-btn.active {
-  color: var(--accent-color, #31d279);
+  color: var(--accent-text, #31d279);
   background: color-mix(in srgb, var(--accent-sidebar-bg, #e6f7ef) 64%, transparent);
 }
 

@@ -435,7 +435,7 @@ const {
   padding: 4px 10px;
   border-radius: 999px;
   background: var(--accent-sidebar-bg, #e6f7ef);
-  color: var(--accent-color, #31d279);
+  color: var(--accent-text, #31d279);
   font-size: var(--font-size-caption);
   font-weight: 700;
 }

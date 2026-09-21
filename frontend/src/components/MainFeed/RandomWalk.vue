@@ -73,7 +73,7 @@ watch([randomWalkNonce, notes], () => {
 .section-icon { color: var(--text-secondary); }
 .random-walk-actions { display: flex; gap: 8px; align-items: center; }
 .btn-random-next {
-  background: var(--accent-sidebar-bg); color: var(--accent-color); border: none;
+  background: var(--accent-sidebar-bg); color: var(--accent-text); border: none;
   padding: 6px 14px; border-radius: var(--radius-md); cursor: pointer;
   font-size: var(--font-size-small); font-weight: 500; transition: all 0.15s;
   display: inline-flex;

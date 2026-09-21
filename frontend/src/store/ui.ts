@@ -1,22 +1,19 @@
 import { ref } from 'vue';
 
-export type ThemeSkin = 'default' | 'nord' | 'sepia';
+export type ThemeSkin = 'default' | 'nord' | 'sepia' | 'cream';
 
 // 全局状态：黑夜模式与风格皮肤解耦
 export const isDarkMode = ref(false);
-export const currentSkin = ref<ThemeSkin>('default');
+export const currentSkin = ref<ThemeSkin>('cream');
 
 // 初始化和切换主题
 export function initTheme() {
   const savedSkin = localStorage.getItem('theme-skin') as ThemeSkin | null;
-  if (savedSkin && ['default', 'nord', 'sepia'].includes(savedSkin)) {
-    currentSkin.value = savedSkin;
-  }
+  currentSkin.value = savedSkin && ['default', 'nord', 'sepia', 'cream'].includes(savedSkin)
+    ? savedSkin : 'cream';
   
   const savedMode = localStorage.getItem('theme-mode');
-  if (savedMode === 'dark' || (!savedMode && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-    isDarkMode.value = true;
-  }
+  isDarkMode.value = savedMode === 'dark' || (!savedMode && window.matchMedia('(prefers-color-scheme: dark)').matches);
   
   applyTheme();
 }
@@ -43,11 +40,13 @@ function applyTheme() {
   }
   
   // 皮肤类
-  root.classList.remove('theme-nord', 'theme-sepia');
+  root.classList.remove('theme-nord', 'theme-sepia', 'theme-cream');
   if (currentSkin.value === 'nord') {
     root.classList.add('theme-nord');
   } else if (currentSkin.value === 'sepia') {
     root.classList.add('theme-sepia');
+  } else if (currentSkin.value === 'cream') {
+    root.classList.add('theme-cream');
   }
 }
 

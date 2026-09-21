@@ -88,14 +88,14 @@ const resetFilters = () => { clearSearch(); clearSelectedFilters(); };
   border-radius: var(--radius-md); 
   font-size: var(--font-size-small);
   font-weight: 400;
-  color: var(--accent-color); 
+  color: var(--accent-text);
   margin-bottom: 12px; 
 }
 .filter-clear { 
   background: none; 
   border: none; 
   font-size: 1.1rem; 
-  color: var(--accent-color); 
+  color: var(--accent-text);
   cursor: pointer; 
   padding: 0 4px; 
 }

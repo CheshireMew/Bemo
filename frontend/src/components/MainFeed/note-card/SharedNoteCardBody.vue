@@ -111,7 +111,7 @@ const saveEdit = async (payload: EditorSubmitPayload) => {
 .note-tag {
   font-size: var(--font-size-caption);
   font-weight: 500;
-  color: var(--accent-color);
+  color: var(--accent-text);
   cursor: pointer;
   transition: opacity 0.15s;
   border: none;

@@ -50,7 +50,7 @@ const hasFilters = computed(() => Boolean(selectedTag.value || selectedDate.valu
   border-radius: 999px;
   padding: 6px 10px;
   background: var(--accent-sidebar-bg, #e6f7ef);
-  color: var(--accent-color, #31d279);
+  color: var(--accent-text, #31d279);
   font-size: var(--font-size-caption);
   font-weight: 600;
   cursor: pointer;

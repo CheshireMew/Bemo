@@ -1,14 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <title>Bemo — 小熊笔记</title>
   <defs>
-    <linearGradient id="bg" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#3BDF86" />
-      <stop offset="1" stop-color="#24BF73" />
+    <linearGradient id="yellow" x1="82" y1="32" x2="427" y2="483" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE566"/>
+      <stop offset="1" stop-color="#FFCF29"/>
     </linearGradient>
   </defs>
-  <rect x="8" y="6" width="48" height="52" rx="10" fill="url(#bg)" />
-  <path d="M8 18C8 12.477 12.477 8 18 8H46C51.523 8 56 12.477 56 18V22H8V18Z" fill="#12955A" />
-  <path d="M23 32H44" stroke="#FFFDF8" stroke-linecap="round" stroke-width="4.5" />
-  <path d="M30 41H44" stroke="#FFFDF8" stroke-linecap="round" stroke-width="4.5" />
-  <path d="M23 50H44" stroke="#FFFDF8" stroke-linecap="round" stroke-width="4.5" />
-  <path d="M16.5 40.5L20.5 44.5L27 37.5" stroke="#138752" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.5" />
+  <rect x="24" y="24" width="464" height="464" rx="114" fill="url(#yellow)"/>
+  <g stroke="#202832" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <!-- One continuous silhouette keeps the ears joined to the head. -->
+    <path d="M140 280C128 239 131 197 151 170C132 155 133 128 151 114C171 98 197 108 207 129C236 118 276 118 305 129C316 108 342 98 361 114C380 128 380 155 361 170C381 197 384 239 372 280Z" fill="#FFFFFF"/>
+    <path d="M157 141C156 130 171 123 180 132L188 141L174 154Z" fill="#E7DDD5" stroke="none"/>
+    <path d="M355 141C356 130 341 123 332 132L324 141L338 154Z" fill="#E7DDD5" stroke="none"/>
+    <ellipse cx="203" cy="220" rx="14" ry="17" fill="#202832" stroke="none"/>
+    <ellipse cx="309" cy="220" rx="14" ry="17" fill="#202832" stroke="none"/>
+    <path d="M239 239C243 232 269 232 273 239C279 250 265 260 256 262C247 260 233 250 239 239Z" fill="#202832" stroke="none"/>
+    <!-- Note and paws overlap in the same order as the approved icon. -->
+    <rect x="94" y="280" width="324" height="166" rx="32" fill="#FFFFFF"/>
+    <path d="M107 280C108 260 127 250 145 253C163 255 177 268 175 283C174 295 163 302 152 299C147 311 132 314 123 306C110 308 101 295 107 280Z" fill="#FFFFFF"/>
+    <path d="M405 280C404 260 385 250 367 253C349 255 335 268 337 283C338 295 349 302 360 299C365 311 380 314 389 306C402 308 411 295 405 280Z" fill="#FFFFFF"/>
+  </g>
+  <path d="M139 345H295M139 387H295" stroke="#E5DED7" stroke-width="12" stroke-linecap="round"/>
+  <path d="M350 359C334 337 311 353 326 373L350 397L374 373C389 353 366 337 350 359Z" fill="#FFDA43"/>
 </svg>

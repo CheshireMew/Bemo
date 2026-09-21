@@ -161,7 +161,7 @@ watch(searchQuery, (q) => {
 }
 
 .icon-btn.active {
-  color: var(--accent-color);
+  color: var(--accent-text);
   background-color: var(--border-color, #e8eaed);
 }
 

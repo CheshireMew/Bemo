@@ -97,7 +97,7 @@ const activeDays = computed(() => new Set(notes.value.map((note) => {
   border-radius: 4px;
   border: 1px solid color-mix(in srgb, var(--accent-color) 40%, transparent);
   background: color-mix(in srgb, var(--accent-color) 15%, transparent);
-  color: var(--accent-color);
+  color: var(--accent-text);
   font-size: 0.6875rem;
   font-weight: 800;
   letter-spacing: 0.04em;

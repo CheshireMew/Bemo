@@ -44,7 +44,7 @@
 
 .section-badge {
   background: var(--accent-sidebar-bg, #e6f7ef);
-  color: var(--accent-color, #31d279);
+  color: var(--accent-text, #31d279);
   padding: 6px 10px;
   border-radius: 999px;
   font-size: var(--font-size-small);

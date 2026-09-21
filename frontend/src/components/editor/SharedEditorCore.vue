@@ -630,7 +630,7 @@ onBeforeUnmount(() => {
 
 .image-add-tile:hover {
   border-color: var(--accent-color, #31d279);
-  color: var(--accent-color, #31d279);
+  color: var(--accent-text, #31d279);
 }
 
 .image-add-plus {
@@ -726,7 +726,7 @@ onBeforeUnmount(() => {
 
 .btn-send {
   background-color: var(--accent-sidebar-bg, #e6f7ef);
-  color: var(--accent-color, #31d279);
+  color: var(--accent-text, #31d279);
   border: none;
   border-radius: 9px;
   width: 56px;
@@ -762,7 +762,7 @@ onBeforeUnmount(() => {
 }
 
 .icon-btn.active {
-  color: var(--accent-color, #10b981);
+  color: var(--accent-text, #10b981);
   background-color: var(--accent-sidebar-bg, #e6f7ef);
 }
 

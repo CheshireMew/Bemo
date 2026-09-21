@@ -291,7 +291,7 @@ useMobileBackHandler({
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-card));
-  color: var(--accent-color);
+  color: var(--accent-text);
 }
 
 .settings-index-copy {

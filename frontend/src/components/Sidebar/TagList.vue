@@ -159,7 +159,7 @@ const handleTagClick = (tagName: string) => {
   text-align: left;
   font-size: var(--font-size-small);
   font-weight: 400;
-  color: var(--accent-color);
+  color: var(--accent-text);
   background: var(--accent-sidebar-bg);
   padding: 7px 10px;
   border-radius: 12px;

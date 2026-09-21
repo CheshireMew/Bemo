@@ -9,6 +9,7 @@
   --text-secondary: #626972;
   --border-color: #dde1e6;
   --accent-color: #147a46;
+  --accent-text: var(--accent-color);
   --accent-hover: #0f663a;
   --accent-sidebar-bg: #e1f3e9;
   --accent-foreground: #ffffff;
@@ -73,6 +74,45 @@
   --heatmap-2: #059669;       /* emerald-600 */
   --heatmap-3: #10b981;       /* emerald-500 */
   --heatmap-4: #34d399;       /* emerald-400 */
+}
+
+/* 奶油：黄色用于实色控件，文字使用更深的琥珀色。 */
+:root.theme-cream {
+  --bg-main: #f8f6f0;
+  --bg-sidebar: #f1eee5;
+  --bg-card: #ffffff;
+  --text-primary: #302e29;
+  --text-secondary: #716b60;
+  --border-color: #e3ded2;
+  --accent-color: #f2cc4d;
+  --accent-text: #806000;
+  --accent-hover: #e5bc35;
+  --accent-sidebar-bg: #fcf1c7;
+  --accent-foreground: #302811;
+  --heatmap-0: #ebe7dd;
+  --heatmap-1: #f8e9ae;
+  --heatmap-2: #f0d36b;
+  --heatmap-3: #d5af32;
+  --heatmap-4: #967319;
+}
+
+:root.theme-cream.dark {
+  --bg-main: #201f1c;
+  --bg-sidebar: #191815;
+  --bg-card: #2b2924;
+  --text-primary: #f3f0e7;
+  --text-secondary: #c2bcae;
+  --border-color: #474238;
+  --accent-color: #e8c967;
+  --accent-text: #e8c967;
+  --accent-hover: #f1d782;
+  --accent-sidebar-bg: #443a20;
+  --accent-foreground: #292310;
+  --heatmap-0: #39352d;
+  --heatmap-1: #63532a;
+  --heatmap-2: #947932;
+  --heatmap-3: #bea044;
+  --heatmap-4: #e8c967;
 }
 
 /* 极地冰川 Nord Theme - Light */

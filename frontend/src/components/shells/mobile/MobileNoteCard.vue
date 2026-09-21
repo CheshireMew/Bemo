@@ -132,7 +132,7 @@ const removeNote = async () => {
 }
 
 .note-date-pin {
-  color: var(--accent-color);
+  color: var(--accent-text);
   flex-shrink: 0;
 }
 
@@ -166,12 +166,12 @@ const removeNote = async () => {
 }
 
 .btn-action.copied {
-  color: var(--accent-color, #31d279);
+  color: var(--accent-text, #31d279);
   background: color-mix(in srgb, var(--accent-color, #31d279) 12%, transparent);
 }
 
 .pin-active {
-  color: var(--accent-color) !important;
+  color: var(--accent-text) !important;
 }
 
 :root.dark .btn-action:hover {
@@ -179,6 +179,6 @@ const removeNote = async () => {
 }
 
 .note-actions .btn-restore {
-  color: var(--accent-color) !important;
+  color: var(--accent-text) !important;
 }
 </style>
