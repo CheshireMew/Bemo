@@ -115,6 +115,7 @@ const handleTagClick = (tagName: string) => {
   font-weight: 500;
   cursor: pointer;
   padding: 0;
+  min-height: 28px;
 }
 
 .toggle-link:hover {
@@ -138,7 +139,8 @@ const handleTagClick = (tagName: string) => {
 }
 
 .tag-search:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent-color, #31d279) 18%, transparent);
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
   border-color: var(--accent-color, #31d279);
 }
 
@@ -159,22 +161,23 @@ const handleTagClick = (tagName: string) => {
   text-align: left;
   font-size: var(--font-size-small);
   font-weight: 400;
-  color: var(--accent-text);
-  background: var(--accent-sidebar-bg);
+  color: var(--text-secondary);
+  background: transparent;
+  min-height: 36px;
   padding: 7px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .tag-badge:hover {
-  background: var(--accent-color);
-  color: var(--accent-foreground, white);
+  background: var(--surface-hover);
+  color: var(--text-primary);
 }
 
 .tag-badge.active {
-  background: var(--accent-color);
-  color: var(--accent-foreground, white);
+  background: var(--accent-sidebar-bg);
+  color: var(--accent-text);
   font-weight: 600;
 }
 

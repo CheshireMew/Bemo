@@ -12,13 +12,27 @@ body {
   min-height: 100%;
 }
 
-button:focus-visible, a:focus-visible, select:focus-visible {
+button, input, textarea, select {
+  font: inherit;
+}
+
+button, a, input, textarea, select, [contenteditable='true'] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
   outline: 2px solid var(--accent-color);
   outline-offset: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  html, body, * { scroll-behavior: auto !important; }
+  .note-skeleton { animation: none !important; }
+  .mobile-drawer-enter-active, .mobile-drawer-leave-active,
+  .mobile-drawer-enter-active .sidebar-drawer, .mobile-drawer-leave-active .sidebar-drawer,
+  .sheet-overlay, .sheet-panel, .mobile-note-card, .mobile-bottom-nav .compose-pill {
+    transition: none !important;
+  }
 }
 
 body,
@@ -33,9 +47,35 @@ body {
   background-color: var(--bg-main);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
-  transition: background-color 0.3s, color 0.3s;
   overflow-x: hidden;
 }
+
+::selection {
+  background: var(--accent-sidebar-bg);
+  color: var(--accent-text);
+}
+
+input, textarea, [contenteditable='true'] {
+  caret-color: var(--accent-color);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.skip-link {
+  position: fixed;
+  left: 24px;
+  top: 12px;
+  z-index: 3000;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background: var(--accent-color);
+  color: var(--accent-foreground);
+  transform: translateY(-160%);
+}
+.skip-link:focus { transform: translateY(0); }
 
 /* 整个应用容器居中，两侧自动留白 */
 .flomo-layout {
@@ -50,12 +90,8 @@ body {
 }
 
 .surface-scroll {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.surface-scroll::-webkit-scrollbar {
-  display: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 
 /* Mobile Responsive */

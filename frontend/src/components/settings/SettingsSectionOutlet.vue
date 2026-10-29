@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-content">
+  <div ref="contentRef" class="settings-content">
     <SettingsSyncSection v-if="activeTab === 'sync'" />
     <SettingsAppearanceSection v-else-if="activeTab === 'appearance'" />
     <SettingsAttachmentsSection v-else-if="activeTab === 'attachments'" />
@@ -12,6 +12,7 @@
 </template>
 
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue';
 import SettingsAppearanceSection from '../SettingsAppearanceSection.vue';
 import SettingsAttachmentsSection from '../SettingsAttachmentsSection.vue';
 import SettingsConflictsSection from '../SettingsConflictsSection.vue';
@@ -22,9 +23,14 @@ import SettingsSyncSection from '../SettingsSyncSection.vue';
 import SettingsTrashSection from '../SettingsTrashSection.vue';
 import type { SettingsTabId } from '../../composables/useSettingsTabs';
 
-defineProps<{
+const props = defineProps<{
   activeTab: SettingsTabId;
 }>();
+const contentRef = ref<HTMLElement | null>(null);
+watch(() => props.activeTab, async () => {
+  await nextTick();
+  contentRef.value?.scrollTo({ top: 0 });
+});
 
 const emit = defineEmits<{
   notesImported: [];
@@ -35,7 +41,8 @@ const emit = defineEmits<{
 .settings-content {
   container: settings / inline-size;
   min-width: 0;
-  padding: 24px 24px 32px 20px;
+  padding: 24px 28px 32px;
+  overscroll-behavior: contain;
   overflow-y: auto;
   display: flex;
   flex-direction: column;

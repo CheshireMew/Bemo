@@ -73,6 +73,7 @@ watch([randomWalkNonce, notes], () => {
 .section-icon { color: var(--text-secondary); }
 .random-walk-actions { display: flex; gap: 8px; align-items: center; }
 .btn-random-next {
+  min-height: 40px;
   background: var(--accent-sidebar-bg); color: var(--accent-text); border: none;
   padding: 6px 14px; border-radius: var(--radius-md); cursor: pointer;
   font-size: var(--font-size-small); font-weight: 500; transition: all 0.15s;
@@ -83,6 +84,8 @@ watch([randomWalkNonce, notes], () => {
 .btn-random-next:hover:not(:disabled) { background: var(--accent-color); color: var(--accent-foreground, white); }
 .btn-random-next:disabled { cursor: default; opacity: 0.6; }
 .btn-random-close {
+  min-width: 40px;
+  min-height: 40px;
   background: none; border: none; color: var(--text-secondary);
   cursor: pointer; padding: 6px; border-radius: 6px; line-height: 1;
   display: inline-flex;

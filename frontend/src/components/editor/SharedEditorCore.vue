@@ -1,5 +1,5 @@
 <template>
-  <div ref="editorCardRef" class="editor-card" :class="shellClass">
+  <div ref="editorCardRef" class="editor-card" :class="shellClass" :aria-busy="isSaving || isUploading">
     <div class="editor-body">
       <div
         v-show="showPreview"
@@ -47,8 +47,8 @@
           <span class="image-chip-remove">×</span>
         </button>
 
-        <button type="button" class="image-add-tile" @click="triggerImageUpload">
-          <span class="image-add-plus">+</span>
+        <button type="button" class="image-add-tile" aria-label="继续添加图片" @click="triggerImageUpload">
+          <Plus :size="28" aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -65,6 +65,8 @@
         <button
           class="icon-btn"
           :class="{ active: showPreview }"
+          type="button"
+          :aria-pressed="showPreview"
           :title="actionTitle(showPreview ? '切换到 Markdown' : '切换到富文本', 'Ctrl+Shift+P')"
           :aria-label="showPreview ? '切换到 Markdown' : '切换到富文本'"
           @click="togglePreview"
@@ -73,7 +75,7 @@
           <PenLine v-else :size="20" />
         </button>
         <div class="divider"></div>
-        <button class="icon-btn" :class="{ active: showTagInput }" :title="actionTitle('添加标签')" @click="showTagInput = !showTagInput"><Hash :size="20" /></button>
+        <button class="icon-btn" type="button" :class="{ active: showTagInput }" :aria-expanded="showTagInput" :aria-controls="`${editorErrorId}-tags`" :title="actionTitle('添加标签')" @click="showTagInput = !showTagInput"><Hash :size="20" /></button>
         <button class="icon-btn" :title="actionTitle('上传图片')" @click="triggerImageUpload"><ImageIcon :size="20" /></button>
         <div class="divider"></div>
         <button class="icon-btn" :title="actionTitle('加粗', 'Ctrl+B')" @click="insertBold"><Bold :size="20" /></button>
@@ -91,7 +93,7 @@
       <div class="toolbar-action">
         <button v-if="showCancelButton" class="btn-cancel-text" type="button" @click="emit('cancel')">取消</button>
         <button class="btn-send" type="button" :disabled="!hasContent || isUploading || isSaving || Boolean(submissionBlockedReason)" @click="saveNote" :title="submitButtonTitle" :aria-label="submitButtonTitle">
-          <span v-if="isUploading || isSaving" class="send-loading">...</span>
+          <LoaderCircle v-if="isUploading || isSaving" :size="18" class="send-loading" aria-hidden="true" />
           <SendHorizontal v-else :size="18" class="send-icon" />
         </button>
       </div>
@@ -99,7 +101,7 @@
       <input type="file" ref="fileInput" @change="handleImageUpload" accept="image/*" style="display: none" />
     </div>
 
-    <div v-if="showTagInput" class="tag-input-area">
+    <div v-if="showTagInput" :id="`${editorErrorId}-tags`" class="tag-input-area">
       <input
         v-model="tagInput"
         :disabled="isSaving"
@@ -137,7 +139,7 @@ import {
 import {
   Hash, Image as ImageIcon, Bold, Italic, Strikethrough,
   Link as LinkIcon, List, ListOrdered, CheckSquare, Code, SendHorizontal,
-  Eye, PenLine, Eraser
+  Eye, PenLine, Eraser, Plus, LoaderCircle
 } from 'lucide-vue-next';
 
 export type { EditorSubmitPayload } from '../../composables/useEditorSubmit';
@@ -505,11 +507,10 @@ onBeforeUnmount(() => {
   background: var(--bg-card, white);
   border-radius: var(--radius-lg, 0.75rem);
   border: 1px solid var(--border-color, #e4e4e7);
-  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -1px rgba(0,0,0,0.02);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.15s;
 }
 
 .editor-card,
@@ -521,7 +522,10 @@ onBeforeUnmount(() => {
 
 .editor-card:focus-within {
   border-color: var(--accent-color, #10b981);
-  box-shadow: 0 4px 6px -1px color-mix(in srgb, var(--accent-color) 8%, transparent), 0 2px 4px -1px color-mix(in srgb, var(--accent-color) 8%, transparent);
+}
+.editor-card:has(.editor-preview:focus-visible, .editor-input:focus-visible) {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }
 
 .editor-body {
@@ -633,19 +637,13 @@ onBeforeUnmount(() => {
   color: var(--accent-text, #31d279);
 }
 
-.image-add-plus {
-  font-size: 2.5rem;
-  font-weight: 300;
-  line-height: 1;
-}
-
 .editor-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
   border-top: 1px solid var(--border-color, #e4e4e7);
-  background-color: var(--bg-main, #fafafa);
+  background-color: var(--surface-muted);
   gap: 12px;
 }
 
@@ -670,7 +668,7 @@ onBeforeUnmount(() => {
   gap: 4px;
   flex-wrap: nowrap;
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding: 4px;
   min-width: 0;
 }
 
@@ -682,14 +680,17 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
-  padding: 5px;
+  transition: background-color 0.15s, color 0.15s;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border-radius: var(--radius-sm, 0.375rem);
 }
 
 .icon-btn:hover:not(:disabled) {
   color: var(--text-primary, #3f3f46);
-  background-color: var(--bg-main, #f4f4f5);
+  background-color: var(--surface-hover);
 }
 
 .icon-btn:disabled {
@@ -698,6 +699,7 @@ onBeforeUnmount(() => {
 }
 
 .divider {
+  flex: 0 0 1px;
   width: 1px;
   height: 16px;
   background-color: var(--border-color, #e4e4e7);
@@ -712,6 +714,8 @@ onBeforeUnmount(() => {
 }
 
 .btn-cancel-text {
+  min-height: 40px;
+  padding: 0 4px;
   border: none;
   background: transparent;
   color: var(--text-secondary, #a1a1aa);
@@ -730,9 +734,9 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 9px;
   width: 56px;
-  height: 32px;
+  height: 40px;
   cursor: not-allowed;
-  transition: all 0.2s;
+  transition: background-color 0.15s, color 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -757,9 +761,10 @@ onBeforeUnmount(() => {
 }
 
 .send-loading {
-  font-size: 1.4rem;
-  line-height: 1;
+  animation: save-progress 1s linear infinite;
 }
+@keyframes save-progress { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .send-loading { animation: none; } }
 
 .icon-btn.active {
   color: var(--accent-text, #10b981);

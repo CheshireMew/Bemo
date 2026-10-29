@@ -1,18 +1,20 @@
 <template>
-  <div class="topbar-row topbar-row-main">
+  <div class="topbar-row topbar-row-main" :class="{ 'has-settings': showSettings }">
     <button v-if="showSidebarToggle" type="button" class="icon-btn menu-btn" title="打开导航" aria-label="打开导航" @click="emit('openSidebar')">
       <PanelLeftOpen :size="18" />
     </button>
-    <div class="search-box">
-      <Search class="search-icon" :size="16" />
+    <div class="search-box" role="search" aria-label="笔记搜索">
+      <Search class="search-icon" :size="18" aria-hidden="true" />
       <input ref="searchInputRef" type="search" aria-label="搜索笔记" aria-keyshortcuts="Control+K Meta+K" v-model="searchQuery" :placeholder="searchPlaceholder" />
-      <button v-if="searchQuery" type="button" class="search-clear" aria-label="清空搜索" @click="searchQuery = ''">×</button>
+      <button v-if="searchQuery" type="button" class="search-clear" aria-label="清空搜索" @click="clearAndFocus"><X :size="16" /></button>
     </div>
     <div class="topbar-actions">
       <button
         class="icon-btn"
         type="button"
         :class="{ active: sortOrder === 'asc' }"
+        :aria-pressed="sortOrder === 'asc'"
+        :aria-label="sortOrder === 'desc' ? '当前从新到旧，点击切换为从旧到新' : '当前从旧到新，点击切换为从新到旧'"
         :title="sortOrder === 'desc' ? '当前从新到旧，点击切换为从旧到新' : '当前从旧到新，点击切换为从新到旧'"
         @click="toggleSortOrder"
       >
@@ -31,7 +33,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Search, Settings, ArrowUpDown, PanelLeftOpen, Sun, Moon } from 'lucide-vue-next';
+import { Search, Settings, ArrowUpDown, PanelLeftOpen, Sun, Moon, X } from 'lucide-vue-next';
 import { searchQuery, performSearch, sortOrder, toggleSortOrder } from '../../../store/notes';
 import { isDarkMode, toggleTheme } from '../../../store/ui';
 
@@ -42,7 +44,7 @@ withDefaults(defineProps<{
 }>(), {
   showSidebarToggle: false,
   showSettings: true,
-  searchPlaceholder: 'Ctrl+K 或直接搜索...',
+  searchPlaceholder: '搜索笔记…',
 });
 
 const emit = defineEmits<{
@@ -51,6 +53,10 @@ const emit = defineEmits<{
 }>();
 
 const searchInputRef = ref<HTMLInputElement | null>(null);
+const clearAndFocus = () => {
+  searchQuery.value = '';
+  searchInputRef.value?.focus();
+};
 
 const handleGlobalSearchShortcut = (event: KeyboardEvent) => {
   if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'k') return;
@@ -86,21 +92,25 @@ watch(searchQuery, (q) => {
 }
 
 .search-box {
-  background: color-mix(in srgb, var(--border-color, #e8eaed) 88%, var(--bg-card, #fff));
-  border-radius: 18px;
-  padding: 8px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  min-height: 44px;
+  padding: 0 12px;
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
   position: relative;
-  transition: background 0.2s, box-shadow 0.2s;
+  transition: border-color 0.15s;
   flex: 1;
   min-width: 0;
 }
 
 .search-box:focus-within {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 18%, transparent);
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+  border-color: var(--accent-color);
 }
 
 .search-box input {
@@ -109,6 +119,8 @@ watch(searchQuery, (q) => {
   outline: none;
   width: 100%;
   min-width: 0;
+  min-height: 40px;
+  font-family: inherit;
   font-size: 0.9375rem;
   color: var(--text-primary);
 }
@@ -128,7 +140,16 @@ watch(searchQuery, (q) => {
   font-size: 1rem;
   color: var(--text-secondary, #888);
   cursor: pointer;
-  padding: 0 2px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+}
+
+.search-clear:hover {
+  background: var(--surface-hover);
 }
 
 .topbar-actions {
@@ -137,9 +158,7 @@ watch(searchQuery, (q) => {
   gap: 6px;
   flex-shrink: 0;
   margin-left: auto;
-  padding: 2px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-card, #fff) 76%, transparent);
+  padding: 0;
 }
 
 .icon-btn {
@@ -150,21 +169,21 @@ watch(searchQuery, (q) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   padding: 0;
-  border-radius: 999px;
-  transition: all 0.2s ease;
+  border-radius: var(--radius-md);
+  transition: background-color 0.15s, color 0.15s;
 }
 
 .icon-btn:hover {
   color: var(--text-primary);
-  background-color: var(--bg-main, #f4f4f5);
+  background-color: var(--surface-hover);
 }
 
 .icon-btn.active {
   color: var(--accent-text);
-  background-color: var(--border-color, #e8eaed);
+  background-color: var(--accent-sidebar-bg);
 }
 
 @media (max-width: 767px) {
@@ -181,7 +200,7 @@ watch(searchQuery, (q) => {
     height: 44px;
     box-sizing: border-box;
     padding: 0 12px;
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     gap: 8px;
   }
 
@@ -206,5 +225,15 @@ watch(searchQuery, (q) => {
     min-width: 40px !important;
     min-height: 40px !important;
   }
+}
+
+@media (max-width: 420px) {
+  .topbar-row-main.has-settings { flex-wrap: wrap; }
+  .has-settings .search-box { flex-basis: calc(100% - 50px); }
+  .has-settings .topbar-actions { margin-left: auto; }
+}
+
+@media (pointer: coarse) {
+  .icon-btn, .search-clear { min-width: 44px !important; min-height: 44px !important; }
 }
 </style>

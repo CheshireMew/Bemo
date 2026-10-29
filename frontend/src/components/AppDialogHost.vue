@@ -101,8 +101,7 @@ const handleEnter = (event: KeyboardEvent) => {
   display: grid;
   place-items: center;
   padding: 20px max(20px, var(--safe-right)) max(20px, var(--safe-bottom)) max(20px, var(--safe-left));
-  background: rgba(15, 23, 42, 0.42);
-  backdrop-filter: blur(10px);
+  background: var(--overlay-color);
 }
 
 .app-dialog {
@@ -114,7 +113,7 @@ const handleEnter = (event: KeyboardEvent) => {
   background: var(--bg-card);
   color: var(--text-primary);
   padding: 22px;
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+  box-shadow: var(--shadow-dialog);
 }
 
 .app-dialog h2 {
@@ -152,7 +151,8 @@ const handleEnter = (event: KeyboardEvent) => {
 }
 
 .dialog-input-row input:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent-color) 28%, transparent);
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
   border-color: var(--accent-color);
 }
 

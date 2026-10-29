@@ -19,7 +19,7 @@
   --info-color: #2563eb;
   --info-text: #1d4fbd;
   
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --font-size-caption: 0.75rem;
   --font-size-small: 0.8125rem;
@@ -31,6 +31,12 @@
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+  --surface-muted: color-mix(in srgb, var(--bg-main) 60%, var(--bg-card));
+  --surface-hover: color-mix(in srgb, var(--border-color) 45%, var(--bg-card));
+  --overlay-color: rgb(9 14 22 / 48%);
+  --shadow-dialog: 0 20px 64px rgb(9 14 22 / 20%);
+  --settings-nav-width: 208px;
+  color-scheme: light;
   --layout-max-width: 1200px;
   --layout-shell-gap: 20px;
   --layout-shell-padding: 20px;
@@ -53,6 +59,7 @@
 }
 
 :root.dark {
+  color-scheme: dark;
   --bg-main: #18181b;         /* zinc-900 */
   --bg-sidebar: #09090b;      /* zinc-950 */
   --bg-card: #27272a;         /* zinc-800 */

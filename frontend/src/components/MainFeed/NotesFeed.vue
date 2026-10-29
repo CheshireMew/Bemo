@@ -97,13 +97,17 @@ const resetFilters = () => { clearSearch(); clearSelectedFilters(); };
   font-size: 1.1rem; 
   color: var(--accent-text);
   cursor: pointer; 
-  padding: 0 4px; 
+  padding: 0 8px;
+  min-width: 32px;
+  min-height: 32px;
+  flex-shrink: 0;
 }
 
 .filter-bar-error {
   background: color-mix(in srgb, var(--danger-color) 10%, var(--bg-card));
   color: var(--danger-text);
 }
+.filter-bar > span { min-width: 0; overflow-wrap: anywhere; }
 
 .filter-bar-error .filter-clear {
   color: inherit;
@@ -189,4 +193,5 @@ const resetFilters = () => { clearSearch(); clearSelectedFilters(); };
     margin-top: 10px;
   }
 }
+@media (pointer: coarse) { .filter-clear { min-width: 44px; min-height: 44px; } }
 </style>

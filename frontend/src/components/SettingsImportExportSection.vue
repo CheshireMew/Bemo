@@ -3,12 +3,11 @@
     <div class="section-header">
       <div>
         <h3>导入导出</h3>
-        <p>把侧边栏里的备份与迁移操作集中到这里。</p>
       </div>
       <span v-if="isImporting" class="section-badge">处理中...</span>
     </div>
 
-    <div class="card-grid two-up">
+    <div class="transfer-list">
       <article class="settings-card">
         <h4>完整备份</h4>
         <p>导出全部笔记、回收站及引用的附件，用于数据备份或跨设备无损迁移。</p>
@@ -51,6 +50,8 @@
           <button type="button" class="secondary-btn" @click="triggerSyncDirectoryImport">选择同步目录并恢复</button>
         </div>
       </article>
+    </div>
+    <div class="transfer-list reset-list">
       <article class="settings-card danger-card">
         <h4>清空工作区</h4>
         <p v-if="remoteAppData">删除后端主存储中的全部笔记、回收站、附件和同步残留，并清理本机缓存；使用同一后端的设备都会受到影响，界面设置会保留。</p>
@@ -118,5 +119,10 @@ void syncDirectoryInput;
 </script>
 
 <style scoped>
-/* Scoped styles are handled by global settings.css */
+.transfer-list { display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); }
+.transfer-list .settings-card { border: none; border-radius: 0; background: transparent; }
+.transfer-list .settings-card + .settings-card { border-top: 1px solid var(--border-color); }
+.reset-list h4 { color: var(--danger-text); }
+.reset-list { border-color: color-mix(in srgb, var(--danger-color) 28%, var(--border-color)); }
+.transfer-list :deep(.button-row) { margin-top: 0; padding-top: 14px; }
 </style>

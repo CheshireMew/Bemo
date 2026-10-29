@@ -1,5 +1,5 @@
 <template>
-  <nav class="settings-nav" :class="layoutClass" aria-label="设置分组">
+  <nav ref="navRef" class="settings-nav" :class="layoutClass" aria-label="设置分组">
     <button
       v-for="tab in tabs"
       :key="tab.id"
@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import type { SettingsTab, SettingsTabId } from '../../composables/useSettingsTabs';
 
 const props = withDefaults(defineProps<{
@@ -36,6 +36,12 @@ const layoutClass = computed(() => (
     ? 'settings-nav-mobile'
     : 'settings-nav-sidebar'
 ));
+const navRef = ref<HTMLElement | null>(null);
+watch([() => props.activeTab, () => props.layout], async () => {
+  if (props.layout !== 'mobile-tabs') return;
+  await nextTick();
+  navRef.value?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}, { immediate: true });
 </script>
 
 <style scoped>
@@ -45,17 +51,20 @@ const layoutClass = computed(() => (
 }
 
 .settings-nav-sidebar {
-  width: var(--layout-sidebar-width);
+  width: var(--settings-nav-width);
   flex-shrink: 0;
-  padding: 24px 20px 24px 24px;
+  padding: 20px 12px;
   flex-direction: column;
-  background: color-mix(in srgb, var(--bg-main) 86%, #f2fbf6);
+  background: var(--surface-muted);
+  overflow-y: auto;
 }
 
 .settings-nav-mobile {
   width: auto;
   padding: 12px 16px;
   overflow-x: auto;
+  flex-shrink: 0;
+  scroll-padding-inline: 16px;
   flex-direction: row;
   border-bottom: 1px solid var(--border-color, #e4e4e7);
 }
@@ -68,7 +77,8 @@ const layoutClass = computed(() => (
   background: transparent;
   color: var(--text-secondary, #888888);
   cursor: pointer;
-  transition: all 0.2s ease;
+  min-height: 44px;
+  transition: background-color 0.15s, color 0.15s;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -89,8 +99,8 @@ const layoutClass = computed(() => (
 }
 
 .tab-btn.active {
-  background: var(--accent-color, #31d279);
-  color: var(--accent-foreground, white);
+  background: var(--accent-sidebar-bg);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
@@ -105,7 +115,7 @@ const layoutClass = computed(() => (
 }
 
 .tab-btn.active .tab-icon {
-  color: var(--accent-foreground, white);
+  color: var(--accent-text);
   opacity: 1;
 }
 

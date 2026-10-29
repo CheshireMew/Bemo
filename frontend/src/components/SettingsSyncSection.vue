@@ -4,15 +4,10 @@
       <div>
         <h3>同步</h3>
       </div>
-      <span class="section-badge">{{ currentModeBadge }}</span>
     </div>
 
     <article class="settings-card sync-hero">
-      <div class="sync-hero-main">
-        <div class="sync-hero-copy">
-          <h4>同步模式</h4>
-        </div>
-      </div>
+      <h4>同步模式</h4>
 
       <div class="mode-switcher" role="radiogroup" aria-label="同步模式" @keydown="handleModeKeydown">
         <button
@@ -50,22 +45,12 @@
         </button>
       </div>
 
-      <div class="mode-summary">
-        <div class="mode-summary-head">
-          <strong>{{ currentModeTitle }}</strong>
-          <span class="mode-summary-tag">{{ currentModeTag }}</span>
-        </div>
-      </div>
-
       <div v-if="modeSwitchNotice" class="helper-panel helper-panel-warning">
         <strong>切换提示</strong>
         <span>{{ modeSwitchNotice }}</span>
       </div>
 
-      <div class="helper-panel">
-        <strong>自动保存</strong>
-        <span>同步模式和当前表单内容会自动保存，关闭设置后会继续保留。</span>
-      </div>
+      <p class="field-hint">设置会自动保存。</p>
     </article>
 
     <article class="settings-card form-card">
@@ -81,26 +66,12 @@
           <input id="device-name" v-model="syncSettings.deviceName" type="text" />
         </label>
 
-        <div class="status-grid">
-        <div class="status-metric">
-          <span class="status-label">Server 待同步</span>
-          <strong>{{ serverPendingCount }}</strong>
-          <small>条变更</small>
-        </div>
-        <div class="status-metric">
-          <span class="status-label">WebDAV 待同步</span>
-          <strong>{{ webdavPendingCount }}</strong>
-          <small>条变更</small>
-        </div>
-        <div class="status-metric">
-          <span class="status-label">Server 最近同步</span>
-          <strong class="status-text">{{ serverLastSyncAt || '未同步' }}</strong>
-        </div>
-        <div class="status-metric">
-          <span class="status-label">WebDAV 最近同步</span>
-          <strong class="status-text">{{ webdavLastSyncAt || '未同步' }}</strong>
-        </div>
-        </div>
+        <dl class="sync-status-list">
+          <div><dt>Server 待同步</dt><dd>{{ serverPendingCount }} 条</dd></div>
+          <div><dt>Server 最近同步</dt><dd>{{ serverLastSyncAt || '未同步' }}</dd></div>
+          <div><dt>WebDAV 待同步</dt><dd>{{ webdavPendingCount }} 条</dd></div>
+          <div><dt>WebDAV 最近同步</dt><dd>{{ webdavLastSyncAt || '未同步' }}</dd></div>
+        </dl>
       </div>
 
       <div v-if="syncError" class="helper-panel helper-panel-danger">
@@ -219,11 +190,9 @@
       :flush-sync-settings="flushPersist"
     />
 
-    <article class="settings-card form-card">
+    <details class="settings-card queue-details">
+      <summary>待同步详情 <span>{{ serverPendingCount + webdavPendingCount }} 条</span></summary>
       <div class="section-inline-header">
-        <div>
-          <h4>待同步详情</h4>
-        </div>
         <button type="button" class="secondary-btn" :disabled="isRefreshingQueues" @click="refreshPendingQueues">
           {{ isRefreshingQueues ? '刷新中...' : '刷新' }}
         </button>
@@ -262,7 +231,7 @@
           </ul>
         </section>
       </div>
-    </article>
+    </details>
   </section>
 </template>
 
@@ -291,12 +260,6 @@ const {
   webdavConfigIssue,
 } = useSyncSettings();
 
-const currentModeTitle = computed(() => {
-  if (syncSettings.mode === 'server') return '自部署服务器';
-  if (syncSettings.mode === 'webdav') return 'WebDAV 云盘';
-  return '本地模式';
-});
-
 const handleModeKeydown = (event: KeyboardEvent) => {
   const buttons = Array.from((event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('[role="radio"]'));
   const current = buttons.indexOf(event.target as HTMLButtonElement);
@@ -311,18 +274,6 @@ const handleModeKeydown = (event: KeyboardEvent) => {
   buttons[next]?.focus();
   buttons[next]?.click();
 };
-
-const currentModeTag = computed(() => {
-  if (syncSettings.mode === 'server') return '完整双向';
-  if (syncSettings.mode === 'webdav') return shouldProxyWebDavThroughBackend() ? '经同步服务器' : '原生直连';
-  return '推荐单机';
-});
-
-const currentModeBadge = computed(() => {
-  if (syncSettings.mode === 'server') return '自部署服务器';
-  if (syncSettings.mode === 'webdav') return 'WebDAV';
-  return '本地';
-});
 
 const webdavUrlPlaceholder = computed(() => getWebDavUrlPlaceholder(syncSettings.webdavUrl));
 const webdavProviderHint = computed(() => getWebDavProviderHint(syncSettings.webdavUrl));
@@ -350,280 +301,34 @@ const {
 </script>
 
 <style scoped>
-
-
-.sync-hero {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.sync-hero-main {
-  display: flex;
-  justify-content: flex-start;
-  gap: 24px;
-  align-items: flex-start;
-}
-
-.sync-hero-copy {
-  max-width: var(--layout-content-width-compact);
-}
-
-.sync-hero-copy h4 {
-  font-size: 1.18rem;
-}
-
-.mode-switcher {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 6px;
-  border-radius: var(--radius-md, 0.5rem);
-  background: var(--bg-main, #f4f5f7);
-  border: 1px solid var(--border-color, #e4e4e7);
-}
-
-.mode-pill {
-  flex: 1 1 0;
-  min-width: 140px;
-  border: none;
-  border-radius: var(--radius-sm, 0.375rem);
-  background: transparent;
-  color: var(--text-secondary, #71717a);
-  padding: 10px 14px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-
-.mode-pill:hover:not(.active) {
-  background: var(--border-color, #e4e4e7);
-  color: var(--text-primary, #18181b);
-}
-
-.mode-pill.active {
-  background: var(--accent-color, #31d279);
-  color: var(--accent-foreground, #fff);
-  font-weight: 600;
-}
-
-.mode-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px 18px;
-  border-radius: var(--radius-md, 0.5rem);
-  background: var(--bg-main, #f4f5f7);
-  border: 1px solid var(--border-color, #e4e4e7);
-}
-
-.mode-summary-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.mode-summary-head strong {
-  font-size: 1rem;
-}
-
-.mode-summary-tag {
-  flex-shrink: 0;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--accent-sidebar-bg, #e6f7ef);
-  color: var(--accent-text, #31d279);
-  font-size: var(--font-size-caption);
-  font-weight: 700;
-}
-
-.mode-summary p {
-  margin: 0;
-}
-
-
-
-.overview-grid {
-  display: grid;
-  grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
-  gap: 16px;
-  align-items: stretch;
-}
-
-.device-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 18px;
-  border-radius: 16px;
-  border: 1px solid var(--border-color, #e4e4e7);
-  background: color-mix(in srgb, var(--bg-main) 72%, var(--bg-card));
-}
-
-.device-card input {
-  width: 100%;
-  border: 1px solid var(--border-color, #d4d4d8);
-  background: var(--bg-card, #fff);
-  color: var(--text-primary, #18181b);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font: inherit;
-}
-
-.device-card input:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent-color, #31d279) 20%, transparent);
-  border-color: var(--accent-color, #31d279);
-}
-
-.status-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.status-metric {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  justify-content: space-between;
-  padding: 18px;
-  border-radius: 16px;
-  border: 1px solid var(--border-color, #e4e4e7);
-  background: color-mix(in srgb, var(--bg-main) 72%, var(--bg-card));
-  min-height: 120px;
-}
-
-.status-label {
-  color: var(--text-secondary, #71717a);
-  font-size: var(--font-size-supporting);
-}
-
-.status-metric strong {
-  color: var(--text-primary, #18181b);
-  font-size: 1.9rem;
-  line-height: 1;
-}
-
-.status-metric .status-text {
-  font-size: 1rem;
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.status-metric small {
-  color: var(--text-secondary, #71717a);
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-readable);
-}
-
-.queue-card {
-  border: 1px solid var(--border-color, #e4e4e7);
-  border-radius: 16px;
-  padding: 16px;
-  background: var(--bg-main, #f4f5f7);
-  min-width: 0;
-}
-
-.queue-card-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 10px;
-  color: var(--text-primary, #18181b);
-}
-
-.queue-empty {
-  color: var(--text-secondary, #71717a);
-  font-size: var(--font-size-supporting);
-}
-
-.queue-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.queue-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--bg-card, #ffffff);
-  border: 1px solid var(--border-color, #e4e4e7);
-  color: var(--text-secondary, #71717a);
-  font-size: var(--font-size-small);
-  word-break: break-word;
-}
-
-.queue-item strong {
-  color: var(--text-primary, #18181b);
-  font-size: var(--font-size-supporting);
-}
-
-@container settings (max-width: 640px) {
-  .overview-grid { grid-template-columns: 1fr; }
-  .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .mode-pill { min-width: 0; flex-basis: 140px; }
-}
-
-@media (max-width: 768px) {
-  .card-grid.two-up,
-  .mode-switcher {
-    grid-template-columns: 1fr;
-  }
-
-  .mode-switcher {
-    flex-direction: column;
-    gap: 4px;
-    padding: 4px;
-  }
-
-  .mode-summary-head,
-  .sync-hero-main {
-    width: 100%;
-  }
-
-  .mode-pill {
-    width: 100%;
-    min-width: 0;
-    min-height: 48px;
-    flex: 0 0 auto;
-    padding: 12px 14px;
-  }
-
-  .mode-summary-head {
-    align-items: flex-start;
-  }
-
-  .card-grid.two-up {
-    grid-template-columns: 1fr;
-  }
-
-  .sync-hero-main,
-  .mode-summary-head {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .overview-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .status-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .field-row input {
-    width: 100%;
-  }
+.sync-hero { gap: 16px; }
+.mode-switcher { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--surface-muted); }
+.mode-pill { flex: 1; min-width: 0; min-height: 44px; padding: 10px 12px; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); font-size: var(--font-size-supporting); font-weight: 500; cursor: pointer; transition: color 0.15s, background-color 0.15s; }
+.mode-pill:hover:not(.active) { background: var(--surface-hover); color: var(--text-primary); }
+.mode-pill.active { background: var(--accent-color); color: var(--accent-foreground); font-weight: 600; }
+.overview-grid { display: grid; gap: 20px; margin-top: 18px; }
+.device-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 1fr); gap: 16px; align-items: center; }
+.device-card input { min-width: 0; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-card); color: var(--text-primary); }
+.sync-status-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
+.sync-status-list > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; padding: 12px 0; border-top: 1px solid var(--border-color); font-size: var(--font-size-small); }
+.sync-status-list dt { color: var(--text-secondary); }
+.sync-status-list dd { color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.form-card > .helper-panel { margin-top: 16px; }
+.queue-details { display: block; }
+.queue-details summary { cursor: pointer; color: var(--text-primary); font-weight: 600; min-height: 28px; line-height: 28px; }
+.queue-details summary span { float: right; color: var(--text-secondary); font-size: var(--font-size-small); font-weight: 400; font-variant-numeric: tabular-nums; }
+.queue-details > .section-inline-header { justify-content: flex-end; margin: 12px 0; }
+.queue-card { min-width: 0; }
+.queue-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); font-size: var(--font-size-supporting); }
+.queue-card-header span, .queue-empty { color: var(--text-secondary); font-size: var(--font-size-small); }
+.queue-empty { padding: 14px 0; }
+.queue-list { list-style: none; }
+.queue-item { display: flex; flex-direction: column; gap: 4px; padding: 14px 0; border-bottom: 1px solid var(--border-color); color: var(--text-secondary); font-size: var(--font-size-small); overflow-wrap: anywhere; }
+.queue-item strong { color: var(--text-primary); }
+@container settings (max-width: 540px) {
+  .sync-status-list { grid-template-columns: 1fr; }
+  .device-card { grid-template-columns: 1fr; gap: 8px; }
+  .mode-switcher { flex-direction: column; }
+  .mode-pill { flex: auto; }
 }
 </style>

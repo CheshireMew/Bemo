@@ -1,9 +1,10 @@
 <template>
   <div id="app" class="flomo-layout app-shell web-desktop-shell">
+    <a class="skip-link" href="#notes-content">跳到笔记内容</a>
     <WebDesktopSidebar v-if="!isCompactShell" />
     <WebDesktopSidebarDrawer v-else :open="isSidebarOpen" @close="isSidebarOpen = false" />
 
-    <main class="main-content">
+    <main class="main-content" aria-label="笔记工作区">
       <div class="sticky-stack">
         <WebDesktopTopbar
           :show-sidebar-toggle="isCompactShell"

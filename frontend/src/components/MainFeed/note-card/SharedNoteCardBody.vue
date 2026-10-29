@@ -31,7 +31,7 @@
           :class="{ 'note-image-card-primary': index === 0, 'note-image-card-secondary': index > 0 }"
           @click="openImagePreview(image.url)"
         >
-          <img :src="resolvedImageUrls[image.url] || image.url" :alt="image.label" class="note-image" />
+          <img :src="resolvedImageUrls[image.url] || image.url" :alt="image.label" class="note-image" loading="lazy" decoding="async" />
         </button>
       </div>
       <div v-if="audioAttachments.length" class="note-audio-list">
@@ -41,7 +41,7 @@
           class="note-audio-card"
         >
           <div class="note-audio-title">{{ audio.label }}</div>
-          <audio class="note-audio-player" controls :src="resolvedAttachmentUrls[audio.url] || audio.url"></audio>
+          <audio class="note-audio-player" controls preload="none" :src="resolvedAttachmentUrls[audio.url] || audio.url"></audio>
         </div>
       </div>
       <div v-if="videoAttachments.length" class="note-video-list">
@@ -51,7 +51,7 @@
           class="note-video-card"
         >
           <div class="note-video-title">{{ video.label }}</div>
-          <video class="note-video-player" controls :src="resolvedAttachmentUrls[video.url] || video.url"></video>
+          <video class="note-video-player" controls preload="metadata" :src="resolvedAttachmentUrls[video.url] || video.url"></video>
         </div>
       </div>
       <div v-if="fileAttachments.length" class="note-file-list">
@@ -109,14 +109,17 @@ const saveEdit = async (payload: EditorSubmitPayload) => {
 }
 
 .note-tag {
-  font-size: var(--font-size-caption);
+  font-size: var(--font-size-small);
   font-weight: 500;
   color: var(--accent-text);
   cursor: pointer;
-  transition: opacity 0.15s;
+  min-height: 28px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   border: none;
   background: transparent;
-  padding: 2px 0;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
 }
 
@@ -124,8 +127,8 @@ const saveEdit = async (payload: EditorSubmitPayload) => {
   cursor: default;
 }
 
-.note-tag:hover {
-  opacity: 0.7;
+.note-tag:hover:not(:disabled) {
+  background: var(--accent-sidebar-bg);
 }
 
 .edit-area {
@@ -212,6 +215,7 @@ const saveEdit = async (payload: EditorSubmitPayload) => {
 
 .note-audio-player,
 .note-video-player {
+  min-width: 0;
   width: 100%;
   display: block;
 }

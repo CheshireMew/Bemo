@@ -10,9 +10,12 @@
       @editing-change="setEditing(note.note_id, $event)"
     />
     <nav v-if="pageCount > 1" class="pagination pagination-bottom" aria-label="笔记分页底部">
-      <span aria-live="polite">第 {{ page }} / {{ pageCount }} 页</span>
+      <span aria-live="polite">第 {{ page }} / {{ pageCount }} 页 · {{ notes.length }} 条笔记</span>
       <div class="page-controls">
         <button type="button" :disabled="page === 1" @click="changePage(page - 1)">上一页</button>
+        <select aria-label="选择页码" :value="page" @change="selectPage">
+          <option v-for="number in pageCount" :key="number" :value="number">第 {{ number }} 页</option>
+        </select>
         <button type="button" :disabled="page === pageCount" @click="changePage(page + 1)">下一页</button>
       </div>
     </nav>
@@ -54,13 +57,18 @@ const changePage = async (next: number) => {
   await nextTick();
   listRef.value?.scrollIntoView({ block: 'start' });
 };
+const selectPage = async (event: Event) => {
+  const select = event.target as HTMLSelectElement;
+  await changePage(Number(select.value));
+  select.value = String(page.value);
+};
 </script>
 
 <style scoped>
 .paged-note-list { display: flex; flex-direction: column; gap: 10px; scroll-margin-top: 340px; }
 .pagination { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--text-secondary); font-size: var(--font-size-small); font-weight: 400; }
 .page-controls { display: flex; align-items: center; gap: 6px; }
-.page-controls button { min-height: 36px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-card); color: var(--text-primary); padding: 6px 9px; font: inherit; cursor: pointer; }
+.page-controls button, .page-controls select { min-height: 40px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-card); color: var(--text-primary); padding: 6px 9px; font: inherit; cursor: pointer; }
 .page-controls button:disabled { color: var(--text-secondary); cursor: default; opacity: 0.55; }
 .pagination-bottom { padding-top: 8px; }
 @media (max-width: 767px) { .paged-note-list { scroll-margin-top: 16px; } }

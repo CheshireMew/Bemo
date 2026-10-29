@@ -95,6 +95,7 @@ onMounted(() => {
 }
 
 .btn-empty-trash {
+  min-height: 40px;
   background: color-mix(in srgb, var(--danger-color) 12%, var(--bg-card));
   color: var(--danger-text);
   border: none;

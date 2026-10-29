@@ -86,13 +86,13 @@ watch(isEditing, editing => emit('editingChange', editing));
 .note-card {
   background: var(--bg-card);
   border-radius: var(--radius-lg);
-  padding: 6px 16px 12px;
+  padding: 12px 20px 18px;
   border: 1px solid var(--border-color);
   transition: border-color 0.2s;
 }
 
 .note-card.pinned {
-  border-left: 3px solid var(--accent-color);
+  border-color: color-mix(in srgb, var(--accent-color) 55%, var(--border-color));
 }
 
 .note-header {
@@ -101,7 +101,7 @@ watch(isEditing, editing => emit('editingChange', editing));
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2px;
+  margin-bottom: 8px;
   font-size: var(--font-size-small);
   font-weight: 400;
   color: var(--text-secondary);
@@ -112,6 +112,7 @@ watch(isEditing, editing => emit('editingChange', editing));
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  font-variant-numeric: tabular-nums;
 }
 
 .note-date-pin {
@@ -122,19 +123,8 @@ watch(isEditing, editing => emit('editingChange', editing));
 .note-actions {
   display: flex;
   gap: 4px;
-  opacity: 1;
-  transition: opacity 0.2s;
   flex-wrap: wrap;
   justify-content: flex-end;
-}
-
-.note-card:hover .note-actions,
-.note-card:focus-within .note-actions {
-  opacity: 1;
-}
-
-@media (hover: none) {
-  .note-actions { opacity: 1; }
 }
 
 .btn-action {
@@ -149,12 +139,12 @@ watch(isEditing, editing => emit('editingChange', editing));
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: background-color 0.15s, color 0.15s;
 }
 
 .btn-action:hover {
   color: var(--text-primary);
-  background: #f4f4f5;
+  background: var(--surface-hover);
 }
 
 .btn-action:disabled {
@@ -171,11 +161,16 @@ watch(isEditing, editing => emit('editingChange', editing));
   color: var(--accent-text) !important;
 }
 
-:root.dark .btn-action:hover {
-  background: #3f3f46;
-}
-
 .note-actions .btn-restore {
   color: var(--accent-text) !important;
+}
+
+@media (max-width: 767px) {
+  .note-card { padding: 12px 16px 16px; }
+  .note-actions { margin-left: auto; }
+}
+
+@media (pointer: coarse) {
+  .btn-action { width: 44px; height: 44px; }
 }
 </style>

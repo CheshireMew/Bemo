@@ -16,7 +16,7 @@
         >
           {{ item.action.label }}
         </button>
-        <button type="button" class="notification-close" aria-label="关闭通知" @click="removeNotification(item.id)">×</button>
+        <button type="button" class="notification-close" aria-label="关闭通知" @click="removeNotification(item.id)"><X :size="16" /></button>
       </div>
     </div>
   </div>
@@ -24,6 +24,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { X } from 'lucide-vue-next';
 import { notifications, removeNotification, runNotificationAction } from '../../store/notifications';
 
 const props = withDefaults(defineProps<{
@@ -77,6 +78,7 @@ const stackClass = computed(() => (
 .notification-message {
   min-width: 0;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .notification-actions {
@@ -99,7 +101,7 @@ const stackClass = computed(() => (
 }
 
 .notification-success {
-  border-color: color-mix(in srgb, var(--accent-color, #31d279) 45%, #d4d4d8);
+  border-color: color-mix(in srgb, var(--accent-color) 45%, var(--border-color));
 }
 
 .notification-error {
@@ -121,6 +123,12 @@ const stackClass = computed(() => (
   cursor: pointer;
   font-size: 1rem;
   line-height: 1;
-  padding: 4px;
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: var(--radius-sm);
 }
+.notification-close:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
+@media (pointer: coarse) { .notification-close, .notification-action { min-width: 44px; min-height: 44px; } }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <div class="feed-container">
+  <div id="notes-content" class="feed-container" tabindex="-1">
     <TrashView v-if="currentView === 'trash'" />
     <RandomWalk v-else-if="currentView === 'random'" />
     <NotesFeed v-else />
@@ -19,6 +19,7 @@ import { currentView } from '../../../store/ui';
   max-width: var(--layout-content-width);
   padding: 0 0 calc(64px + var(--safe-bottom));
   margin: 0;
+  scroll-margin-top: 320px;
 }
 
 @media (max-width: 1023px) {
@@ -30,6 +31,7 @@ import { currentView } from '../../../store/ui';
 
 @media (max-width: 767px) {
   .feed-container {
+    scroll-margin-top: 16px;
     flex: 1;
     min-height: 0;
     max-width: none;

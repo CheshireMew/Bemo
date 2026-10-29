@@ -6,9 +6,8 @@
           <span class="brand-word brand-word-main">Bemo</span>
           <span class="brand-word brand-word-sub">Notes</span>
         </h2>
-        <span class="badge">OSS</span>
       </div>
-      <button v-if="showClose" type="button" class="close-btn" @click="emit('close')" aria-label="关闭导航">×</button>
+      <button v-if="showClose" type="button" class="close-btn" @click="emit('close')" aria-label="关闭导航"><X :size="18" /></button>
     </div>
     <div class="stats">
       <div class="stat-item">
@@ -29,6 +28,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { X } from 'lucide-vue-next';
 import { notes, allTags } from '../../store/notes';
 
 withDefaults(defineProps<{
@@ -88,26 +88,11 @@ const activeDays = computed(() => new Set(notes.value.map((note) => {
   color: color-mix(in srgb, var(--text-primary) 84%, var(--accent-color) 16%);
 }
 
-.badge { 
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 20px;
-  padding: 0 7px;
-  border-radius: 4px;
-  border: 1px solid color-mix(in srgb, var(--accent-color) 40%, transparent);
-  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
-  color: var(--accent-text);
-  font-size: 0.6875rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
 .close-btn {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
   border: 1px solid var(--border-color);
   border-radius: 999px;
@@ -136,6 +121,7 @@ const activeDays = computed(() => new Set(notes.value.map((note) => {
   align-items: center; 
 }
 .stat-num { 
+  font-variant-numeric: tabular-nums;
   font-size: 1.3rem;
   font-weight: 700;
   color: var(--text-primary);
@@ -157,10 +143,5 @@ const activeDays = computed(() => new Set(notes.value.map((note) => {
     font-size: 1.1rem;
   }
 
-  .badge {
-    height: 20px;
-    padding: 0 7px;
-    font-size: 0.6875rem;
-  }
 }
 </style>

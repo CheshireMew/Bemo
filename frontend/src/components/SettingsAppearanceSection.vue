@@ -3,16 +3,14 @@
     <div class="section-header">
       <div>
         <h3>外观主题</h3>
-        <p>选择您喜欢的界面首选项，系统支持独立切换明暗模式和主题色系。</p>
       </div>
     </div>
 
     <!-- 深浅模式设置 -->
     <article class="settings-card form-card">
-      <div class="field-row">
+      <div class="toggle-row">
         <div class="field-row-text">
           <span class="field-label">深色模式</span>
-          <p class="field-hint">手动开启或关闭全局黑夜模式。顶部导航栏也可快捷切换该状态。</p>
         </div>
         <div class="toggle-switch-wrapper">
           <label class="switch">
@@ -25,7 +23,6 @@
 
     <article class="settings-card">
       <h4>主题风格</h4>
-      <p>选择全局高亮颜色及背景色相的风格色板。</p>
       <div class="theme-grid">
         <!-- 默认 -->
         <button 
@@ -94,8 +91,8 @@ import { currentSkin, setSkin, isDarkMode, toggleTheme } from '../store/ui';
 
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
   margin-top: 14px;
 }
 
@@ -106,10 +103,11 @@ import { currentSkin, setSkin, isDarkMode, toggleTheme } from '../store/ui';
   gap: 12px;
   background: transparent;
   border: 2px solid transparent;
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: var(--radius-md);
+  padding: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  min-width: 0;
+  transition: background-color 0.15s, border-color 0.15s;
 }
 
 .theme-card:hover {
@@ -126,7 +124,6 @@ import { currentSkin, setSkin, isDarkMode, toggleTheme } from '../store/ui';
   aspect-ratio: 16 / 10;
   border-radius: 10px;
   border: 1px solid var(--border-color, #e4e4e7);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
   display: flex;
   overflow: hidden;
   padding: 0;
@@ -171,7 +168,7 @@ import { currentSkin, setSkin, isDarkMode, toggleTheme } from '../store/ui';
   font-size: 0.95rem;
 }
 
-@media (max-width: 600px) {
+@container settings (max-width: 540px) {
   .theme-grid {
     grid-template-columns: 1fr;
     gap: 8px;
