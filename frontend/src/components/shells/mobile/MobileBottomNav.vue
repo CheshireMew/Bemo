@@ -17,15 +17,20 @@
       <Trash2 :size="20" />
       <span>回收站</span>
     </button>
+    <button class="nav-btn" type="button" aria-label="打开设置" title="设置" @click="emit('openSettings')">
+      <Settings :size="20" />
+      <span>设置</span>
+    </button>
   </nav>
 </template>
 
 <script setup lang="ts">
-import { Dices, LayoutGrid, Plus, Trash2 } from 'lucide-vue-next';
+import { Dices, LayoutGrid, Plus, Settings, Trash2 } from 'lucide-vue-next';
 import { usePrimaryNavigation } from '../../../composables/usePrimaryNavigation';
 
 const emit = defineEmits<{
   compose: [];
+  openSettings: [];
 }>();
 
 const {
@@ -44,7 +49,7 @@ const {
   bottom: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   padding: 5px max(8px, var(--safe-left)) calc(7px + var(--safe-bottom)) max(8px, var(--safe-right));
   border-top: 1px solid color-mix(in srgb, var(--border-color, #e4e4e7) 88%, white);

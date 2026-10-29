@@ -109,9 +109,12 @@ export function useSyncOperations(options: {
     try {
       isSyncingNow.value = true;
       options.flushSyncSettings();
-      await flushPendingQueue();
+      const result = await flushPendingQueue();
       await refreshPendingQueues();
-      pushNotification('同步已执行', 'success');
+      if (result.status === 'failed') pushNotification(result.error, 'error', 3600);
+      else if (result.status === 'skipped') pushNotification(result.reason, 'info', 3600);
+      else if (result.conflicts) pushNotification(`同步完成，发现 ${result.conflicts} 项冲突，请在冲突列表中处理`, 'info', 3600);
+      else pushNotification('同步完成', 'success');
     } catch (error) {
       pushNotification(error instanceof Error ? error.message : '同步失败', 'error', 3600);
     } finally {

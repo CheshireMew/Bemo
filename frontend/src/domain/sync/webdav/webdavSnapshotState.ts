@@ -30,7 +30,10 @@ function toSnapshotNote(change: SyncChange, existing?: WebDavSnapshotNote): WebD
   const noteId = String(change.entity_id || existing?.note_id || '');
   if (!noteId) return null;
 
-  if (change.type === 'note.purge') return null;
+  if (change.type === 'note.purge') return {
+    note_id: noteId, scope: 'purged', revision: normalizeNoteRevision(payload.revision, (existing?.revision ?? 0) + 1),
+    content: '', tags: [], pinned: false, attachments: [], updated_at: change.timestamp,
+  };
 
   if (change.type === 'note.delete' || change.type === 'note.trash') {
     return {
@@ -102,7 +105,9 @@ function toSnapshotNote(change: SyncChange, existing?: WebDavSnapshotNote): WebD
 function toRemoteNoteState(change: SyncChange, existing?: SyncRemoteNoteState): SyncRemoteNoteState | null {
   const noteId = String(change.entity_id || existing?.note_id || '');
   if (!noteId) return null;
-  if (change.type === 'note.purge') return null;
+  if (change.type === 'note.purge') return {
+    note_id: noteId, scope: 'purged', revision: normalizeNoteRevision(change.payload?.revision, (existing?.revision ?? 0) + 1),
+  };
 
   const payload = change.payload || {};
   const revision = normalizeNoteRevision(payload.revision, existing?.revision ?? 1);
@@ -123,11 +128,6 @@ export function applyChangesToSnapshotState(
     const noteId = String(change.entity_id || '');
     if (!noteId) continue;
 
-    if (change.type === 'note.purge') {
-      delete next[noteId];
-      continue;
-    }
-
     const snapshotNote = toSnapshotNote(change, next[noteId]);
     if (snapshotNote) {
       next[noteId] = snapshotNote;
@@ -144,9 +144,9 @@ export function buildBootstrapChangesFromSnapshot(snapshot: SnapshotRecord) {
       operation_id: `snapshot_${snapshot.latest_cursor}_${String(index + 1).padStart(6, '0')}_${note.note_id}`,
       device_id: 'snapshot',
       entity_id: note.note_id,
-      type: note.scope === 'trash' ? 'note.trash' : 'note.create',
+      type: note.scope === 'purged' ? 'note.purge' : note.scope === 'trash' ? 'note.trash' : 'note.create',
       timestamp: note.updated_at || snapshot.generated_at,
-      base_revision: 0,
+      base_revision: Math.max(0, note.revision - 1),
       cursor: snapshot.latest_cursor,
       payload: {
         revision: note.revision,
@@ -179,11 +179,6 @@ export function applyChangesToRemoteNoteStates(
   for (const change of changes) {
     const noteId = String(change.entity_id || '');
     if (!noteId) continue;
-
-    if (change.type === 'note.purge') {
-      delete next[noteId];
-      continue;
-    }
 
     const remoteNote = toRemoteNoteState(change, next[noteId]);
     if (remoteNote) {

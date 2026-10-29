@@ -16,6 +16,7 @@ export interface ChangeRecord {
   device_id: string;
   entity_id: string;
   target?: SyncTarget;
+  target_id?: string;
   type: NoteMutationType;
   base_revision: number | null;
   timestamp: string;
@@ -36,6 +37,7 @@ export function claimMutationLogTargets(items: ChangeRecord[], target: SyncTarge
 
 export async function enqueueChange(input: {
   target: SyncTarget;
+  targetId?: string | null;
   deviceId: string;
   entityId: string;
   type: NoteMutationType;
@@ -47,6 +49,7 @@ export async function enqueueChange(input: {
     device_id: input.deviceId,
     entity_id: input.entityId,
     target: input.target,
+    target_id: input.targetId || undefined,
     type: input.type,
     base_revision: input.baseRevision ?? null,
     timestamp: new Date().toISOString(),
@@ -59,13 +62,31 @@ export async function enqueueChange(input: {
   });
 }
 
-export function filterMutationLogByTarget(items: ChangeRecord[], target?: SyncTarget): ChangeRecord[] {
-  const filtered = target ? items.filter((item) => item.target === target) : items;
+export function filterMutationLogByTarget(items: ChangeRecord[], target?: SyncTarget, targetId?: string): ChangeRecord[] {
+  const filtered = items.filter(item => (!target || item.target === target) && (!targetId || item.target_id === targetId));
   return [...filtered].sort((a, b) => a.createdAt - b.createdAt);
 }
 
-export async function getMutationLog(target?: SyncTarget): Promise<ChangeRecord[]> {
-  return filterMutationLogByTarget(await readStore('mutationLog', store => store.getAll()), target);
+export async function getMutationLog(target?: SyncTarget, targetId?: string): Promise<ChangeRecord[]> {
+  return filterMutationLogByTarget(await readStore('mutationLog', store => store.getAll()), target, targetId);
+}
+
+export async function bindLegacyMutationTarget(target: SyncTarget, targetId: string): Promise<void> {
+  return withIndexedDb(['mutationLog', 'syncState'], 'readwrite', tx => {
+    const state = tx.objectStore('syncState');
+    const owner = state.get(`legacy_target_owner:${target}`);
+    owner.onsuccess = () => {
+      if (owner.result && owner.result.value !== targetId) return;
+      state.put({ key: `legacy_target_owner:${target}`, value: targetId });
+      const log = tx.objectStore('mutationLog');
+      const request = log.getAll();
+      request.onsuccess = () => {
+        for (const item of request.result as ChangeRecord[]) {
+          if ((!item.target || item.target === target) && !item.target_id) log.put({ ...item, target, target_id: targetId });
+        }
+      };
+    };
+  });
 }
 
 export async function claimLegacyMutationTargets(target: SyncTarget): Promise<number> {

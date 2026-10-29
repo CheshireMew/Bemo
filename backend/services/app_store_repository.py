@@ -14,6 +14,10 @@ APP_STORE_BOOTSTRAP_VERSION = 1
 _transaction_connection: ContextVar[sqlite3.Connection | None] = ContextVar("app_transaction", default=None)
 
 
+def current_transaction_connection() -> sqlite3.Connection | None:
+    return _transaction_connection.get()
+
+
 def ensure_app_store() -> None:
     if _transaction_connection.get() is not None:
         return
@@ -134,6 +138,7 @@ def _import_legacy_sync_store(conn: sqlite3.Connection) -> None:
                 )
                 for row in note_rows
                 if str(_row_value(row, "note_id") or "")
+                and not bool(_row_value(row, "purged", 0))
             ],
         )
 
@@ -402,17 +407,19 @@ def delete_attachment_record(filename: str) -> None:
 
 def clear_all_data() -> None:
     ensure_app_store()
-    with connect() as conn:
-        conn.execute("DELETE FROM notes_current")
-        conn.execute("DELETE FROM attachment_files")
-        clear_replication_state(conn)
-    if os.path.isdir(APP_BLOBS_DIR):
-        shutil.rmtree(APP_BLOBS_DIR)
-    os.makedirs(APP_BLOBS_DIR, exist_ok=True)
+    with transaction():
+        with connect() as conn:
+            conn.execute("DELETE FROM notes_current")
+            conn.execute("DELETE FROM attachment_files")
+            clear_replication_state(conn)
+        from services.hosted_sync_service import publish_app_changes
+        publish_app_changes()
+    # Protocol history can still reference these content-addressed blobs. Keep
+    # them readable for devices catching up after a clear or backup replacement.
 
 
 def clear_replication_state(conn: sqlite3.Connection) -> None:
-    for table in ("sync_outbox", "sync_inbox"):
+    for table in ("sync_outbox", "sync_inbox", "sync_state", "sync_target_owners"):
         if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
             conn.execute(f"DELETE FROM {table}")
 
@@ -439,6 +446,12 @@ def has_blob_record(blob_hash: str) -> bool:
 
 
 def delete_blob_record(blob_hash: str) -> None:
+    from services.sync_store_repository import uses_app_store
+    if uses_app_store():
+        with connect() as conn:
+            if conn.execute('SELECT 1 FROM hosted_sync_changes WHERE change_json LIKE ? LIMIT 1',
+                            (f'%{blob_hash}%',)).fetchone():
+                return
     path = _blob_path(blob_hash)
     if path.exists():
         path.unlink()

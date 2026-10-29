@@ -3,6 +3,7 @@ import { normalizeAppNoteRecord } from './noteContract.js';
 import { resolveBackendUrl } from '../../config.js';
 import { getOrCreateDeviceId } from '../storage/deviceIdentity.js';
 import { readSyncConfigSnapshot } from '../sync/syncConfig.js';
+import { getSyncTargetId } from '../sync/syncTargetIdentity.js';
 
 type NoteContentPayload = {
   content: string;
@@ -27,14 +28,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!url) {
     throw new Error('当前没有可用的笔记服务地址。');
   }
+  const sync = readSyncConfigSnapshot();
 
   const response = await fetch(url, {
     ...init,
     signal: init?.signal ?? AbortSignal.timeout(30_000),
     headers: {
       'Content-Type': 'application/json',
-      ...(init?.method && readSyncConfigSnapshot().mode !== 'local' ? {
-        'X-Bemo-Sync-Context': JSON.stringify({ target: readSyncConfigSnapshot().mode, device_id: await getOrCreateDeviceId() }),
+      ...(init?.method && sync.mode !== 'local' ? {
+        'X-Bemo-Sync-Context': JSON.stringify({ target: sync.mode,
+          target_id: getSyncTargetId(sync), device_id: await getOrCreateDeviceId() }),
       } : {}),
       ...(init?.headers || {}),
     },

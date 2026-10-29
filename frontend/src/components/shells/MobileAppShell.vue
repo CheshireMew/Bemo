@@ -6,14 +6,13 @@
       <div class="mobile-header-stack">
         <MobileTopbar
           @openSidebar="openSidebar"
-          @openSettings="openMobileSettings"
         />
       </div>
 
       <AppFeedContent />
     </main>
 
-    <MobileBottomNav @compose="openMobileCompose" />
+    <MobileBottomNav @compose="openMobileCompose" @openSettings="openMobileSettings" />
     <MobileComposeSheet
       :open="isMobileComposeOpen"
       @close="closeMobileCompose"

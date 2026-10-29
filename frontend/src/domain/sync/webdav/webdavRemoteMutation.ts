@@ -1,4 +1,5 @@
 import type { SyncChange, SyncPushAcceptedChange } from '../syncTransport.js';
+import { validateWebDavChanges } from './webdavChangeValidation.js';
 import { applyChangesToRemoteNoteStates, applyChangesToSnapshotState } from './webdavSnapshotState.js';
 import {
   buildPendingWriteRecord,
@@ -13,6 +14,7 @@ import {
 } from './webdavRemoteContract.js';
 import {
   buildSnapshotStateFromRemote,
+  readChangesFromBatches,
   planBatchWrite,
   planWebDavSnapshotWrite,
   writeBatch,
@@ -65,12 +67,22 @@ export async function pushWebDavBatch(
   const manifest = currentState.manifest;
   const batchIndex = currentState.batchIndex;
   const { accepted: deduplicatedAccepted, pending } = splitAcceptedChanges(batchIndex, changes);
+  for (const accepted of deduplicatedAccepted) {
+    const batch = batchIndex.batches.find(item => toCursorNumber(item.started_after_cursor) < toCursorNumber(accepted.cursor)
+      && toCursorNumber(item.latest_cursor) >= toCursorNumber(accepted.cursor));
+    if (!batch) throw new Error('已接受操作缺少同步批次，无法确认重试结果');
+    const stored = (await readChangesFromBatches(baseUrl, headers, [batch], toCursorNumber(accepted.cursor) - 1))
+      .find(item => item.operation_id === accepted.operation_id && item.cursor === accepted.cursor);
+    if (!stored) throw new Error('已接受操作缺少正式内容，无法确认重试结果');
+    accepted.change = stored;
+  }
   if (!pending.length) {
     return {
       accepted: deduplicatedAccepted,
       latestCursor: manifest.latest_cursor,
       manifest,
       batchIndex,
+      conflicts: [],
     };
   }
 
@@ -78,7 +90,11 @@ export async function pushWebDavBatch(
     toCursorNumber(manifest.latest_cursor),
     toCursorNumber(batchIndex.latest_cursor),
   );
-  const plannedBatch = planBatchWrite(startingCursor, pending);
+  const previousNotes = await buildSnapshotStateFromRemote(baseUrl, headers, manifest);
+  const validated = validateWebDavChanges(previousNotes, pending);
+  if (!validated.accepted.length) return { accepted: deduplicatedAccepted, conflicts: validated.conflicts,
+    latestCursor: manifest.latest_cursor, manifest, batchIndex };
+  const plannedBatch = planBatchWrite(startingCursor, validated.accepted);
   const { indexedBatch, changes: writtenChanges } = plannedBatch;
   const latestCursor = indexedBatch.latest_cursor;
   const previousRemoteNotes = await readWebDavRemoteNoteStates(baseUrl, headers, manifest);
@@ -92,7 +108,6 @@ export async function pushWebDavBatch(
   let plannedSnapshot: PlannedWebDavSnapshotWrite | null = null;
 
   if (shouldRollSnapshot) {
-    const previousNotes = await buildSnapshotStateFromRemote(baseUrl, headers, manifest);
     const nextNotes = applyChangesToSnapshotState(previousNotes, writtenChanges);
     plannedSnapshot = planWebDavSnapshotWrite(baseUrl, latestCursor, nextNotes);
     latestSnapshot = plannedSnapshot.snapshotName;
@@ -163,6 +178,7 @@ export async function pushWebDavBatch(
     latestCursor,
     manifest: nextManifest,
     batchIndex: nextBatchIndex,
+    conflicts: validated.conflicts,
   };
 }
 

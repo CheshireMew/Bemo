@@ -3,6 +3,7 @@ import { registerPlugin } from '@capacitor/core';
 import {
   shouldUseNativeClipboardBridge,
   shouldUseNativeOpenBridge,
+  isMobileProductShell,
 } from './platformCapabilities.js';
 
 type NativeHostPlugin = {
@@ -78,6 +79,42 @@ export async function copyContentToClipboard(input: {
   }
 
   await copyViaBrowserClipboard(input);
+}
+
+export function canShareImageFile(blob: Blob, fileName: string) {
+  if (isMobileProductShell()) return true;
+  try {
+    return !!navigator.share && !!navigator.canShare?.({
+      files: [new File([blob], fileName, { type: 'image/png' })],
+    });
+  } catch {
+    return false;
+  }
+}
+
+export async function shareImageFile(input: { blob: Blob; fileName: string; title: string }) {
+  if (isMobileProductShell()) {
+    const [{ Directory, Filesystem }, { Share }] = await Promise.all([
+      import('@capacitor/filesystem'),
+      import('@capacitor/share'),
+    ]);
+    if (!(await Share.canShare()).value) {
+      throw new Error('当前设备不支持系统分享。');
+    }
+    const path = `share-images/${sanitizeFileName(input.fileName)}`;
+    await Filesystem.writeFile({
+      path,
+      directory: Directory.Cache,
+      data: encodeBytesToBase64(new Uint8Array(await input.blob.arrayBuffer())),
+      recursive: true,
+    });
+    const { uri } = await Filesystem.getUri({ path, directory: Directory.Cache });
+    await Share.share({ title: input.title, files: [uri], dialogTitle: '分享笔记图片' });
+    return;
+  }
+
+  const file = new File([input.blob], input.fileName, { type: 'image/png' });
+  await navigator.share({ title: input.title, files: [file] });
 }
 
 export async function performDefaultNativeBackNavigation() {

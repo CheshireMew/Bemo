@@ -17,6 +17,8 @@ backend 现在负责：
 - sync `push / pull / blobs`
 - 网页端 WebDAV 代理
 
+app / desktop 模式下，网页数据与同步协议记录共同保存在 `app.db`：设备上传后网页接口立即可读，网页修改也立即可被其它设备拉取，无需保持网页打开。独立 server 模式继续使用 `sync.db`。升级时保留原数据库，并自动迁移旧同步历史和附件；有分歧的内容保留为副本。实现与边界见 [同步架构](../SYNC_ARCHITECTURE.md)。
+
 因此它更接近“Web / Desktop 应用数据服务 + 同步服务”，而不是一个纯远端同步目标。
 
 ## 与 Mobile 的关系

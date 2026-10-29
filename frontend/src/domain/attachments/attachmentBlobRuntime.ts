@@ -4,6 +4,8 @@ import {
   getBlobIndexRecord,
   putAttachmentBlob,
   putBlobIndexRecord,
+  getAttachmentContentBlob,
+  putAttachmentContentBlob,
 } from './blobStorage.js';
 import { resolveBackendAttachmentAssetUrl } from './backendAttachmentsApi.js';
 import { getAttachmentRefFilenamesForNote } from './attachmentRefStorage.js';
@@ -77,17 +79,24 @@ export async function collectSyncAttachments(
   return attachments;
 }
 
-export async function ensureBlobIndexValid(blobHash: string): Promise<boolean> {
+export async function ensureBlobIndexValid(blobHash: string, filename?: string, mimeType?: string): Promise<boolean> {
+  let blob = await getAttachmentContentBlob(blobHash);
   const record = await getBlobIndexRecord(blobHash);
-  if (!record) return false;
-
-  const blob = await getAttachmentBlob(record.filename);
-  if (blob) {
-    return true;
+  if (!blob && record) {
+    const legacyBlob = await getAttachmentBlob(record.filename);
+    if (legacyBlob && `sha256:${await sha256Hex(new Uint8Array(await legacyBlob.arrayBuffer()))}` === blobHash) {
+      blob = legacyBlob;
+      await putAttachmentContentBlob(blobHash, blob);
+    }
   }
-
-  await deleteBlobIndexRecord(blobHash);
-  return false;
+  if (!blob) {
+    if (record) await deleteBlobIndexRecord(blobHash);
+    return false;
+  }
+  if (filename) {
+    await putAttachmentBlob({ filename, blob: new Blob([await blob.arrayBuffer()], { type: mimeType || blob.type }), mimeType: mimeType || blob.type });
+  }
+  return true;
 }
 
 export async function ensureLocalAttachment(
@@ -96,13 +105,15 @@ export async function ensureLocalAttachment(
   blobHash: string,
   mimeType = 'application/octet-stream',
 ): Promise<void> {
-  if (await ensureBlobIndexValid(blobHash)) {
+  if (await ensureBlobIndexValid(blobHash, filename, mimeType)) {
     return;
   }
 
+  const blob = new Blob([Uint8Array.from(data)], { type: mimeType });
+  await putAttachmentContentBlob(blobHash, blob);
   await putAttachmentBlob({
     filename,
-    blob: new Blob([Uint8Array.from(data)], { type: mimeType }),
+    blob,
     mimeType,
   });
 

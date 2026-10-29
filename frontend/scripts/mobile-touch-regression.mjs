@@ -88,7 +88,7 @@ try {
   const noteCard = page.locator('.mobile-note-card').filter({ hasText: regressionNoteText });
   await noteCard.waitFor({ timeout: 8000 });
   const noteActions = noteCard.locator('.note-actions .btn-action');
-  assert.equal(await noteActions.count(), 4, 'mobile note actions should be directly visible');
+  assert.equal(await noteActions.count(), 5, 'mobile note actions including image sharing should be directly visible');
   for (let index = 0; index < await noteActions.count(); index += 1) {
     const box = await noteActions.nth(index).boundingBox();
     assert.ok(box && box.height >= 38 && box.width >= 38, `note action ${index} is too small`);

@@ -7,23 +7,25 @@ import {
   canAcceptRemoteDeleteConflict,
   getConflictCopyFilename,
   getRemoteRevision,
+  requireActiveConflictTarget,
 } from '../domain/sync/conflictResolution.js';
 import {
   createLocalNoteFromSync,
-} from '../domain/notes/localNoteCreation';
-import { moveLocalNoteToTrashById } from '../domain/notes/localTrashMutations';
-import { updateLocalNoteById } from '../domain/notes/localNoteMutations';
+} from '../domain/notes/localNoteCreation.js';
+import { updateLocalNoteById } from '../domain/notes/localNoteMutations.js';
 import {
   findLocalNoteByFilename,
   findLocalNoteById,
-} from '../domain/notes/localNoteQueries';
-import { fetchNotes } from './notes';
+} from '../domain/notes/localNoteQueries.js';
+import { fetchNotes } from './notes.js';
 import { requestSyncNow } from '../domain/sync/syncCoordinator.js';
 import { shouldUseBackendAppStore } from '../domain/runtime/appStoreRuntime.js';
-import { editBackendReplica } from '../domain/appStore/syncReplicaAdapter.js';
+import { acceptRemoteDeleteState, editBackendReplica } from '../domain/appStore/syncReplicaAdapter.js';
 import { readSyncConfigSnapshot } from '../domain/sync/syncConfig.js';
 import { getOrCreateDeviceId } from '../domain/storage/deviceIdentity.js';
 import type { ChangeRecord } from '../domain/sync/mutationLogStorage.js';
+import { getSyncTargetId } from '../domain/sync/syncTargetIdentity.js';
+import { recordSyncBaseline } from '../domain/sync/syncBaseline.js';
 
 export interface ConflictItem {
   id: number;
@@ -68,10 +70,13 @@ export async function acceptConflictResult(id: number) {
 export async function keepLocalAndResync(id: number) {
   const conflict = await getConflict(id);
   if (!conflict) return;
+  requireActiveConflictTarget(conflict);
 
   const conflictCopyFilename = getConflictCopyFilename(conflict);
   const noteId = conflict.note_id;
   const remoteBaseRevision = getRemoteRevision(conflict.detail);
+  const localSnapshot = conflict.detail.local_snapshot as Record<string, unknown> | undefined;
+  const localPinned = typeof localSnapshot?.pinned === 'boolean' ? localSnapshot.pinned : undefined;
 
   if (conflict.reason === 'revision_conflict' && conflictCopyFilename) {
     if (shouldUseBackendAppStore()) {
@@ -83,11 +88,11 @@ export async function keepLocalAndResync(id: number) {
         const canonical = active.get(noteId);
         const conflictCopy = [...active.values()].find(note => note.filename === conflictCopyFilename);
         if (!canonical || !conflictCopy) throw new Error('未找到冲突副本或原始笔记');
-        const resolution = buildKeepLocalResyncPayload({ noteId, canonical, conflictCopy, remoteRevision: remoteBaseRevision });
+        const resolution = buildKeepLocalResyncPayload({ noteId, canonical, conflictCopy, remoteRevision: remoteBaseRevision, localPinned });
         const updated = await store.updateLocalNoteById(noteId, current => ({ ...current,
           ...resolution.updatedNote, revision: current.revision + 1, updated_at: Math.floor(Date.now() / 1000) }));
         if (sync.mode !== 'local' && updated) outbox.push({ operation_id: `op_${crypto.randomUUID()}`, device_id: deviceId,
-          entity_id: noteId, target: sync.mode, type: 'note.update', base_revision: resolution.baseRevision,
+          entity_id: noteId, target: sync.mode, target_id: getSyncTargetId(sync) || undefined, type: 'note.update', base_revision: resolution.baseRevision,
           timestamp: new Date().toISOString(), createdAt: Date.now(), payload: { ...resolution.payload, revision: updated.revision } });
       }, { outbox });
       if (outbox.length) requestSyncNow();
@@ -108,6 +113,7 @@ export async function keepLocalAndResync(id: number) {
       canonical,
       conflictCopy,
       remoteRevision: remoteBaseRevision,
+      localPinned,
     });
 
     await updateLocalNoteById(noteId, (current) => ({
@@ -115,6 +121,7 @@ export async function keepLocalAndResync(id: number) {
       content: resolution.updatedNote.content,
       title: resolution.updatedNote.title,
       tags: [...resolution.updatedNote.tags],
+      pinned: resolution.updatedNote.pinned,
       revision: current.revision + 1,
       updated_at: Math.floor(Date.now() / 1000),
     }));
@@ -134,6 +141,7 @@ export async function keepLocalAndResync(id: number) {
 export async function recreateFromRemoteConflict(id: number) {
   const conflict = await getConflict(id);
   if (!conflict) return;
+  requireActiveConflictTarget(conflict);
   if (conflict.reason !== 'local_note_not_found') {
     throw new Error('当前冲突不支持按远端重建');
   }
@@ -158,21 +166,16 @@ export async function recreateFromRemoteConflict(id: number) {
 export async function acceptRemoteDeleteConflict(id: number) {
   const conflict = await getConflict(id);
   if (!conflict) return;
+  requireActiveConflictTarget(conflict);
   if (!canAcceptRemoteDeleteConflict(conflict)) {
     throw new Error('当前冲突不支持接受远端删除');
   }
 
-  if (shouldUseBackendAppStore()) {
-    await editBackendReplica(async store => { await store.moveLocalNoteToTrashById(conflict.note_id); });
-    await fetchNotes();
-    await dismissConflict(id);
-    return;
-  }
-
-  const existing = await findLocalNoteById(conflict.note_id);
-  if (existing) {
-    await moveLocalNoteToTrashById(conflict.note_id);
-  }
+  const snapshot = conflict.detail.remote_snapshot as Record<string, unknown>;
+  const payload = await acceptRemoteDeleteState(conflict.note_id, snapshot);
+  const targetId = getSyncTargetId(readSyncConfigSnapshot());
+  if (targetId) await recordSyncBaseline(targetId, { entity_id: conflict.note_id,
+    type: snapshot.purged ? 'note.purge' : 'note.trash', payload });
 
   await fetchNotes();
   await dismissConflict(id);

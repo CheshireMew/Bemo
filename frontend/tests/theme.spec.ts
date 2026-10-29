@@ -9,11 +9,11 @@ Object.defineProperty(window, 'matchMedia', { value: () => ({ matches: systemDar
 const root = document.documentElement;
 
 initTheme();
-assert.equal(currentSkin.value, 'cream');
-assert.ok(root.classList.contains('theme-cream'));
+assert.equal(currentSkin.value, 'default');
+assert.equal(root.classList.contains('theme-cream'), false);
 assert.equal(isDarkMode.value, false);
 
-for (const skin of ['default', 'nord', 'sepia', 'cream'] as ThemeSkin[]) {
+for (const skin of ['default', 'nord', 'sepia'] as ThemeSkin[]) {
   setSkin(skin);
   assert.equal(localStorage.getItem('theme-skin'), skin);
   initTheme();
@@ -30,13 +30,19 @@ for (const skin of ['default', 'nord', 'sepia', 'cream'] as ThemeSkin[]) {
 localStorage.clear();
 systemDark = true;
 initTheme();
-assert.equal(currentSkin.value, 'cream');
+assert.equal(currentSkin.value, 'default');
 assert.ok(root.classList.contains('dark'));
 localStorage.setItem('theme-mode', 'light');
 initTheme();
 assert.equal(isDarkMode.value, false);
 localStorage.setItem('theme-skin', 'invalid');
 initTheme();
-assert.equal(currentSkin.value, 'cream');
+assert.equal(currentSkin.value, 'default');
+localStorage.setItem('theme-skin', 'cream');
+root.classList.add('theme-cream');
+initTheme();
+assert.equal(currentSkin.value, 'default');
+assert.equal(localStorage.getItem('theme-skin'), 'default');
+assert.equal(root.classList.contains('theme-cream'), false);
 dom.window.close();
-console.log('PASS cream default, saved themes, class cleanup and light/dark persistence');
+console.log('PASS classic default, legacy cream migration, saved themes and light/dark persistence');

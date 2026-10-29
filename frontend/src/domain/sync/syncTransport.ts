@@ -1,6 +1,6 @@
 export interface SyncRemoteNoteState {
   note_id: string;
-  scope: 'active' | 'trash';
+  scope: 'active' | 'trash' | 'purged';
   revision: number;
 }
 
@@ -13,6 +13,7 @@ export interface SyncChange {
   base_revision?: number | null;
   cursor?: string;
   payload?: Record<string, unknown>;
+  preserve_local?: boolean;
 }
 
 export interface SyncPushAcceptedChange {
@@ -40,6 +41,8 @@ export interface SyncPushResult {
 }
 
 export interface SyncBootstrapState {
+  store_id?: string;
+  latest_cursor?: string;
   status: 'not_started' | 'in_progress' | 'completed';
   fingerprint: string | null;
   remoteNotes: SyncRemoteNoteState[];

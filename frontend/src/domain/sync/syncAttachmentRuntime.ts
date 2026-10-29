@@ -73,7 +73,7 @@ export async function hydrateInboundAttachments(
       const filename = typeof attachment?.filename === 'string' ? attachment.filename : '';
       const mimeType = typeof attachment?.mime_type === 'string' ? attachment.mime_type : 'application/octet-stream';
       if (!blobHash || !filename) continue;
-      if (!shouldUseBackendAppStore() && await ensureBlobIndexValid(blobHash)) continue;
+      if (!shouldUseBackendAppStore() && await ensureBlobIndexValid(blobHash, filename, mimeType)) continue;
       const data = await transport.getBlob(blobHash);
       const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(data));
       const actualHash = `sha256:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')}`;

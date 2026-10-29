@@ -6,6 +6,7 @@ import { readSyncConfigSnapshot } from './syncConfig.js';
 
 let listeners: SyncListener[] = [];
 let currentState: SyncState = {
+  completedRuns: 0,
   status: typeof navigator !== 'undefined' && navigator.onLine ? 'online' : 'offline',
   pendingCount: 0,
   serverPendingCount: 0,

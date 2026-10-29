@@ -3,6 +3,8 @@ import { enqueueExistingLocalNotesForSync } from './noteSyncOutbox.js';
 import type { SyncTarget } from './mutationLogStorage.js';
 import { getSyncCursorStateKey, getSyncStateValue, setSyncStateValue } from './syncStateStorage.js';
 import type { SyncChange, SyncRemoteNoteState, SyncTransport } from './syncTransport.js';
+import { shouldUseBackendAppStore } from '../runtime/appStoreRuntime.js';
+import { readAppChangeToken } from '../appStore/backendAppEvents.js';
 
 function collectRemoteNoteIds(changes: SyncChange[]) {
   const remoteNotes = new Map<string, SyncRemoteNoteState>();
@@ -11,7 +13,7 @@ function collectRemoteNoteIds(changes: SyncChange[]) {
     if (!noteId) continue;
     const revision = Number(change.payload?.revision);
     if (change.type === 'note.purge') {
-      remoteNotes.delete(noteId);
+      remoteNotes.set(noteId, { note_id: noteId, scope: 'purged', revision: Number.isFinite(revision) ? revision : 1 });
       continue;
     }
     remoteNotes.set(noteId, {
@@ -38,15 +40,21 @@ export async function inspectRemoteSyncState(
   target: SyncTarget,
   transport: SyncTransport,
   queuedNoteIds: ReadonlySet<string> = new Set(),
+  targetId?: string,
 ) {
   const localNoteIds = await collectLocalNoteIds();
   if (transport.inspectBootstrap) {
     const bootstrap = await transport.inspectBootstrap();
     const remoteNotes = new Map(bootstrap.remoteNotes.map((note) => [note.note_id, note] as const));
+    const isCurrentStore = Boolean(target === 'server' && bootstrap.store_id && shouldUseBackendAppStore()
+      && (await readAppChangeToken()).store_id === bootstrap.store_id);
     return {
-      seededCount: await enqueueExistingLocalNotesForSync(target, remoteNotes, queuedNoteIds),
+      isCurrentStore,
+      latestCursor: bootstrap.latest_cursor,
+      remoteNotes,
+      seededCount: isCurrentStore ? 0 : await enqueueExistingLocalNotesForSync(target, remoteNotes, queuedNoteIds, targetId),
       missingLocalNoteIds: bootstrap.remoteNotes
-        .map((note) => note.note_id)
+        .filter(note => note.scope !== 'purged').map((note) => note.note_id)
         .filter((noteId) => noteId && !localNoteIds.has(noteId)),
     };
   }
@@ -54,8 +62,11 @@ export async function inspectRemoteSyncState(
   const remoteState = await transport.pull(null);
   const remoteNotes = collectRemoteNoteIds(remoteState.changes || []);
   return {
-    seededCount: await enqueueExistingLocalNotesForSync(target, remoteNotes, queuedNoteIds),
-    missingLocalNoteIds: Array.from(remoteNotes.keys()).filter((noteId) => !localNoteIds.has(noteId)),
+    isCurrentStore: false,
+    latestCursor: undefined,
+    remoteNotes,
+    seededCount: await enqueueExistingLocalNotesForSync(target, remoteNotes, queuedNoteIds, targetId),
+    missingLocalNoteIds: Array.from(remoteNotes.values()).filter(note => note.scope !== 'purged').map(note => note.note_id).filter((noteId) => !localNoteIds.has(noteId)),
   };
 }
 
@@ -64,10 +75,11 @@ export async function pullAllRemoteChanges(
   target: SyncTarget,
   options: {
     cursorOverride?: string | null;
+    targetId?: string;
   } = {},
 ) {
   const changes: SyncChange[] = [];
-  const cursorKey = getSyncCursorStateKey(target);
+  const cursorKey = getSyncCursorStateKey(target, options.targetId);
   const hasCursorOverride = Object.prototype.hasOwnProperty.call(options, 'cursorOverride');
   let cursor = hasCursorOverride ? options.cursorOverride ?? null : await getSyncStateValue(cursorKey);
   let latestCursor = cursor || '0';
@@ -102,10 +114,11 @@ export async function consumeRemoteChanges(
   target: SyncTarget,
   options: {
     cursorOverride?: string | null;
+    targetId?: string;
     onBatch: (changes: SyncChange[], meta: { cursor: string | null; nextCursor: string }) => Promise<void>;
   },
 ) {
-  const cursorKey = getSyncCursorStateKey(target);
+  const cursorKey = getSyncCursorStateKey(target, options.targetId);
   const hasCursorOverride = Object.prototype.hasOwnProperty.call(options, 'cursorOverride');
   let cursor = hasCursorOverride ? options.cursorOverride ?? null : await getSyncStateValue(cursorKey);
   let latestCursor = cursor || '0';

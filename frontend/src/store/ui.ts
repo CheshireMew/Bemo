@@ -1,16 +1,17 @@
 import { ref } from 'vue';
 
-export type ThemeSkin = 'default' | 'nord' | 'sepia' | 'cream';
+export type ThemeSkin = 'default' | 'nord' | 'sepia';
 
 // 全局状态：黑夜模式与风格皮肤解耦
 export const isDarkMode = ref(false);
-export const currentSkin = ref<ThemeSkin>('cream');
+export const currentSkin = ref<ThemeSkin>('default');
 
 // 初始化和切换主题
 export function initTheme() {
   const savedSkin = localStorage.getItem('theme-skin') as ThemeSkin | null;
-  currentSkin.value = savedSkin && ['default', 'nord', 'sepia', 'cream'].includes(savedSkin)
-    ? savedSkin : 'cream';
+  currentSkin.value = savedSkin && ['default', 'nord', 'sepia'].includes(savedSkin)
+    ? savedSkin : 'default';
+  if (savedSkin !== currentSkin.value) localStorage.setItem('theme-skin', currentSkin.value);
   
   const savedMode = localStorage.getItem('theme-mode');
   isDarkMode.value = savedMode === 'dark' || (!savedMode && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -45,8 +46,6 @@ function applyTheme() {
     root.classList.add('theme-nord');
   } else if (currentSkin.value === 'sepia') {
     root.classList.add('theme-sepia');
-  } else if (currentSkin.value === 'cream') {
-    root.classList.add('theme-cream');
   }
 }
 

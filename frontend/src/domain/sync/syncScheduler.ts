@@ -1,3 +1,5 @@
+import { canSyncWhileHidden } from '../runtime/platformCapabilities.js';
+
 const SYNC_INTERVAL_MS = 60_000;
 const SYNC_RESUME_DEBOUNCE_MS = 1_500;
 const SYNC_RETRY_BASE_MS = 5_000;
@@ -35,6 +37,9 @@ export function resetRetryDelay() {
 
 export function shouldPauseBackgroundSync() {
   if (typeof document === 'undefined') return false;
+  // A minimized desktop window still has a running local backend. It must keep
+  // sending local edits and receiving updates from the user's sync server.
+  if (canSyncWhileHidden()) return false;
   return document.visibilityState === 'hidden';
 }
 

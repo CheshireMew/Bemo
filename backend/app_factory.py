@@ -58,7 +58,15 @@ def create_app(app_mode: str | None = None) -> FastAPI:
     ensure_data_directories()
     if is_app_mode:
         from services.app_store_repository import ensure_app_store
+        from services import hosted_sync_service, sync_store_repository
         ensure_app_store()
+        with sync_store_repository.use_app_store():
+            hosted_sync_service.initialize()
+
+        @app.middleware("http")
+        async def use_app_sync_store(request, call_next):
+            with sync_store_repository.use_app_store():
+                return await call_next(request)
 
     app.include_router(sync.router, prefix="/api/sync", tags=["sync"])
     if is_app_mode:

@@ -77,7 +77,7 @@ async function applyLocalBackupPayload(payload: Partial<BackupPayload>) {
   const { notes, trash, attachments } = validateBackupPayload(payload);
   const blobs = attachments.map(item => ({ filename: item.filename, mime_type: item.mime_type,
     blob: new Blob([Uint8Array.from(item.data)], { type: item.mime_type }), updatedAt: Date.now() }));
-  const stores = ['cachedNotes', 'trashNotes', 'attachmentBlobs', 'draftAttachmentBlobs', 'attachmentRefs', 'blobIndex', 'mutationLog', 'conflicts', 'syncState'];
+  const stores = ['cachedNotes', 'trashNotes', 'attachmentBlobs', 'attachmentContentBlobs', 'draftAttachmentBlobs', 'attachmentRefs', 'blobIndex', 'mutationLog', 'conflicts', 'syncState'];
   await withIndexedDb(stores, 'readwrite', tx => {
     for (const name of stores) if (name !== 'syncState') tx.objectStore(name).clear();
     notes.forEach(note => tx.objectStore('cachedNotes').put(note));
@@ -89,6 +89,11 @@ async function applyLocalBackupPayload(payload: Partial<BackupPayload>) {
       }
     }
     for (const target of ['server', 'webdav']) for (const suffix of ['cursor', 'last_sync_at']) tx.objectStore('syncState').delete(`${target}_${suffix}`);
+    const state = tx.objectStore('syncState');
+    const request = state.getAll();
+    request.onsuccess = () => {
+      for (const row of request.result as Array<{ key: string }>) if (row.key.startsWith('sync:')) state.delete(row.key);
+    };
   });
   clearAttachmentUrlCache();
 
@@ -129,6 +134,7 @@ export async function clearLocalReplicaState() {
     'conflicts',
     'blobIndex',
     'attachmentBlobs',
+    'attachmentContentBlobs',
     'draftAttachmentBlobs',
     'attachmentRefs',
   ], 'readwrite', tx => {
@@ -140,6 +146,7 @@ export async function clearLocalReplicaState() {
   tx.objectStore('conflicts').clear();
   tx.objectStore('blobIndex').clear();
   tx.objectStore('attachmentBlobs').clear();
+  tx.objectStore('attachmentContentBlobs').clear();
   tx.objectStore('draftAttachmentBlobs').clear();
   tx.objectStore('attachmentRefs').clear();
 

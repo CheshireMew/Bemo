@@ -1,17 +1,21 @@
 import { appRequest, AppApiError } from './backendAppApi.js';
 import { shouldUseBackendAppStore } from '../runtime/appStoreRuntime.js';
-import { applyChangesLocally, type SyncNoteStore } from '../sync/localSyncApply.js';
+import { applyChangesLocally, localSyncStore, type SyncNoteStore } from '../sync/localSyncApply.js';
 import { deriveNoteTitle, normalizeAppNoteRecord, normalizeNoteContentPayload, normalizeNoteTimestampSeconds } from '../notes/noteContract.js';
 import type { NoteMeta } from '../notes/notesTypes.js';
 import type { SyncChange } from '../sync/syncTransport.js';
 import type { ChangeRecord } from '../sync/mutationLogStorage.js';
+import { getSyncStateValue, setSyncStateValue } from '../sync/syncStateStorage.js';
+import { scopedSyncKey } from '../sync/syncTargetIdentity.js';
+import { updateLocalNoteById, updateLocalTrashNoteById } from '../notes/localNoteMutations.js';
 
 type ApplyResult = Awaited<ReturnType<typeof applyChangesLocally>>;
 type Replica = { token: string; notes: NoteMeta[]; trash: NoteMeta[]; receipts: Record<string, ApplyResult> };
 
-export async function editBackendReplica<T>(edit: (store: SyncNoteStore, active: Map<string, NoteMeta>, trash: Map<string, NoteMeta>) => Promise<T>, options: { changes?: SyncChange[]; outbox?: ChangeRecord[] } = {}) {
+export async function editBackendReplica<T>(edit: (store: SyncNoteStore, active: Map<string, NoteMeta>, trash: Map<string, NoteMeta>) => Promise<T>, options: { changes?: SyncChange[]; outbox?: ChangeRecord[]; targetId?: string } = {}) {
+  const receiptKey = (id: string) => options.targetId ? scopedSyncKey(options.targetId, `receipt:${id}`) : id;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const snapshot = await appRequest<Replica>('/api/app/replica/read', { method: 'POST', body: JSON.stringify({ operation_ids: options.changes?.map(c => c.operation_id).filter(Boolean) || [] }) });
+    const snapshot = await appRequest<Replica>('/api/app/replica/read', { method: 'POST', body: JSON.stringify({ operation_ids: options.changes?.map(c => c.operation_id ? receiptKey(c.operation_id) : '').filter(Boolean) || [] }) });
     const normalize = (notes: NoteMeta[]) => new Map(notes.map(note => {
       const normalized = normalizeAppNoteRecord(note);
       if (!normalized) throw new Error('主存储返回了无效的同步笔记。');
@@ -26,7 +30,7 @@ export async function editBackendReplica<T>(edit: (store: SyncNoteStore, active:
         note_id: noteId, filename: remote.filename || existing?.filename || `${noteId}.md`,
         content: remote.content, title: deriveNoteTitle(remote.content), tags: remote.tags,
         pinned: remote.pinned ?? existing?.pinned ?? false,
-        revision: existing ? Math.max(existing.revision + 1, remote.revision) : remote.revision,
+        revision: remote.revision,
         created_at: existing?.created_at ?? normalizeNoteTimestampSeconds(remote.created_at), updated_at: now(),
       };
       // A canonical ID belongs to exactly one list, including conflict recreation.
@@ -67,9 +71,9 @@ export async function editBackendReplica<T>(edit: (store: SyncNoteStore, active:
       const combined: ApplyResult = { applied: [], conflicts: [] };
       for (const change of options.changes) {
         const id = change.operation_id;
-        const item = (id && snapshot.receipts[id]) || await applyChangesLocally([change], store);
+        const item = (id && snapshot.receipts[receiptKey(id)]) || await applyChangesLocally([change], store);
         combined.applied.push(...item.applied); combined.conflicts.push(...item.conflicts);
-        if (id) receipts[id] = item;
+        if (id) receipts[receiptKey(id)] = item;
       }
       result = combined as T;
     } else result = await edit(store, active, trash);
@@ -83,8 +87,60 @@ export async function editBackendReplica<T>(edit: (store: SyncNoteStore, active:
   throw new Error('主存储持续变化，请重试同步。');
 }
 
-export function applyChangesToCurrentStore(changes: SyncChange[]): Promise<ApplyResult> {
-  return shouldUseBackendAppStore()
-    ? editBackendReplica<ApplyResult>(async () => ({ applied: [], conflicts: [] }), { changes })
-    : applyChangesLocally(changes);
+export async function applyChangesToCurrentStore(changes: SyncChange[], targetId?: string): Promise<ApplyResult> {
+  if (shouldUseBackendAppStore()) return editBackendReplica<ApplyResult>(async () => ({ applied: [], conflicts: [] }), { changes, targetId });
+  if (!targetId) return applyChangesLocally(changes);
+  const result: ApplyResult = { applied: [], conflicts: [] };
+  for (const change of changes) {
+    const key = change.operation_id ? scopedSyncKey(targetId, `receipt:${change.operation_id}`) : '';
+    const receipt = key ? await getSyncStateValue(key) : null;
+    const item: ApplyResult = receipt ? JSON.parse(receipt) : await applyChangesLocally([change]);
+    if (key && !receipt) await setSyncStateValue(key, JSON.stringify(item));
+    result.applied.push(...item.applied); result.conflicts.push(...item.conflicts);
+  }
+  return result;
+}
+
+export async function markSyncOperationsApplied(targetId: string, changes: SyncChange[]) {
+  const receipts = Object.fromEntries(changes.filter(change => change.operation_id).map(change => [
+    scopedSyncKey(targetId, `receipt:${change.operation_id}`), { applied: [], conflicts: [] },
+  ]));
+  if (shouldUseBackendAppStore()) {
+    await appRequest('/api/app/replica/receipts', { method: 'POST', body: JSON.stringify({ receipts }) });
+  } else {
+    for (const [key, value] of Object.entries(receipts)) await setSyncStateValue(key, JSON.stringify(value));
+  }
+}
+
+export async function reconcileAcceptedSyncRevision(change: SyncChange, sent: ChangeRecord) {
+  const revision = Number(change.payload?.revision);
+  const sentRevision = Number(sent.payload.revision ?? (sent.base_revision ?? 0) + 1);
+  if (!change.entity_id || change.type === 'note.purge' || !Number.isFinite(revision)) return;
+  const remote = normalizeNoteContentPayload(change.payload || {}, revision);
+  const update = (current: NoteMeta) => current.revision <= sentRevision
+    && current.content === remote.content && JSON.stringify(current.tags) === JSON.stringify(remote.tags)
+    && current.pinned === Boolean(remote.pinned ?? current.pinned)
+    ? { ...current, revision } : current;
+  const trashed = change.type === 'note.trash' || change.type === 'note.delete';
+  if (shouldUseBackendAppStore()) {
+    await editBackendReplica(async (_store, active, trash) => {
+      const list = trashed ? trash : active, current = list.get(change.entity_id!);
+      if (current) list.set(current.note_id, update(current));
+    });
+  } else {
+    await (trashed ? updateLocalTrashNoteById : updateLocalNoteById)(change.entity_id, update);
+  }
+}
+
+export async function acceptRemoteDeleteState(noteId: string, snapshot: Record<string, unknown>) {
+  const edit = async (store: SyncNoteStore) => {
+    if (snapshot.purged) { await store.purgeLocalNoteById(noteId); return snapshot; }
+    const active = await store.findLocalNoteById(noteId);
+    if (active) await store.moveLocalNoteToTrashById(noteId);
+    const trash = await store.findLocalTrashNoteById(noteId);
+    const payload = { ...(trash || {}), ...snapshot };
+    await store.applyRemoteTrashState(noteId, payload, trash);
+    return payload;
+  };
+  return shouldUseBackendAppStore() ? editBackendReplica(edit) : edit(localSyncStore);
 }

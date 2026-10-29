@@ -19,6 +19,14 @@ export interface DraftAttachmentBlobRecord extends AttachmentBlobRecord {
   session_key: string;
 }
 
+export async function getAttachmentContentBlob(blobHash: string): Promise<Blob | null> {
+  return (await readStore<{ blob: Blob } | undefined>('attachmentContentBlobs', store => store.get(blobHash)))?.blob ?? null;
+}
+
+export function putAttachmentContentBlob(blobHash: string, blob: Blob): Promise<void> {
+  return writeStore('attachmentContentBlobs', store => { store.put({ blob_hash: blobHash, blob }); });
+}
+
 
 export async function getBlobIndexRecord(blobHash: string): Promise<BlobIndexRecord | null> {
   return (await readStore<BlobIndexRecord | undefined>('blobIndex', store => store.get(blobHash))) ?? null;

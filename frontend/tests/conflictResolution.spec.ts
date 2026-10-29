@@ -87,6 +87,7 @@ function testBuildKeepLocalResyncPayloadUsesConflictCopyContent() {
     title: '冲突副本 - Updated Locally',
     content: 'updated local body',
     tags: ['x', 'y'],
+    pinned: true,
   });
 
   const payload = buildKeepLocalResyncPayload({
@@ -104,11 +105,13 @@ function testBuildKeepLocalResyncPayloadUsesConflictCopyContent() {
       filename: '2026-03-18-note.md',
       content: 'updated local body',
       tags: ['x', 'y'],
+      pinned: true,
     },
     updatedNote: {
       content: 'updated local body',
       title: 'Updated Locally',
       tags: ['x', 'y'],
+      pinned: true,
     },
   });
 }

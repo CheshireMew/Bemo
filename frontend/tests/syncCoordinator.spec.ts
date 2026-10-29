@@ -6,7 +6,7 @@ import { defaultSettings } from '../src/domain/settings/defaultSettings.js';
 import { settings } from '../src/domain/settings/settingsState.js';
 import { clearScheduledSync, resetRetryDelay } from '../src/domain/sync/syncScheduler.js';
 import { flushPendingQueue } from '../src/domain/sync/syncCoordinator.js';
-import { getSyncStateValue, setSyncStateValue } from '../src/domain/sync/syncStateStorage.js';
+import { getSyncCursorStateKey, getSyncStateValue, setSyncStateValue } from '../src/domain/sync/syncStateStorage.js';
 import { getSyncState } from '../src/domain/sync/syncStatusBus.js';
 import { installMemoryIndexedDb } from './memoryIndexedDb.js';
 
@@ -282,7 +282,7 @@ async function testCoordinatorResumesBootstrapFromStoredShardCursor() {
 
   assert.equal(shardFetches.part1, 1);
   assert.equal(shardFetches.part2 >= 1, true);
-  assert.equal(await getSyncStateValue('webdav_cursor'), '12');
+  assert.equal(await getSyncStateValue(getSyncCursorStateKey('webdav')), '12');
   const notes = await listLocalNotes();
   assert.equal(notes.length, 1);
   assert.equal(notes[0]?.note_id, 'note-2');

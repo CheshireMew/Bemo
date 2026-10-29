@@ -27,7 +27,7 @@ export async function applyRemoteActiveState(noteId: string, payload: Record<str
       title: deriveNoteTitle(remote.content, local.title, 40),
       tags: remote.tags,
       pinned: remote.pinned ?? local.pinned,
-      revision: Math.max(local.revision + 1, remote.revision),
+      revision: remote.revision,
       updated_at: Math.floor(Date.now() / 1000),
     }));
     return requireAppliedNote(updated, 'active', noteId);
@@ -55,7 +55,7 @@ export async function applyRemoteTrashState(noteId: string, payload: Record<stri
       title: deriveNoteTitle(remote.content, local.title, 40),
       tags: remote.tags,
       pinned: remote.pinned ?? local.pinned,
-      revision: Math.max(local.revision + 1, remote.revision),
+      revision: remote.revision,
       updated_at: Math.floor(Date.now() / 1000),
     }));
     return requireAppliedNote(updated, 'trash', noteId);

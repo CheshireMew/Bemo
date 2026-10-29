@@ -5,6 +5,7 @@ import {
   registerSyncWindowEvents,
 } from '../domain/sync/syncCoordinator.js';
 import type { SyncState, SyncStatus } from '../domain/sync/syncTypes.js';
+import { watchBackendAppChanges } from '../domain/appStore/backendAppEvents.js';
 
 export const syncStatus = ref<SyncStatus>('online');
 export const pendingCount = ref(0);
@@ -27,11 +28,12 @@ export function initSync(onComplete?: () => void) {
     syncError.value = state.error;
     serverLastSyncAt.value = state.serverLastSyncAt;
     webdavLastSyncAt.value = state.webdavLastSyncAt;
-    const completed = previous?.status === 'syncing' && state.status === 'online';
+    const completed = previous !== null && state.completedRuns > previous.completedRuns;
     previous = state;
     if (completed) onComplete?.();
   });
 
   flushPendingQueue().catch(() => {});
-  return unsubscribe;
+  const stopWatching = onComplete ? watchBackendAppChanges(onComplete) : () => {};
+  return () => { unsubscribe(); stopWatching(); };
 }

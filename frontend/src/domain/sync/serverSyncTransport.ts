@@ -19,6 +19,9 @@ function annotateSyncTransportError(error: unknown): never {
   if (!axios.isAxiosError(error)) {
     throw error;
   }
+  if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+    throw new Error('同步服务器响应超时，修改已保留，将自动重试。');
+  }
   const retryAfterHeader = error.response?.headers?.['retry-after'];
   const retryAfterMs = parseRetryAfterMs(Array.isArray(retryAfterHeader) ? retryAfterHeader[0] : retryAfterHeader);
   const nextError = error as Error & { retryAfterMs?: number | null };
@@ -28,9 +31,10 @@ function annotateSyncTransportError(error: unknown): never {
   throw nextError;
 }
 
-export function createServerTransport(serverUrl: string, accessToken: string): SyncTransport {
+export function createServerTransport(serverUrl: string, accessToken: string, options: { timeoutMs?: number } = {}): SyncTransport {
   const api = axios.create({
     baseURL: serverUrl.replace(/\/$/, ''),
+    timeout: options.timeoutMs ?? 30_000,
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },

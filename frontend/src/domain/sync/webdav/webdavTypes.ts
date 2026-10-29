@@ -1,3 +1,5 @@
+import type { SyncChange } from '../syncTransport.js';
+
 export type ManifestRecord = {
   format_version: number;
   latest_cursor: string;
@@ -37,7 +39,7 @@ export type WebDavIndexedBatchRecord = {
 
 export type WebDavSnapshotNote = {
   note_id: string;
-  scope: 'active' | 'trash';
+  scope: 'active' | 'trash' | 'purged';
   revision: number;
   filename?: string;
   content: string;
@@ -65,7 +67,7 @@ export type SnapshotRecord = {
   }>;
 };
 
-export type WebDavBatchChange = Record<string, unknown> & {
+export type WebDavBatchChange = SyncChange & Record<string, unknown> & {
   operation_id?: string;
   cursor: string;
 };

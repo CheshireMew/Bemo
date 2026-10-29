@@ -1,4 +1,6 @@
 import type { NoteMeta } from '../notes/notesTypes.js';
+import { readSyncConfigSnapshot } from './syncConfig.js';
+import { getSyncTargetId } from './syncTargetIdentity.js';
 
 export type ConflictDetail = Record<string, unknown>;
 
@@ -8,6 +10,14 @@ export type ConflictRecordLike = {
   conflict_copy_filename?: string;
   detail: ConflictDetail;
 };
+
+export function requireActiveConflictTarget(conflict: { source: string; target_id?: string; detail: ConflictDetail }) {
+  const config = readSyncConfigSnapshot();
+  const targetId = conflict.target_id || conflict.detail.target_id;
+  if (conflict.source !== config.mode || (targetId && targetId !== getSyncTargetId(config))) {
+    throw new Error('此冲突属于其他同步目标，请切回原服务器或 WebDAV 账号和目录后处理。');
+  }
+}
 
 export function canKeepLocalConflict(reason: string) {
   return reason === 'revision_conflict';
@@ -23,7 +33,7 @@ export function isRemoteDeleteConflict(detail: ConflictDetail) {
     return false;
   }
   const snapshot = remoteSnapshot as Record<string, unknown>;
-  return Boolean(snapshot.deleted || snapshot.trashed);
+  return Boolean(snapshot.deleted || snapshot.trashed || snapshot.purged);
 }
 
 export function canAcceptRemoteDeleteConflict(conflict: ConflictRecordLike) {
@@ -51,6 +61,7 @@ export function buildKeepLocalResyncPayload(input: {
   canonical: NoteMeta;
   conflictCopy: NoteMeta;
   remoteRevision: number | null;
+  localPinned?: boolean;
 }) {
   return {
     entityId: input.noteId,
@@ -60,11 +71,13 @@ export function buildKeepLocalResyncPayload(input: {
       filename: input.canonical.filename,
       content: input.conflictCopy.content,
       tags: [...input.conflictCopy.tags],
+      pinned: input.localPinned ?? input.conflictCopy.pinned,
     },
     updatedNote: {
       content: input.conflictCopy.content,
       title: input.conflictCopy.title.replace(/^冲突副本\s*-\s*/, '') || input.canonical.title,
       tags: [...input.conflictCopy.tags],
+      pinned: input.localPinned ?? input.conflictCopy.pinned,
     },
   };
 }

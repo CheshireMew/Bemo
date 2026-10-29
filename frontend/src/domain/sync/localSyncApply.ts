@@ -31,6 +31,7 @@ type SyncChange = {
   type?: string;
   base_revision?: number | null;
   payload?: Record<string, unknown>;
+  preserve_local?: boolean;
 };
 
 function toNumber(value: unknown, fallback: number) {
@@ -105,12 +106,16 @@ export async function applyChangesLocally(changes: SyncChange[], store: SyncNote
           applied.push({ status: 'applied', note_id: noteId, filename: existing.filename, deduplicated: true });
           continue;
         }
-        if (change.device_id === 'snapshot') {
+        if (change.device_id === 'snapshot' && !change.preserve_local) {
           const updated = await applyRemoteActiveState(noteId, payload, existing);
           applied.push({ status: 'applied', note_id: noteId, filename: updated.filename });
           continue;
         }
-        applied.push({ status: 'applied', note_id: noteId, filename: existing.filename });
+        const copy = await createLocalConflictCopy(existing);
+        const updated = await applyRemoteActiveState(noteId, payload, existing);
+        conflicts.push({ status: 'conflict', note_id: noteId, operation_id: operationId, reason: 'revision_conflict',
+          local_snapshot: { ...existing }, remote_snapshot: { ...payload },
+          conflict_copy_note_id: copy.note_id, conflict_copy_filename: copy.filename, applied_filename: updated.filename });
         continue;
       }
 
@@ -171,7 +176,7 @@ export async function applyChangesLocally(changes: SyncChange[], store: SyncNote
       }
 
       const remoteContent = String(payload.content || '');
-      if (hasConcurrentUpdateConflict(local, baseRevision, payload)) {
+      if (change.preserve_local || hasConcurrentUpdateConflict(local, baseRevision, payload)) {
         const conflictCopy = await createLocalConflictCopy(local);
         const updated = await applyRemoteActiveState(noteId, payload, local);
         conflicts.push({
@@ -186,6 +191,7 @@ export async function applyChangesLocally(changes: SyncChange[], store: SyncNote
             title: local.title,
             content: local.content,
             tags: local.tags,
+            pinned: local.pinned,
             revision: local.revision,
           },
           remote_snapshot: {
@@ -227,13 +233,13 @@ export async function applyChangesLocally(changes: SyncChange[], store: SyncNote
         continue;
       }
 
-      if (hasConcurrentPatchConflict(local, baseRevision, payload)) {
+      if (change.preserve_local || hasConcurrentPatchConflict(local, baseRevision, payload)) {
         const conflictCopy = await createLocalConflictCopy(local);
         const updated = await updateLocalNoteById(noteId, (current) => ({
           ...current,
           pinned: payload.pinned !== undefined ? Boolean(payload.pinned) : current.pinned,
           tags: Array.isArray(payload.tags) ? normalizeNoteTags(payload.tags) : current.tags,
-          revision: Math.max(current.revision + 1, toNumber(payload.revision, current.revision + 1)),
+          revision: toNumber(payload.revision, current.revision + 1),
           updated_at: Math.floor(Date.now() / 1000),
         }));
         conflicts.push({
@@ -267,7 +273,7 @@ export async function applyChangesLocally(changes: SyncChange[], store: SyncNote
         ...current,
         pinned: payload.pinned !== undefined ? Boolean(payload.pinned) : current.pinned,
         tags: Array.isArray(payload.tags) ? normalizeNoteTags(payload.tags) : current.tags,
-        revision: Math.max(current.revision + 1, toNumber(payload.revision, current.revision + 1)),
+        revision: toNumber(payload.revision, current.revision + 1),
         updated_at: Math.floor(Date.now() / 1000),
       }));
       applied.push({ status: 'applied', note_id: noteId, filename: updated?.filename || local.filename });
@@ -281,7 +287,7 @@ export async function applyChangesLocally(changes: SyncChange[], store: SyncNote
       }
 
       if (local) {
-        if (shouldKeepDeleteAsConflict(local.revision, baseRevision)) {
+        if (change.preserve_local || shouldKeepDeleteAsConflict(local.revision, baseRevision)) {
           const conflictCopy = await createLocalConflictCopy(local);
           conflicts.push({
             status: 'conflict',
@@ -295,9 +301,11 @@ export async function applyChangesLocally(changes: SyncChange[], store: SyncNote
               title: local.title,
               content: local.content,
               tags: local.tags,
+              pinned: local.pinned,
               revision: local.revision,
             },
             remote_snapshot: {
+              ...payload,
               trashed: true,
               revision: toNumber(payload.revision, local.revision + 1),
             },
@@ -379,6 +387,13 @@ export async function applyChangesLocally(changes: SyncChange[], store: SyncNote
     }
 
     if (type === 'note.purge') {
+      const existing = local || localTrash;
+      if (existing && (change.preserve_local || shouldKeepDeleteAsConflict(existing.revision, baseRevision))) {
+        const copy = await createLocalConflictCopy(existing);
+        conflicts.push({ status: 'conflict', note_id: noteId, operation_id: operationId, reason: 'revision_conflict',
+          local_snapshot: { ...existing }, remote_snapshot: { purged: true, revision: payload.revision },
+          conflict_copy_note_id: copy.note_id, conflict_copy_filename: copy.filename });
+      }
       const purged = await purgeLocalNoteById(noteId);
       applied.push({
         status: 'applied',

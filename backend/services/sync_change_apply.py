@@ -8,7 +8,7 @@ from services.note_contract import (
     normalize_note_tags,
     now_iso,
 )
-from services.sync_store_repository import connect, ensure_sync_store
+from services.sync_store_repository import connect, ensure_sync_store, table_prefix
 
 
 def apply_remote_change(change: dict[str, Any]) -> dict[str, Any]:
@@ -23,11 +23,14 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
     device_id = str(change.get("device_id") or "unknown-device")
     operation_id = str(change.get("operation_id") or "")
     payload = change.get("payload") or {}
-    current = conn.execute("SELECT * FROM notes_current WHERE note_id = ?", (note_id,)).fetchone()
+    current = conn.execute(f"SELECT * FROM {table_prefix()}notes_current WHERE note_id = ?", (note_id,)).fetchone()
 
     if change_type == "note.create":
         return _apply_create(conn, note_id, device_id, operation_id, payload, change, current)
 
+    if current and current["purged"] and change_type != "note.purge":
+        return {"status": "conflict", "operation_id": operation_id, "note_id": note_id,
+                "reason": "note_not_found", "remote_snapshot": {"purged": True, "revision": current["revision"]}}
     if change_type not in {"note.trash", "note.delete", "note.restore", "note.purge"} and (not current or current["deleted_at"]):
         return {"status": "conflict", "operation_id": operation_id, "reason": "note_not_found"}
 
@@ -41,8 +44,12 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
     if change_type in {"note.trash", "note.delete"}:
         return _apply_trash(conn, note_id, device_id, operation_id, payload, change, current, current_revision, base_revision)
     if change_type == "note.restore":
+        if current and base_revision is not None and base_revision != current_revision:
+            return _revision_conflict(operation_id, note_id, current_revision)
         return _apply_restore(conn, note_id, device_id, operation_id, payload, change, current)
     if change_type == "note.purge":
+        if current and base_revision is not None and current_revision != base_revision:
+            return _revision_conflict(operation_id, note_id, current_revision)
         return _apply_purge(conn, note_id, payload, change, current)
 
     return {"status": "conflict", "operation_id": operation_id, "reason": "unsupported_change_type"}
@@ -57,13 +64,13 @@ def _apply_create(
     change: dict[str, Any],
     current: sqlite3.Row | None,
 ) -> dict[str, Any]:
-    if current and not current["deleted_at"]:
+    if current:
         return {"status": "conflict", "operation_id": operation_id, "reason": "note_exists"}
     revision = max(1, int(payload.get("revision") or 1))
     normalized = _normalize_note_payload(payload, current)
     conn.execute(
-        """
-        INSERT OR REPLACE INTO notes_current (
+        f"""
+        INSERT OR REPLACE INTO {table_prefix()}notes_current (
             note_id, filename, title, content, tags_json, attachments_json, pinned, revision,
             created_at, updated_at, deleted_at, last_operation_id, last_device_id
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
@@ -98,29 +105,23 @@ def _apply_update(
     base_revision: int | None,
 ) -> dict[str, Any]:
     normalized = _normalize_note_payload(payload, current)
-    current_tags = _current_tags(current)
     next_tags = normalized["tags"]
-    if (
-        base_revision is not None
-        and base_revision != current_revision
-        and (
-            normalized["content"] != str(current["content"])
-            or next_tags != current_tags
-        )
-    ):
+    if base_revision is not None and base_revision != current_revision:
         return _revision_conflict(operation_id, note_id, current_revision)
 
     next_revision = current_revision + 1
     conn.execute(
-        """
-        UPDATE notes_current
-        SET content = ?, tags_json = ?, attachments_json = ?, revision = ?, updated_at = ?, last_operation_id = ?, last_device_id = ?
+        f"""
+        UPDATE {table_prefix()}notes_current
+        SET content = ?, tags_json = ?, attachments_json = ?, pinned = ?, title = ?, revision = ?, updated_at = ?, last_operation_id = ?, last_device_id = ?
         WHERE note_id = ?
         """,
         (
             normalized["content"],
             json.dumps(next_tags, ensure_ascii=False),
             json.dumps(normalized["attachments"], ensure_ascii=False),
+            1 if normalized["pinned"] else 0,
+            normalized["title"],
             next_revision,
             now_iso(),
             operation_id,
@@ -148,8 +149,8 @@ def _apply_patch(
     next_revision = current_revision + 1
     normalized = _normalize_note_payload(payload, current)
     conn.execute(
-        """
-        UPDATE notes_current
+        f"""
+        UPDATE {table_prefix()}notes_current
         SET pinned = ?, tags_json = ?, revision = ?, updated_at = ?, last_operation_id = ?, last_device_id = ?
         WHERE note_id = ?
         """,
@@ -177,14 +178,14 @@ def _apply_trash(
     current_revision: int,
     base_revision: int | None,
 ) -> dict[str, Any]:
-    if current and base_revision is not None and current_revision > base_revision:
+    if current and base_revision is not None and current_revision != base_revision:
         return _revision_conflict(operation_id, note_id, current_revision)
 
     next_revision = (int(current["revision"] or 0) + 1) if current else max(1, int(payload.get("revision") or 1))
     normalized = _normalize_note_payload(payload, current)
     conn.execute(
-        """
-        INSERT OR REPLACE INTO notes_current (
+        f"""
+        INSERT OR REPLACE INTO {table_prefix()}notes_current (
             note_id, filename, title, content, tags_json, attachments_json, pinned, revision,
             created_at, updated_at, deleted_at, last_operation_id, last_device_id
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -229,8 +230,8 @@ def _apply_restore(
     next_revision = (int(current["revision"] or 0) + 1) if current else max(1, int(payload.get("revision") or 1))
     normalized = _normalize_note_payload(payload, current)
     conn.execute(
-        """
-        INSERT OR REPLACE INTO notes_current (
+        f"""
+        INSERT OR REPLACE INTO {table_prefix()}notes_current (
             note_id, filename, title, content, tags_json, attachments_json, pinned, revision,
             created_at, updated_at, deleted_at, last_operation_id, last_device_id
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
@@ -266,9 +267,14 @@ def _apply_purge(
 ) -> dict[str, Any]:
     if current:
         next_revision = int(current["revision"] or 1) + 1
-        conn.execute("DELETE FROM notes_current WHERE note_id = ?", (note_id,))
+        conn.execute(f"UPDATE {table_prefix()}notes_current SET purged = 1, content = '', title = '', filename = '', tags_json = '[]', "
+                     "attachments_json = '[]', pinned = 0, deleted_at = ?, revision = ?, updated_at = ? WHERE note_id = ?",
+                     (now_iso(), next_revision, now_iso(), note_id))
     else:
         next_revision = max(1, int(payload.get("revision") or 1))
+        conn.execute(f"""INSERT INTO {table_prefix()}notes_current
+            (note_id, content, tags_json, pinned, revision, created_at, updated_at, deleted_at, purged)
+            VALUES (?, '', '[]', 0, ?, ?, ?, ?, 1)""", (note_id, next_revision, now_iso(), now_iso(), now_iso()))
     return _applied_result(change, note_id, next_revision, {
         **payload,
         "revision": next_revision,
@@ -276,7 +282,7 @@ def _apply_purge(
 
 
 def _normalize_note_payload(payload: dict[str, Any], current: sqlite3.Row | None) -> dict[str, Any]:
-    content = str(payload.get("content") or (current["content"] if current else ""))
+    content = str(payload["content"]) if "content" in payload else str(current["content"] if current else "")
     tags = normalize_note_tags(payload.get("tags")) if payload.get("tags") is not None else _current_tags(current)
     attachments = (
         normalize_note_attachments(payload.get("attachments"))
@@ -309,12 +315,17 @@ def _applied_result(
 
 
 def _revision_conflict(operation_id: str, note_id: str, current_revision: int) -> dict[str, Any]:
+    with connect() as conn:
+        current = conn.execute(f'SELECT * FROM {table_prefix()}notes_current WHERE note_id = ?', (note_id,)).fetchone()
+    snapshot = {**_normalize_note_payload({}, current), 'revision': current_revision,
+                'trashed': bool(current and current['deleted_at']), 'purged': bool(current and current['purged'])}
     return {
         "status": "conflict",
         "operation_id": operation_id,
         "reason": "revision_conflict",
         "note_id": note_id,
         "current_revision": current_revision,
+        "remote_snapshot": snapshot,
     }
 
 
@@ -331,13 +342,7 @@ def _current_attachments(current: sqlite3.Row | None) -> list[dict[str, str]]:
 
 
 def _has_patch_conflict(current: sqlite3.Row, base_revision: int | None, payload: dict[str, Any]) -> bool:
-    if base_revision is None or base_revision == int(current["revision"] or 1):
-        return False
-    if "pinned" in payload and bool(payload.get("pinned")) != bool(current["pinned"]):
-        return True
-    if "tags" not in payload:
-        return False
-    return payload.get("tags") != json.loads(current["tags_json"])
+    return base_revision is not None and base_revision != int(current["revision"] or 1)
 
 
 def _int_or_none(value: Any) -> int | None:

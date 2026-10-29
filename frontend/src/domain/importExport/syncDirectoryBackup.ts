@@ -138,6 +138,10 @@ async function buildBackupPayloadFromCandidateRoot(
 
   for (const value of Object.values(snapshot.notes as Record<string, unknown>)) {
     const note = toSnapshotNoteRecord(value);
+    if (note?.scope === 'purged') {
+      if (typeof note.note_id !== 'string' || !note.note_id) throw new Error('同步删除记录缺少笔记 ID。');
+      continue;
+    }
     if (!note || typeof note.content !== 'string' || !Array.isArray(note.tags) || !note.tags.every(tag => typeof tag === 'string')) throw new Error('同步快照包含无效笔记。');
 
     const normalizedNote = toNoteRecord(note);

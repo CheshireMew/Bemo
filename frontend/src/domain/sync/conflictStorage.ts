@@ -4,6 +4,7 @@ import type { SyncTarget } from './mutationLogStorage.js';
 export interface SyncConflictRecord {
   id?: number;
   source: SyncTarget;
+  target_id?: string;
   note_id: string;
   operation_id: string;
   reason: string;
@@ -30,9 +31,10 @@ export async function addConflict(source: SyncTarget, detail: {
   const request = store.getAll();
   request.onsuccess = () => {
     const rows = request.result as SyncConflictRecord[];
-    if (detail.operation_id && rows.some(row => row.operation_id === detail.operation_id && row.source === source && row.reason === detail.reason)) return;
+    if (detail.operation_id && rows.some(row => row.operation_id === detail.operation_id && row.source === source && row.reason === detail.reason && row.target_id === detail.target_id)) return;
     try { store.add({
     source,
+    target_id: typeof detail.target_id === 'string' ? detail.target_id : undefined,
     note_id: detail.note_id,
     operation_id: detail.operation_id,
     reason: detail.reason,

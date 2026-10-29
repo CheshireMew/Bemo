@@ -248,6 +248,10 @@ async function testPushWebDavBatchSkipsDuplicateOperationFromManifest() {
           updated_at: '2026-03-18T00:00:00.000Z',
         });
       }
+      if (init?.method === 'GET' && url.endsWith('/batches/batch_00000009_00000009.json')) {
+        return createJsonResponse({ changes: [{ operation_id: 'op-1', entity_id: 'note-1',
+          type: 'note.update', cursor: '9', payload: { content: 'stored canonical', revision: 3 } }] });
+      }
       if (init?.method === 'PUT') {
         throw new Error('unexpected PUT for deduplicated batch');
       }
@@ -263,6 +267,8 @@ async function testPushWebDavBatchSkipsDuplicateOperationFromManifest() {
       );
       assert.equal(result.latestCursor, '9');
       assert.equal('deduplicated' in result.accepted[0] && result.accepted[0].deduplicated, true);
+      assert.equal(result.accepted[0]?.change.payload?.content, 'stored canonical');
+      assert.equal(result.accepted[0]?.change.payload?.revision, 3);
     },
   );
 }

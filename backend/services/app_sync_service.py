@@ -14,6 +14,8 @@ def _ensure_tables():
     with repository.connect() as conn:
         conn.execute("CREATE TABLE IF NOT EXISTS sync_outbox (operation_id TEXT PRIMARY KEY, target TEXT NOT NULL, change_json TEXT NOT NULL)")
         conn.execute("CREATE TABLE IF NOT EXISTS sync_inbox (operation_id TEXT PRIMARY KEY, result_json TEXT NOT NULL)")
+        conn.execute("CREATE TABLE IF NOT EXISTS sync_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        conn.execute("CREATE TABLE IF NOT EXISTS sync_target_owners (target TEXT PRIMARY KEY, target_id TEXT NOT NULL)")
 
 
 def parse_sync_context(value: str | None):
@@ -23,7 +25,10 @@ def parse_sync_context(value: str | None):
         context = json.loads(value)
         if context["target"] not in {"server", "webdav"} or not isinstance(context["device_id"], str) or not context["device_id"]:
             raise ValueError()
-        return {"target": context["target"], "device_id": context["device_id"]}
+        target_id = context.get('target_id')
+        if target_id is not None and not isinstance(target_id, str):
+            raise ValueError()
+        return {"target": context["target"], "device_id": context["device_id"], "target_id": target_id}
     except (ValueError, KeyError, TypeError):
         raise ValidationError("Invalid synchronization context")
 
@@ -33,6 +38,8 @@ def mutate(action: Callable, change_type: str, context: dict | None, note_id: st
         _ensure_tables()
         current = repository.get_note(note_id) if note_id else None
         result = action()
+        from services.hosted_sync_service import publish_app_changes
+        publish_app_changes()
         if context:
             notes = result if isinstance(result, list) else [result if change_type != "note.purge" else app_note_from_row(current)]
             for note in notes:
@@ -41,7 +48,7 @@ def mutate(action: Callable, change_type: str, context: dict | None, note_id: st
                 change = {
                     "operation_id": f"op_{uuid.uuid4().hex}", "device_id": context["device_id"],
                     "entity_id": note["note_id"], "type": change_type,
-                    "target": context["target"], "timestamp": now_iso(),
+                    "target": context["target"], "target_id": context.get('target_id'), "timestamp": now_iso(),
                     "base_revision": 0 if change_type == 'note.create' else revision if is_purge else max(0, revision - 1),
                     "payload": {"filename": note["filename"], "revision": revision + 1} if is_purge else {
                         **note, "created_at": normalize_note_timestamp_iso(note['created_at']),
@@ -58,11 +65,60 @@ def queue_change(change: dict[str, Any]):
         conn.execute("INSERT OR IGNORE INTO sync_outbox VALUES (?, ?, ?)", (change["operation_id"], change["target"], json.dumps(change)))
 
 
-def list_outbox(target: str):
+def list_outbox(target: str, target_id: str | None = None):
     repository.ensure_app_store()
     _ensure_tables()
     with repository.connect() as conn:
-        return [json.loads(row[0]) for row in conn.execute("SELECT change_json FROM sync_outbox WHERE target = ? ORDER BY rowid", (target,))]
+        changes = [json.loads(row[0]) for row in conn.execute("SELECT change_json FROM sync_outbox WHERE target = ? ORDER BY rowid", (target,))]
+        return [change for change in changes if target_id is None or change.get('target_id') == target_id]
+
+
+def claim_legacy_target(target: str, target_id: str):
+    with repository.transaction():
+        _ensure_tables()
+        with repository.connect() as conn:
+            conn.execute("INSERT OR IGNORE INTO sync_target_owners VALUES (?, ?)", (target, target_id))
+            owner = conn.execute("SELECT target_id FROM sync_target_owners WHERE target = ?", (target,)).fetchone()[0]
+            if owner == target_id:
+                for change in list_outbox(target):
+                    if not change.get('target_id'):
+                        change['target_id'] = target_id
+                        conn.execute("UPDATE sync_outbox SET change_json = ? WHERE operation_id = ?", (json.dumps(change), change['operation_id']))
+
+
+def read_sync_state(key: str):
+    repository.ensure_app_store()
+    _ensure_tables()
+    with repository.connect() as conn:
+        row = conn.execute("SELECT value FROM sync_state WHERE key = ?", (key,)).fetchone()
+        return {"value": row[0] if row else None}
+
+
+def list_sync_state(prefix: str):
+    repository.ensure_app_store()
+    _ensure_tables()
+    with repository.connect() as conn:
+        return [{'key': row[0], 'value': row[1]} for row in conn.execute('SELECT key, value FROM sync_state') if row[0].startswith(prefix)]
+
+
+def write_sync_state(key: str, value: str | None):
+    repository.ensure_app_store()
+    _ensure_tables()
+    with repository.connect() as conn:
+        if value is None:
+            conn.execute("DELETE FROM sync_state WHERE key = ?", (key,))
+        else:
+            conn.execute("INSERT INTO sync_state VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+    return {"ok": True}
+
+
+def record_receipts(receipts: dict):
+    with repository.transaction():
+        _ensure_tables()
+        with repository.connect() as conn:
+            for key, result in receipts.items():
+                conn.execute("INSERT OR IGNORE INTO sync_inbox VALUES (?, ?)", (key, json.dumps(result)))
+    return {"ok": True}
 
 
 def acknowledge_outbox(operation_id: str):
@@ -118,4 +174,6 @@ def commit_replica(payload: dict[str, Any]):
                 conn.execute("INSERT OR IGNORE INTO sync_inbox VALUES (?, ?)", (operation_id, json.dumps(result)))
         for change in payload.get("outbox", []):
             queue_change(change)
+        from services.hosted_sync_service import publish_app_changes
+        publish_app_changes()
     return {"ok": True}

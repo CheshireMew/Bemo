@@ -92,6 +92,8 @@ def apply_backup_payload(payload: dict[str, Any]) -> dict[str, int]:
             _upsert_note_snapshot(note, attachment_index, deleted=False)
         for note in trash:
             _upsert_note_snapshot(note, attachment_index, deleted=True)
+        from services.hosted_sync_service import publish_app_changes
+        publish_app_changes()
 
     return {
         "imported_notes": len(notes) + len(trash),

@@ -1,5 +1,5 @@
 const DB_NAME = 'bemo-offline';
-const DB_VERSION = 10;
+const DB_VERSION = 11;
 
 const STORE_DEFINITIONS = [
   ['cachedNotes', { keyPath: 'note_id' }],
@@ -11,6 +11,7 @@ const STORE_DEFINITIONS = [
   ['attachmentBlobs', { keyPath: 'filename' }],
   ['draftAttachmentBlobs', { keyPath: 'filename' }],
   ['attachmentRefs', { keyPath: 'id' }],
+  ['attachmentContentBlobs', { keyPath: 'blob_hash' }],
 ] as const;
 
 function createLegacyNoteId(storeName: string, record: Record<string, unknown>, index: number) {

@@ -27,21 +27,6 @@
       <h4>主题风格</h4>
       <p>选择全局高亮颜色及背景色相的风格色板。</p>
       <div class="theme-grid">
-        <button
-          class="theme-card"
-          :class="{ active: currentSkin === 'cream' }"
-          :aria-pressed="currentSkin === 'cream'"
-          @click="setSkin('cream')"
-        >
-          <div class="theme-preview preview-cream" :class="{ 'preview-cream-dark': isDarkMode }">
-            <div class="preview-sidebar"></div>
-            <div class="preview-content">
-              <div class="preview-card"></div>
-              <div class="preview-card"></div>
-            </div>
-          </div>
-          <span>奶油 (Cream)</span>
-        </button>
         <!-- 默认 -->
         <button 
           class="theme-card" 
@@ -165,14 +150,6 @@ import { currentSkin, setSkin, isDarkMode, toggleTheme } from '../store/ui';
 .preview-card:first-child { height: 24px; }
 
 /* Previews */
-.preview-cream { background: #f8f6f0; border-color: #e3ded2; }
-.preview-cream .preview-sidebar { background: #f1eee5; }
-.preview-cream .preview-card { background: #ffffff; border: 1px solid #e3ded2; }
-.preview-cream .preview-content::before { content: ""; display: block; width: 40%; height: 6px; border-radius: 3px; background: #f2cc4d; margin-bottom: 2px; }
-.preview-cream-dark { background: #201f1c; border-color: #474238; }
-.preview-cream-dark .preview-sidebar { background: #191815; }
-.preview-cream-dark .preview-card { background: #2b2924; border-color: #474238; }
-.preview-cream-dark .preview-content::before { background: #e8c967; }
 .preview-light { background: #f4f5f7; border-color: #e4e4e7; }
 .preview-light .preview-sidebar { background: #ffffff; }
 .preview-light .preview-card { background: #ffffff; border: 1px solid #eaeaea; }

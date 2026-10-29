@@ -93,17 +93,19 @@ try {
   console.log('PASS save failure preserves draft; success and blocked state are distinct');
 
   setRuntimeConfigOverride({ apiBase: '', appStorageMode: 'local' });
-  setSyncState({ status: 'online', pendingCount: 0 });
+  setSyncState({ status: 'online', pendingCount: 0, completedRuns: 0 });
   let syncCompletions = 0;
   const stop = initSync(() => { syncCompletions++; });
   await pause(50);
   assert.equal(syncCompletions, 0);
   setSyncState({ status: 'syncing' }); notifySyncListeners();
   setSyncState({ status: 'online' }); notifySyncListeners(); notifySyncListeners();
+  assert.equal(syncCompletions, 0, 'A status transition alone does not prove a completed sync');
+  setSyncState({ completedRuns: 1 }); notifySyncListeners(); notifySyncListeners();
   assert.equal(syncCompletions, 1);
   stop();
   setSyncState({ status: 'syncing' }); notifySyncListeners();
-  setSyncState({ status: 'online' }); notifySyncListeners();
+  setSyncState({ status: 'online', completedRuns: 2 }); notifySyncListeners();
   assert.equal(syncCompletions, 1);
   console.log('PASS initial sync snapshot does not refresh; completed sync refreshes once');
 

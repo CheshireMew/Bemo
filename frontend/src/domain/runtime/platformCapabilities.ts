@@ -10,6 +10,10 @@ export function isMobileProductShell() {
   return getProductShell() === 'mobile';
 }
 
+export function canSyncWhileHidden() {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
 export function canRestoreFromSyncDirectory() {
   return !isMobileProductShell();
 }

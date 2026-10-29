@@ -67,8 +67,16 @@ export function createWebDavTransport(config: {
     async pull(cursor: string | null) {
       await ensureRemoteLayout();
       const { manifest } = await readCurrentRemoteState();
-      const { changes, latestCursor } = await pullWebDavChanges(baseUrl, headers, cursor, manifest);
-      return { changes, latest_cursor: latestCursor };
+      try {
+        const { changes, latestCursor } = await pullWebDavChanges(baseUrl, headers, cursor, manifest);
+        return { changes, latest_cursor: latestCursor };
+      } catch (error) {
+        // A writer may have compacted the files referenced by the manifest we read.
+        const updated = (await readCurrentRemoteState()).manifest;
+        if (JSON.stringify(updated) === JSON.stringify(manifest)) throw error;
+        const { changes, latestCursor } = await pullWebDavChanges(baseUrl, headers, cursor, updated);
+        return { changes, latest_cursor: latestCursor };
+      }
     },
     async inspectBootstrap() {
       await ensureRemoteLayout();
@@ -92,9 +100,9 @@ export function createWebDavTransport(config: {
       }
 
       try {
-        const { accepted, latestCursor } = await pushWebDavBatch(baseUrl, headers, changes);
+        const { accepted, latestCursor, conflicts } = await pushWebDavBatch(baseUrl, headers, changes);
         await verifyWebDavPushResult(baseUrl, headers, accepted, latestCursor);
-        return { accepted, conflicts: [], latest_cursor: latestCursor };
+        return { accepted, conflicts, latest_cursor: latestCursor };
       } finally {
         await releaseWebDavLease(baseUrl, headers, lease);
       }

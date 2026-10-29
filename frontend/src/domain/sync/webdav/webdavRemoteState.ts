@@ -489,6 +489,12 @@ export async function pullWebDavChanges(
     const snapshotName = snapshotBootstrap?.snapshotName || manifest.latest_snapshot;
     if (snapshotName) {
       const snapshotMeta = await readWebDavSnapshotMeta(baseUrl, headers, snapshotName);
+      if (!snapshotMeta) {
+        if (snapshotName !== manifest.latest_snapshot && manifest.latest_snapshot) {
+          return pullWebDavChanges(baseUrl, headers, null, manifest);
+        }
+        throw new Error(`同步快照缺失：${snapshotName}`);
+      }
       if (snapshotMeta) {
         if (Array.isArray(snapshotMeta.shards) && snapshotMeta.shards.length > 0) {
           const shardIndex = snapshotBootstrap?.shardIndex || 0;
@@ -506,11 +512,7 @@ export async function pullWebDavChanges(
               manifest,
             };
           }
-          return {
-            changes: [],
-            latestCursor: snapshotMeta.latest_cursor,
-            manifest,
-          };
+          throw new Error('同步快照恢复进度超出分片范围');
         }
 
         const snapshot = await readWebDavSnapshot(baseUrl, headers, {

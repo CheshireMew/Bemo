@@ -13,6 +13,7 @@
         <template v-else>
           <button class="btn-action" type="button" title="编辑" aria-label="编辑笔记" @click="startEdit"><Pencil :size="16" /></button>
           <button class="btn-action" type="button" :class="{ copied: copyFeedback }" :title="copyButtonTitle" :aria-label="copyButtonTitle" @click="copyNoteContent"><Copy :size="16" /></button>
+          <button class="btn-action" type="button" title="分享图片" aria-label="将笔记分享为图片" :disabled="isEditing" @click="isShareOpen = true"><Share2 :size="16" /></button>
           <button class="btn-action" type="button" :title="note.pinned ? '取消置顶' : '置顶'" :aria-label="note.pinned ? '取消置顶' : '置顶笔记'" @click="togglePin(note)"><Pin :size="16" :class="{ 'pin-active': note.pinned }" /></button>
           <button class="btn-action" type="button" title="移到回收站" aria-label="将笔记移到回收站" @click="deleteNote(note)"><Trash2 :size="16" /></button>
         </template>
@@ -35,13 +36,15 @@
       :openImagePreview="openImagePreview"
       :openFileAttachment="openFileAttachment"
     />
+    <NoteImageShareDialog v-if="isShareOpen" :open="isShareOpen" :note="note" @close="isShareOpen = false" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { toRef, watch } from 'vue';
-import { Copy, Pencil, Pin, RotateCcw, Trash2 } from 'lucide-vue-next';
+import { ref, toRef, watch } from 'vue';
+import { Copy, Pencil, Pin, RotateCcw, Share2, Trash2 } from 'lucide-vue-next';
 import SharedNoteCardBody from '../../MainFeed/note-card/SharedNoteCardBody.vue';
+import NoteImageShareDialog from '../../MainFeed/note-card/NoteImageShareDialog.vue';
 import type { NoteMeta } from '../../../store/notes';
 import { deleteNote, pendingNoteIds, togglePin } from '../../../store/notes';
 import { formatNoteDate, useNoteCard } from '../../../composables/useNoteCard';
@@ -56,6 +59,7 @@ const emit = defineEmits<{
   permanentDelete: [];
   editingChange: [editing: boolean];
 }>();
+const isShareOpen = ref(false);
 
 const {
   isEditing,
@@ -82,7 +86,7 @@ watch(isEditing, editing => emit('editingChange', editing));
 .note-card {
   background: var(--bg-card);
   border-radius: var(--radius-lg);
-  padding: 12px 16px;
+  padding: 6px 16px 12px;
   border: 1px solid var(--border-color);
   transition: border-color 0.2s;
 }
@@ -97,7 +101,7 @@ watch(isEditing, editing => emit('editingChange', editing));
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
   font-size: var(--font-size-small);
   font-weight: 400;
   color: var(--text-secondary);
@@ -151,6 +155,11 @@ watch(isEditing, editing => emit('editingChange', editing));
 .btn-action:hover {
   color: var(--text-primary);
   background: #f4f4f5;
+}
+
+.btn-action:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .btn-action.copied {

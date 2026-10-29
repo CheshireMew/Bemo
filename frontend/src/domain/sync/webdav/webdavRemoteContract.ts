@@ -253,7 +253,7 @@ export function normalizeWebDavRemoteNoteIndex(index: WebDavRemoteNoteIndexRecor
       ? index.notes
         .map((note) => ({
           note_id: String(note?.note_id || ''),
-          scope: (note?.scope === 'trash' ? 'trash' : 'active') as 'active' | 'trash',
+          scope: (note?.scope === 'purged' ? 'purged' : note?.scope === 'trash' ? 'trash' : 'active') as SyncRemoteNoteState['scope'],
           revision: Math.max(1, Number(note?.revision || 1)),
         }))
         .filter((note) => note.note_id)

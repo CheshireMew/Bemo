@@ -13,7 +13,7 @@ import {
 let hasRegisteredWindowEvents = false;
 
 export function registerSyncWindowEvents(input: {
-  flushPendingQueue: () => Promise<void>;
+  flushPendingQueue: () => Promise<unknown>;
   requestSyncNow: () => void;
 }) {
   if (hasRegisteredWindowEvents || typeof window === 'undefined') return;
@@ -47,7 +47,7 @@ export function registerSyncWindowEvents(input: {
       maybeSyncOnForeground(input.requestSyncNow);
       return;
     }
-    clearScheduledSync();
+    if (shouldPauseBackgroundSync()) clearScheduledSync();
   });
 
   window.addEventListener('focus', () => {

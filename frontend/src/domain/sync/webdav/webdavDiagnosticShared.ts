@@ -71,7 +71,7 @@ export function normalizeRemoteNoteIndex(index: RemoteNoteIndexRecord | null) {
         if (!noteId) return null;
         return {
           note_id: noteId,
-          scope: note?.scope === 'trash' ? 'trash' : 'active',
+          scope: note?.scope === 'purged' ? 'purged' : note?.scope === 'trash' ? 'trash' : 'active',
           revision: Math.max(1, Number(note?.revision || 1)),
         };
       })

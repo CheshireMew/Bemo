@@ -78,7 +78,8 @@ export async function readWebDavSnapshot(
 ): Promise<(SnapshotRecord & { notes: Record<string, WebDavSnapshotNote> }) | null> {
   if (!manifest.latest_snapshot) return null;
   const snapshot = await readJson<SnapshotRecord>(snapshotUrl(baseUrl, manifest.latest_snapshot), headers);
-  if (!snapshot) return null;
+  if (!snapshot) throw new Error(`同步快照缺失：${manifest.latest_snapshot}`);
+  validateSnapshotMeta(snapshot);
   if (!Array.isArray(snapshot.shards) || snapshot.shards.length === 0) {
     return {
       ...snapshot,
@@ -89,8 +90,14 @@ export async function readWebDavSnapshot(
   const notes: Record<string, WebDavSnapshotNote> = {};
   for (const shard of snapshot.shards) {
     const payload = await readJson<SnapshotRecord>(snapshotShardUrl(baseUrl, manifest.latest_snapshot, shard.file), headers);
-    if (!payload?.notes) continue;
+    if (!payload?.notes) throw new Error(`同步快照分片缺失或无效：${shard.file}`);
+    if (shard.note_count !== undefined && Object.keys(payload.notes).length !== shard.note_count) {
+      throw new Error(`同步快照分片不完整：${shard.file}`);
+    }
     Object.assign(notes, payload.notes);
+  }
+  if (snapshot.note_count !== undefined && Object.keys(notes).length !== snapshot.note_count) {
+    throw new Error('同步快照笔记数量不完整');
   }
 
   return {
@@ -104,17 +111,32 @@ export async function readWebDavSnapshotMeta(
   headers: HeadersInit,
   snapshotName: string,
 ) {
-  return readJson<SnapshotRecord>(snapshotUrl(baseUrl, snapshotName), headers);
+  const snapshot = await readJson<SnapshotRecord>(snapshotUrl(baseUrl, snapshotName), headers);
+  if (snapshot) validateSnapshotMeta(snapshot);
+  return snapshot;
+}
+
+function validateSnapshotMeta(snapshot: SnapshotRecord) {
+  if (Array.isArray(snapshot.shards) && snapshot.shards.length) {
+    const total = snapshot.shards.reduce((sum, shard) => sum + shard.note_count, 0);
+    if (snapshot.shards.some(shard => !shard.file || !Number.isInteger(shard.note_count) || shard.note_count <= 0)
+      || (snapshot.note_count !== undefined && total !== snapshot.note_count)) throw new Error('同步快照分片目录不完整');
+  } else if (!snapshot.notes || (snapshot.note_count !== undefined && Object.keys(snapshot.notes).length !== snapshot.note_count)) {
+    throw new Error('同步快照笔记内容缺失或不完整');
+  }
 }
 
 export async function readWebDavSnapshotShard(
   baseUrl: string,
   headers: HeadersInit,
   snapshotName: string,
-  shard: { file: string },
+  shard: { file: string; note_count?: number },
 ) {
   const payload = await readJson<SnapshotRecord>(snapshotShardUrl(baseUrl, snapshotName, shard.file), headers);
-  return payload?.notes || {};
+  if (!payload?.notes || (shard.note_count !== undefined && Object.keys(payload.notes).length !== shard.note_count)) {
+    throw new Error(`同步快照分片缺失或不完整：${shard.file}`);
+  }
+  return payload.notes;
 }
 
 export function planWebDavSnapshotWrite(
@@ -237,13 +259,21 @@ export async function readChangesFromBatches(
   minCursor: number,
 ) {
   const changes: WebDavBatchChange[] = [];
+  let coveredCursor = minCursor;
   for (const batch of batches) {
+    if (toCursorNumber(batch.started_after_cursor) > coveredCursor) throw new Error(`同步批次之间缺少进度：${batch.file}`);
     const payload = await readBatch(baseUrl, headers, batch);
-    if (!payload?.changes?.length) continue;
+    if (!payload || !Array.isArray(payload.changes) || payload.changes.length !== batch.change_count) {
+      throw new Error(`同步批次缺失或不完整：${batch.file}`);
+    }
+    let expected = toCursorNumber(batch.started_after_cursor) + 1;
     for (const change of payload.changes) {
+      if (toCursorNumber(change.cursor) !== expected++) throw new Error(`同步批次进度不连续：${batch.file}`);
       if (toCursorNumber(change.cursor) <= minCursor) continue;
       changes.push(change);
     }
+    if (expected - 1 !== toCursorNumber(batch.latest_cursor)) throw new Error(`同步批次进度不完整：${batch.file}`);
+    coveredCursor = Math.max(coveredCursor, toCursorNumber(batch.latest_cursor));
   }
   return changes;
 }

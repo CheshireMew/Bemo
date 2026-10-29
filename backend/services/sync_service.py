@@ -10,11 +10,15 @@ def ensure_sync_store() -> None:
 
 
 def get_sync_info() -> dict[str, Any]:
-    return {
+    info = {
         "format_version": 1,
         "latest_cursor": str(sync_store_repository.get_latest_cursor()),
         "blob_prefix": "/api/sync/blobs",
     }
+    if sync_store_repository.uses_app_store():
+        from services.hosted_sync_service import get_store_id
+        info['store_id'] = get_store_id()
+    return info
 
 
 def get_sync_state() -> dict[str, Any]:
@@ -23,6 +27,7 @@ def get_sync_state() -> dict[str, Any]:
         "status": "completed",
         "fingerprint": None,
         "remoteNotes": sync_store_repository.list_current_note_states(),
+        **get_sync_info(),
     }
 
 
@@ -37,28 +42,27 @@ def push_changes(changes: list[dict[str, Any]]) -> dict[str, Any]:
             conflicts.append({"operation_id": "", "reason": "missing_operation_id"})
             continue
 
-        existing_cursor = sync_store_repository.get_applied_operation_cursor(operation_id)
-        if existing_cursor is not None:
+        with sync_store_repository.transaction():
+            existing_cursor = sync_store_repository.get_applied_operation_cursor(operation_id)
+            if existing_cursor is not None:
+                stored = sync_store_repository.list_changes_after(existing_cursor - 1, 1)[0]
+                accepted.append({"operation_id": operation_id, "cursor": str(existing_cursor),
+                                 "duplicate": True, "change": stored})
+                continue
+
+            result = sync_change_apply.apply_remote_change(change)
+            if result["status"] == "conflict":
+                conflicts.append(result)
+                continue
+
+            cursor = sync_store_repository.persist_applied_change(change, result)
+            if sync_store_repository.uses_app_store():
+                from services.hosted_sync_service import project_accepted_change
+                project_accepted_change(result['change'])
             accepted.append({
-                "operation_id": operation_id,
-                "cursor": str(existing_cursor),
-                "duplicate": True,
+                "operation_id": operation_id, "cursor": str(cursor),
+                "note_id": result["note_id"], "revision": result["revision"], "change": result["change"],
             })
-            continue
-
-        result = sync_change_apply.apply_remote_change(change)
-        if result["status"] == "conflict":
-            conflicts.append(result)
-            continue
-
-        cursor = sync_store_repository.persist_applied_change(change, result)
-        accepted.append({
-            "operation_id": operation_id,
-            "cursor": str(cursor),
-            "note_id": result["note_id"],
-            "revision": result["revision"],
-            "change": result["change"],
-        })
 
     return {
         "accepted": accepted,

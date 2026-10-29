@@ -22,7 +22,7 @@
         <Sun v-if="isDarkMode" :size="20" />
         <Moon v-else :size="20" />
       </button>
-      <button class="icon-btn" type="button" title="设置" aria-label="打开设置" @click="emit('openSettings')">
+      <button v-if="showSettings" class="icon-btn" type="button" title="设置" aria-label="打开设置" @click="emit('openSettings')">
         <Settings :size="20" />
       </button>
     </div>
@@ -37,9 +37,11 @@ import { isDarkMode, toggleTheme } from '../../../store/ui';
 
 withDefaults(defineProps<{
   showSidebarToggle?: boolean;
+  showSettings?: boolean;
   searchPlaceholder?: string;
 }>(), {
   showSidebarToggle: false,
+  showSettings: true,
   searchPlaceholder: 'Ctrl+K 或直接搜索...',
 });
 

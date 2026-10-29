@@ -2,9 +2,9 @@
   <header class="mobile-topbar">
     <ShellTopbarControls
       show-sidebar-toggle
+      :show-settings="false"
       search-placeholder=""
       @openSidebar="emit('openSidebar')"
-      @openSettings="emit('openSettings')"
     />
 
     <div v-if="hasFilters" class="filter-row">
@@ -23,7 +23,6 @@ import { selectedDate, selectedTag } from '../../../store/notes';
 
 const emit = defineEmits<{
   openSidebar: [];
-  openSettings: [];
 }>();
 
 const hasFilters = computed(() => Boolean(selectedTag.value || selectedDate.value));
