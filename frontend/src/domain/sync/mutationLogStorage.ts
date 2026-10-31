@@ -82,7 +82,12 @@ export async function bindLegacyMutationTarget(target: SyncTarget, targetId: str
       const request = log.getAll();
       request.onsuccess = () => {
         for (const item of request.result as ChangeRecord[]) {
-          if ((!item.target || item.target === target) && !item.target_id) log.put({ ...item, target, target_id: targetId });
+          if ((!item.target || item.target === target) && !item.target_id) {
+            log.put({ ...item, target, target_id: targetId });
+            if (item.payload.workspace_replacement && item.payload.desired_scope === 'purged') {
+              tx.objectStore('syncState').put({ key: `sync:${encodeURIComponent(targetId)}:deleted:${encodeURIComponent(item.entity_id)}`, value: '1' });
+            }
+          }
         }
       };
     };

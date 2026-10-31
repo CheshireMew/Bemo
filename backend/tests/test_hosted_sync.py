@@ -51,12 +51,12 @@ class HostedSyncTests(ApiTestCase):
         created = self.client.post('/api/app/notes/', json={'content': 'web', 'tags': ['one']}).json()
         note_id = created['note_id']
         self.assertEqual(self.changes()[0]['entity_id'], note_id)
-        self.client.put(f'/api/app/notes/{note_id}', json={'content': 'web edit', 'tags': ['two']})
-        self.client.patch(f'/api/app/notes/{note_id}', json={'pinned': True})
+        self.client.put(f'/api/app/notes/{note_id}', json={**self.note_version(note_id), 'content': 'web edit', 'tags': ['two']})
+        self.client.patch(f'/api/app/notes/{note_id}', json={**self.note_version(note_id), 'pinned': True})
         self.client.delete(f'/api/app/notes/{note_id}')
         self.client.post(f'/api/app/notes/trash/{note_id}/restore')
         self.client.delete(f'/api/app/notes/{note_id}')
-        self.client.delete(f'/api/app/notes/trash/{note_id}')
+        self.client.request('DELETE', f'/api/app/notes/trash/{note_id}', json=self.note_version(note_id))
         changes = self.changes()
         self.assertEqual([c['type'] for c in changes], [
             'note.create', 'note.update', 'note.update', 'note.trash', 'note.restore', 'note.trash', 'note.purge'])
@@ -66,7 +66,7 @@ class HostedSyncTests(ApiTestCase):
 
     def test_web_and_device_edits_share_revision_checks_and_duplicate_receipts(self):
         self.push()
-        self.client.put('/api/app/notes/shared', json={'content': 'web edit', 'tags': []})
+        self.client.put('/api/app/notes/shared', json={**self.note_version('shared'), 'base_revision': 1, 'content': 'web edit', 'tags': []})
         stale = self.push('stale', 'note.update', 1, 'stale remote')
         self.assertEqual(stale['conflicts'][0]['reason'], 'revision_conflict')
         duplicate = self.push()
@@ -109,12 +109,12 @@ class HostedSyncTests(ApiTestCase):
     def test_parallel_web_and_device_writes_cannot_leave_different_snapshots(self):
         self.push()
         def web_edit():
-            return self.client.put('/api/app/notes/shared', json={'content': 'web concurrent', 'tags': []})
+            return self.client.put('/api/app/notes/shared', json={**self.note_version('shared'), 'base_revision': 1, 'content': 'web concurrent', 'tags': []})
         def device_edit():
             return self.push('parallel', 'note.update', 1, 'device concurrent')
         with ThreadPoolExecutor(max_workers=2) as pool:
             a, b = pool.submit(web_edit), pool.submit(device_edit)
-            self.assertEqual(a.result().status_code, 200)
+            self.assertIn(a.result().status_code, (200, 409))
             b.result()
         last = self.changes()[-1]['payload']
         self.assertEqual((self.notes()[0]['content'], self.notes()[0]['revision']), (last['content'], last['revision']))
@@ -162,7 +162,7 @@ class HostedSyncTests(ApiTestCase):
 
     def test_adopting_another_targets_revision_cannot_reuse_a_hosted_version(self):
         self.push()
-        self.client.put('/api/app/notes/shared', json={'content': 'app revision two', 'tags': []})
+        self.client.put('/api/app/notes/shared', json={**self.note_version('shared'), 'base_revision': 1, 'content': 'app revision two', 'tags': []})
         replica = self.client.post('/api/app/replica/read', json={'operation_ids': []}).json()
         replica['notes'][0].update(content='external target confirmed revision one', revision=1)
         self.assertEqual(self.client.post('/api/app/replica/commit', json=replica).status_code, 200)
@@ -194,7 +194,7 @@ class HostedSyncTests(ApiTestCase):
         upload = self.client.post('/api/app/attachments', files={'file': ('history.png', b'history', 'image/png')}).json()
         note = self.client.post('/api/app/notes/', json={'content': '![history](/images/history.png)', 'tags': []}).json()
         self.client.delete(f"/api/app/notes/{note['note_id']}")
-        self.client.delete(f"/api/app/notes/trash/{note['note_id']}")
+        self.client.request("DELETE", f"/api/app/notes/trash/{note['note_id']}", json=self.note_version(note["note_id"]))
         response = self.client.post('/api/app/storage/cleanup-orphans')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['deleted_files'], ['history.png'])

@@ -235,7 +235,9 @@ export async function permanentDelete(noteId: string) {
   if (pendingNoteIds.value.has(noteId)) return;
   pendingNoteIds.value.add(noteId);
   try {
-    const queued = await purgeTrashNote(noteId);
+    const expected = trashNotes.value.find(note => note.note_id === noteId);
+    if (!expected) return;
+    const queued = await purgeTrashNote(noteId, expected);
     if (queued) requestSyncNow();
     await fetchTrash();
   } catch (e) {

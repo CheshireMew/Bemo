@@ -57,7 +57,7 @@ cases.splice(2, 0, ['001/002/003 separate app and sync stores round trip', async
     assert.equal(result.conflicts?.length ?? 0, 0);
   };
   await push({ operation_id: 'other-create', device_id: 'other-device', entity_id: 'other-note', type: 'note.create', base_revision: 0, timestamp: new Date().toISOString(), payload: { content: 'remote create', tags: [], revision: 1, created_at: '2020-01-01T00:00:00Z' } });
-  await updateBackendNote(saved.note_id, { content: 'primary updated', tags: [] });
+  await updateBackendNote(saved.note_id, { base_revision: (await listBackendNotes()).find(n => n.note_id === saved.note_id)!.revision, base_edit_version: (await listBackendNotes()).find(n => n.note_id === saved.note_id)!.edit_version!, content: 'primary updated', tags: [] });
   await flushPendingQueue();
   assert.equal(getSyncState().error, '');
   let current = await listBackendNotes();
@@ -104,7 +104,7 @@ cases.splice(2, 0, ['001 backend conflict copy, replay and recreation from trash
   settings.sync.mode = 'local';
   setRuntimeConfigOverride({ apiBase: baseUrl, appStorageMode: 'backend' });
   const original = await createBackendNote({ content: 'original', tags: [] });
-  await updateBackendNote(original.note_id, { content: 'local edit', tags: [] });
+  await updateBackendNote(original.note_id, { base_revision: (await listBackendNotes()).find(n => n.note_id === original.note_id)!.revision, base_edit_version: (await listBackendNotes()).find(n => n.note_id === original.note_id)!.edit_version!, content: 'local edit', tags: [] });
   const incoming = { operation_id: 'concurrent-edit', device_id: 'other', entity_id: original.note_id, type: 'note.update', base_revision: 1, payload: { content: 'remote edit', tags: [], revision: 2 } };
   const result = await applyChangesLocally([incoming]);
   assert.equal(result.conflicts.length, 1);

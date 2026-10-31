@@ -8,6 +8,7 @@ from services import app_store_repository as repository
 from services.app_storage_service import _normalize_notes, _upsert_note_snapshot
 from services.note_contract import app_note_from_row, now_iso, normalize_note_timestamp_iso
 from services.service_errors import ConflictError, ValidationError
+from services.sync_contract import sync_state_prefix, sync_note_key
 
 
 def _ensure_tables():
@@ -51,7 +52,7 @@ def mutate(action: Callable, change_type: str, context: dict | None, note_id: st
                     "target": context["target"], "target_id": context.get('target_id'), "timestamp": now_iso(),
                     "base_revision": 0 if change_type == 'note.create' else revision if is_purge else max(0, revision - 1),
                     "payload": {"filename": note["filename"], "revision": revision + 1} if is_purge else {
-                        **note, "created_at": normalize_note_timestamp_iso(note['created_at']),
+                        **{key: value for key, value in note.items() if key != 'edit_version'}, "created_at": normalize_note_timestamp_iso(note['created_at']),
                         "updated_at": normalize_note_timestamp_iso(note['updated_at']),
                     },
                 }
@@ -84,6 +85,9 @@ def claim_legacy_target(target: str, target_id: str):
                     if not change.get('target_id'):
                         change['target_id'] = target_id
                         conn.execute("UPDATE sync_outbox SET change_json = ? WHERE operation_id = ?", (json.dumps(change), change['operation_id']))
+                        if change.get('payload', {}).get('workspace_replacement') and change['payload'].get('desired_scope') == 'purged':
+                            conn.execute('INSERT OR REPLACE INTO sync_state VALUES (?, ?)',
+                                (sync_note_key(target_id, 'deleted', change['entity_id']), '1'))
 
 
 def read_sync_state(key: str):
@@ -134,7 +138,7 @@ def _snapshot():
     return token, rows
 
 
-def read_replica(operation_ids: list[str]):
+def read_replica(operation_ids: list[str], target_id: str | None = None):
     with repository.transaction():
         _ensure_tables()
         token, rows = _snapshot()
@@ -144,8 +148,22 @@ def read_replica(operation_ids: list[str]):
                 row = conn.execute("SELECT result_json FROM sync_inbox WHERE operation_id = ?", (operation_id,)).fetchone()
                 if row:
                     receipts[operation_id] = json.loads(row[0])
+        deleted_ids, applied_cursors = [], {}
+        if target_id:
+            from urllib.parse import unquote
+            prefix = sync_state_prefix(target_id)
+            for state in list_sync_state(prefix):
+                name = state['key'][len(prefix):]
+                if name.startswith('deleted:'):
+                    deleted_ids.append(unquote(name[len('deleted:'):]))
+                elif name.startswith('baseline:'):
+                    baseline = json.loads(state['value'])
+                    if baseline.get('cursor'):
+                        applied_cursors[baseline['note_id']] = baseline['cursor']
         return {"token": token, "notes": [app_note_from_row(r) for r in rows if not r["deleted_at"]],
-                "trash": [app_note_from_row(r) for r in rows if r["deleted_at"]], "receipts": receipts}
+                "trash": [app_note_from_row(r) for r in rows if r["deleted_at"]], "receipts": receipts,
+                'workspace_epoch': read_sync_state('workspace_epoch')['value'] or '0',
+                'deleted_ids': deleted_ids, 'applied_cursors': applied_cursors}
 
 
 def commit_replica(payload: dict[str, Any]):
@@ -155,6 +173,8 @@ def commit_replica(payload: dict[str, Any]):
         raise ValidationError("Duplicate note ID in replica")
     with repository.transaction():
         _ensure_tables()
+        if payload.get('workspace_epoch') != (read_sync_state('workspace_epoch')['value'] or '0'):
+            raise ConflictError('工作区已被替换，原同步操作已停止，请重新同步。')
         token, rows = _snapshot()
         if token != payload.get("token"):
             raise ConflictError("主存储在同步期间发生变化，请重试。")

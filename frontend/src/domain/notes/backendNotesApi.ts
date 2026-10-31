@@ -1,9 +1,7 @@
 import type { NoteMeta } from './notesTypes.js';
 import { normalizeAppNoteRecord } from './noteContract.js';
 import { resolveBackendUrl } from '../../config.js';
-import { getOrCreateDeviceId } from '../storage/deviceIdentity.js';
-import { readSyncConfigSnapshot } from '../sync/syncConfig.js';
-import { getSyncTargetId } from '../sync/syncTargetIdentity.js';
+import { getSyncContextHeaders } from '../sync/syncContext.js';
 
 type NoteContentPayload = {
   content: string;
@@ -19,6 +17,8 @@ type NoteContentPayload = {
 };
 
 type NotePatchPayload = {
+  base_revision: number;
+  base_edit_version: string;
   pinned?: boolean;
   tags?: string[];
 };
@@ -28,17 +28,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!url) {
     throw new Error('当前没有可用的笔记服务地址。');
   }
-  const sync = readSyncConfigSnapshot();
 
   const response = await fetch(url, {
     ...init,
     signal: init?.signal ?? AbortSignal.timeout(30_000),
     headers: {
       'Content-Type': 'application/json',
-      ...(init?.method && sync.mode !== 'local' ? {
-        'X-Bemo-Sync-Context': JSON.stringify({ target: sync.mode,
-          target_id: getSyncTargetId(sync), device_id: await getOrCreateDeviceId() }),
-      } : {}),
+      ...(init?.method ? await getSyncContextHeaders() : {}),
       ...(init?.headers || {}),
     },
   });
@@ -87,7 +83,7 @@ export async function createBackendNote(payload: NoteContentPayload): Promise<No
   return requireNormalizedNote(note);
 }
 
-export async function updateBackendNote(noteId: string, payload: NoteContentPayload): Promise<NoteMeta> {
+export async function updateBackendNote(noteId: string, payload: NoteContentPayload & { base_revision: number; base_edit_version: string }): Promise<NoteMeta> {
   const note = await request<NoteMeta & { deleted_at?: string }>(`/api/app/notes/${encodeURIComponent(noteId)}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
@@ -122,9 +118,10 @@ export async function restoreBackendTrashNote(noteId: string): Promise<NoteMeta>
   return requireNormalizedNote(note);
 }
 
-export async function purgeBackendTrashNote(noteId: string): Promise<void> {
+export async function purgeBackendTrashNote(noteId: string, version: { revision: number; edit_version?: string }): Promise<void> {
   await request<{ ok: boolean }>(`/api/app/notes/trash/${encodeURIComponent(noteId)}`, {
     method: 'DELETE',
+    body: JSON.stringify({ base_revision: version.revision, base_edit_version: version.edit_version }),
   });
 }
 

@@ -1,9 +1,12 @@
 import hashlib
+import time
 from urllib.parse import quote
 
 from services import app_store_repository
 from services.note_contract import now_iso
-from services.service_errors import NotFoundError, ValidationError
+from services.service_errors import ConflictError, NotFoundError, ValidationError
+
+UPLOAD_HOLD_SECONDS = 24 * 60 * 60
 
 
 def register_attachment(filename: str, data: bytes, mime_type: str | None = None) -> dict:
@@ -15,14 +18,14 @@ def register_attachment(filename: str, data: bytes, mime_type: str | None = None
     blob_hash = f"sha256:{hashlib.sha256(blob_bytes).hexdigest()}"
     normalized_mime = str(mime_type or "application/octet-stream").strip() or "application/octet-stream"
 
-    app_store_repository.put_blob_record(blob_hash, blob_bytes)
-    app_store_repository.upsert_attachment_record(
-        clean_filename,
-        blob_hash,
-        normalized_mime,
-        len(blob_bytes),
-        now_iso(),
-    )
+    with app_store_repository.transaction():
+        existing = app_store_repository.get_attachment_record(clean_filename)
+        if existing and existing['blob_hash'] != blob_hash:
+            raise ConflictError('同名附件内容不同，原附件已保留。请使用新的附件文件名。')
+        app_store_repository.put_blob_record(blob_hash, blob_bytes)
+        app_store_repository.upsert_attachment_record(clean_filename, blob_hash, normalized_mime, len(blob_bytes), now_iso())
+        with app_store_repository.connect() as conn:
+            conn.execute('INSERT OR REPLACE INTO attachment_upload_holds VALUES (?, ?)', (clean_filename, time.time() + UPLOAD_HOLD_SECONDS))
 
     return {
         "filename": clean_filename,

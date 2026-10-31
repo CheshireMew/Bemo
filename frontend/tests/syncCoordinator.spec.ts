@@ -169,7 +169,8 @@ async function testPreflightFailureMarksOfflineAndSchedulesRetry() {
       }
       throw new Error(`unexpected request ${init?.method || 'GET'} ${url}`);
     }, async () => {
-      await flushPendingQueue();
+      const result = await flushPendingQueue();
+      assert.equal(result.status, 'failed');
     });
 
     const state = getSyncState();
@@ -249,6 +250,8 @@ async function testCoordinatorResumesBootstrapFromStoredShardCursor() {
     part1: 0,
     part2: 0,
   };
+  const etags = new Map<string, string>();
+  let version = 0;
 
   await withMockedBrowser(async () => {
     await withMockedFetch((url, init) => {
@@ -257,7 +260,11 @@ async function testCoordinatorResumesBootstrapFromStoredShardCursor() {
         return new Response('', { status: 405 });
       }
       if (init?.method === 'PUT') {
+        const headers = new Headers(init.headers);
+        if ((headers.get('If-Match') && headers.get('If-Match') !== (etags.get(path) || '"initial"'))
+          || (headers.get('If-None-Match') === '*' && files.has(path))) return new Response('', { status: 412 });
         files.set(path, typeof init.body === 'string' ? init.body : '');
+        etags.set(path, `"${++version}"`);
         return new Response('', { status: 200 });
       }
       if (init?.method === 'GET' || !init?.method) {
@@ -271,12 +278,14 @@ async function testCoordinatorResumesBootstrapFromStoredShardCursor() {
           status: 200,
           headers: {
             'Content-Type': 'application/json',
+            ETag: etags.get(path) || '"initial"',
           },
         });
       }
       throw new Error(`unexpected request ${init?.method || 'GET'} ${url}`);
     }, async () => {
-      await flushPendingQueue();
+      const result = await flushPendingQueue();
+      assert.equal(result.status, 'completed', JSON.stringify(result));
     });
   });
 

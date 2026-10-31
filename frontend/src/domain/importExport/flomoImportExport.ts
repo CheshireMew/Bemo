@@ -6,7 +6,7 @@ import { parseFlomoCsv, parseFlomoZip } from './flomoArchiveParser.js';
 
 function escapeCsvField(value: string) {
   const normalized = String(value ?? '');
-  if (/[",\n]/.test(normalized)) {
+  if (/[",\r\n]/.test(normalized)) {
     return `"${normalized.replace(/"/g, '""')}"`;
   }
   return normalized;

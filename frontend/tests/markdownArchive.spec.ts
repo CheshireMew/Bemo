@@ -62,8 +62,8 @@ async function testArchiveIncludesNotesTrashAttachmentsAndManifest() {
 
   const archive = await buildMarkdownArchiveBlob();
   const zip = await unzip(archive);
-  const noteFile = await zip.file('notes/2026/03/18/note-1.md')?.async('string');
-  const trashFile = await zip.file('trash/2026/03/18/trash-1.md')?.async('string');
+  const noteFile = await zip.file(/^notes\/[^/]+\/note-1\.md$/)[0]?.async('string');
+  const trashFile = await zip.file(/^trash\/[^/]+\/trash-1\.md$/)[0]?.async('string');
   const manifest = await zip.file('manifest.json')?.async('string');
   const attachment = await zip.file('attachments/cover.png')?.async('uint8array');
   const orphan = await zip.file('attachments/orphan.png')?.async('uint8array');
@@ -73,7 +73,7 @@ async function testArchiveIncludesNotesTrashAttachmentsAndManifest() {
   assert.ok(manifest);
   assert.ok(attachment);
   assert.equal(orphan, undefined);
-  assert.match(String(noteFile), /\.\.\/\.\.\/\.\.\/attachments\/cover\.png/);
+  assert.match(String(noteFile), /\.\.\/\.\.\/attachments\/cover\.png/);
   assert.match(String(manifest), /"format": "bemo-markdown-archive"/);
 }
 

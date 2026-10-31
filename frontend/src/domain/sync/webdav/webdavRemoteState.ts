@@ -2,6 +2,7 @@ import type { SyncBootstrapState, SyncRemoteNoteState } from '../syncTransport.j
 import { buildBootstrapChangesFromSnapshot } from './webdavSnapshotState.js';
 import type { BatchIndexRecord, ManifestRecord } from './webdavTypes.js';
 import { readJson, readJsonDocument, webdavRequest, writeJson } from './webdavRequest.js';
+import { withWebDavLease } from './webdavLease.js';
 import {
   areSameBatchIndex,
   areSameManifest,
@@ -60,6 +61,7 @@ export async function writeWebDavManifest(
   manifest: ManifestRecord,
   options: {
     ifMatch?: string | null;
+    ifNoneMatch?: string | null;
   } = {},
 ) {
   const normalized = normalizeWebDavManifest(manifest);
@@ -137,6 +139,7 @@ export async function writeWebDavBatchIndex(
   index: BatchIndexRecord,
   options: {
     ifMatch?: string | null;
+    ifNoneMatch?: string | null;
   } = {},
 ) {
   const normalized = normalizeWebDavBatchIndex(index);
@@ -171,13 +174,17 @@ export async function writeWebDavPendingWrite(
   headers: HeadersInit,
   pendingWrite: WebDavPendingWriteRecord,
 ) {
-  await writeJson(pendingWriteUrl(baseUrl), headers, pendingWrite);
+  await writeJson(pendingWriteUrl(baseUrl), headers, pendingWrite, { ifNoneMatch: '*' });
 }
 
-export async function deleteWebDavPendingWrite(baseUrl: string, headers: HeadersInit) {
+export async function deleteWebDavPendingWrite(baseUrl: string, headers: HeadersInit, transactionId: string) {
+  const document = await readJsonDocument<WebDavPendingWriteRecord>(pendingWriteUrl(baseUrl), headers);
+  if (!document.value) return true;
+  if (document.value.transaction_id !== transactionId) throw new Error('WebDAV 待处理事务已变化，已停止清理。');
+  if (!document.etag) throw new Error('WebDAV 待处理记录缺少强 ETag，已停止清理。');
   const response = await webdavRequest(pendingWriteUrl(baseUrl), {
     method: 'DELETE',
-    headers,
+    headers: { ...headers, 'If-Match': document.etag },
   });
   return response.status === 404 || (response.status >= 200 && response.status < 300);
 }
@@ -226,7 +233,7 @@ export async function readWebDavRemoteNoteStates(
   }
 
   const remoteNotes = await buildRemoteNoteStatesFromRemote(baseUrl, headers, manifest);
-  await writeWebDavRemoteNoteIndex(baseUrl, headers, remoteNotes, manifest.latest_cursor);
+  // Readers may rebuild the cache in memory; only a leased writer publishes it.
   return remoteNotes;
 }
 
@@ -240,10 +247,6 @@ async function repairManifestFromBatchIndex(
   if (toCursorNumber(batchIndex.latest_cursor) <= toCursorNumber(manifest.latest_cursor)) {
     return manifest;
   }
-  const activeLease = await readJson<{ device_id?: string; expires_at?: string }>(`${baseUrl}/lease.json`, headers);
-  if (activeLease?.device_id && Date.parse(String(activeLease.expires_at || '')) > Date.now()) {
-    return manifest;
-  }
   const nextManifest = normalizeWebDavManifest({
     ...manifest,
     latest_cursor: batchIndex.latest_cursor,
@@ -254,6 +257,7 @@ async function repairManifestFromBatchIndex(
   });
   await writeWebDavManifest(baseUrl, headers, nextManifest, {
     ifMatch: manifestEtag,
+    ifNoneMatch: manifestEtag ? undefined : '*',
   });
   return nextManifest;
 }
@@ -263,12 +267,17 @@ export async function commitPendingWebDavWrite(
   headers: HeadersInit,
   pendingWrite: WebDavPendingWriteRecord,
   commitOptions: WebDavCommitOptions,
+  assertLease: () => Promise<void>,
 ) {
+  await assertLease();
   await writeWebDavBatchIndex(baseUrl, headers, pendingWrite.next_batch_index, {
     ifMatch: commitOptions.batchIndexEtag,
+    ifNoneMatch: commitOptions.batchIndexEtag ? undefined : '*',
   });
+  await assertLease();
   await writeWebDavManifest(baseUrl, headers, pendingWrite.next_manifest, {
     ifMatch: commitOptions.manifestEtag,
+    ifNoneMatch: commitOptions.manifestEtag ? undefined : '*',
   });
 }
 
@@ -306,19 +315,36 @@ async function cleanupPendingArtifacts(
   baseUrl: string,
   headers: HeadersInit,
   pendingWrite: WebDavPendingWriteRecord,
+  assertLease: () => Promise<void>,
+  current: WebDavRemoteState,
 ) {
+  const retained = new Set([
+    ...current.manifest.batches.map(batch => batchUrl(baseUrl, batch.file)),
+    ...current.batchIndex.batches.map(batch => batchUrl(baseUrl, batch.file)),
+  ]);
+  for (const name of [current.manifest.latest_snapshot, current.batchIndex.latest_snapshot]) {
+    if (!name) continue;
+    retained.add(snapshotUrl(baseUrl, name));
+    const meta = await readWebDavSnapshotMeta(baseUrl, headers, name);
+    for (const shard of meta?.shards || []) retained.add(snapshotFileUrl(baseUrl, shard.file));
+  }
   const stagedUrls = [
     ...pendingWrite.staged_files.batch_files.map((file) => batchUrl(baseUrl, file)),
     ...pendingWrite.staged_files.snapshot_files.map((file) => snapshotFileUrl(baseUrl, file)),
   ];
-  await Promise.all(stagedUrls.map((url) => deleteRemoteFile(url, headers)));
+  for (const url of stagedUrls) {
+    if (retained.has(url)) continue;
+    await assertLease();
+    await deleteRemoteFile(url, headers);
+  }
 }
 
-async function deleteSnapshotFiles(baseUrl: string, headers: HeadersInit, snapshotName: string) {
+async function deleteSnapshotFiles(baseUrl: string, headers: HeadersInit, snapshotName: string, assertLease: () => Promise<void>) {
   const snapshot = await readWebDavSnapshotMeta(baseUrl, headers, snapshotName);
   if (snapshot?.shards?.length) {
-    await Promise.all(snapshot.shards.map((shard) => deleteRemoteFile(snapshotFileUrl(baseUrl, shard.file), headers)));
+    for (const shard of snapshot.shards) { await assertLease(); await deleteRemoteFile(snapshotFileUrl(baseUrl, shard.file), headers); }
   }
+  await assertLease();
   await deleteRemoteFile(snapshotUrl(baseUrl, snapshotName), headers);
 }
 
@@ -329,6 +355,7 @@ export async function cleanupPrunedWebDavFiles(
   previousBatchIndex: BatchIndexRecord,
   nextManifest: ManifestRecord,
   nextBatchIndex: BatchIndexRecord,
+  assertLease: () => Promise<void>,
 ) {
   const retainedBatchFiles = new Set(nextBatchIndex.batches.map((batch) => batch.file));
   const previousBatchFiles = new Set([
@@ -336,11 +363,11 @@ export async function cleanupPrunedWebDavFiles(
     ...previousBatchIndex.batches.map((batch) => batch.file),
   ]);
 
-  await Promise.all(
-    Array.from(previousBatchFiles)
-      .filter((file) => file && !retainedBatchFiles.has(file))
-      .map((file) => deleteRemoteFile(batchUrl(baseUrl, file), headers)),
-  );
+  for (const file of previousBatchFiles) {
+    if (!file || retainedBatchFiles.has(file)) continue;
+    await assertLease();
+    await deleteRemoteFile(batchUrl(baseUrl, file), headers);
+  }
 
   const retainedSnapshots = new Set<string>();
   if (nextManifest.latest_snapshot) retainedSnapshots.add(nextManifest.latest_snapshot);
@@ -349,24 +376,21 @@ export async function cleanupPrunedWebDavFiles(
   if (previousManifest.latest_snapshot) previousSnapshots.add(previousManifest.latest_snapshot);
   if (previousBatchIndex.latest_snapshot) previousSnapshots.add(previousBatchIndex.latest_snapshot);
 
-  await Promise.all(
-    Array.from(previousSnapshots)
-      .filter((snapshotName) => snapshotName && !retainedSnapshots.has(snapshotName))
-      .map((snapshotName) => deleteSnapshotFiles(baseUrl, headers, snapshotName)),
-  );
+  for (const snapshot of previousSnapshots) {
+    if (retainedSnapshots.has(snapshot)) continue;
+    await deleteSnapshotFiles(baseUrl, headers, snapshot, assertLease);
+  }
 }
 
 async function recoverPendingWebDavWrite(
   baseUrl: string,
   headers: HeadersInit,
+  assertLease: () => Promise<void>,
 ): Promise<WebDavRemoteState | null> {
   const pendingWrite = await readWebDavPendingWrite(baseUrl, headers);
   if (!pendingWrite) return null;
 
-  const activeLease = await readJson<{ device_id?: string; expires_at?: string }>(`${baseUrl}/lease.json`, headers);
-  if (activeLease?.device_id && Date.parse(String(activeLease.expires_at || '')) > Date.now()) {
-    return null;
-  }
+  await assertLease();
 
   const currentManifestDocument = await readWebDavManifestDocument(baseUrl, headers);
   const currentBatchIndexDocument = await readWebDavBatchIndexDocument(baseUrl, headers, currentManifestDocument.manifest);
@@ -381,8 +405,10 @@ async function recoverPendingWebDavWrite(
     toCursorNumber(currentManifest.latest_cursor) > toCursorNumber(pendingWrite.next_manifest.latest_cursor)
     || toCursorNumber(currentBatchIndex.latest_cursor) > toCursorNumber(pendingWrite.next_batch_index.latest_cursor)
   ) {
-    await cleanupPendingArtifacts(baseUrl, headers, pendingWrite);
-    await deleteWebDavPendingWrite(baseUrl, headers);
+    await assertLease();
+    await cleanupPendingArtifacts(baseUrl, headers, pendingWrite, assertLease, { manifest: currentManifest, batchIndex: currentBatchIndex });
+    await assertLease();
+    await deleteWebDavPendingWrite(baseUrl, headers, pendingWrite.transaction_id);
     return {
       manifest: currentManifest,
       batchIndex: currentBatchIndex,
@@ -391,25 +417,31 @@ async function recoverPendingWebDavWrite(
 
   if (previousManifestMatches && previousBatchIndexMatches) {
     if (!(await arePendingArtifactsReady(baseUrl, headers, pendingWrite))) {
-      await cleanupPendingArtifacts(baseUrl, headers, pendingWrite);
-      await deleteWebDavPendingWrite(baseUrl, headers);
+      await assertLease();
+      await cleanupPendingArtifacts(baseUrl, headers, pendingWrite, assertLease, { manifest: currentManifest, batchIndex: currentBatchIndex });
+      await assertLease();
+      await deleteWebDavPendingWrite(baseUrl, headers, pendingWrite.transaction_id);
       return {
         manifest: currentManifest,
         batchIndex: currentBatchIndex,
       };
     }
+    await assertLease();
     await commitPendingWebDavWrite(baseUrl, headers, pendingWrite, {
       manifestEtag: currentManifestDocument.etag,
       batchIndexEtag: currentBatchIndexDocument.etag,
-    });
+    }, assertLease);
   } else if (previousManifestMatches && nextBatchIndexMatches) {
+    await assertLease();
     await writeWebDavManifest(baseUrl, headers, pendingWrite.next_manifest, {
       ifMatch: currentManifestDocument.etag,
+      ifNoneMatch: currentManifestDocument.etag ? undefined : '*',
     });
   } else if (!nextManifestMatches || !nextBatchIndexMatches) {
     throw new Error('WebDAV 检测到未完成写入且远端状态已经变化，已停止自动恢复');
   }
 
+  await assertLease();
   await cleanupPrunedWebDavFiles(
     baseUrl,
     headers,
@@ -417,8 +449,10 @@ async function recoverPendingWebDavWrite(
     pendingWrite.previous_batch_index,
     pendingWrite.next_manifest,
     pendingWrite.next_batch_index,
+    assertLease,
   );
-  await deleteWebDavPendingWrite(baseUrl, headers);
+  await assertLease();
+  await deleteWebDavPendingWrite(baseUrl, headers, pendingWrite.transaction_id);
 
   return {
     manifest: pendingWrite.next_manifest,
@@ -429,13 +463,22 @@ async function recoverPendingWebDavWrite(
 export async function readResolvedRemoteStateDocuments(
   baseUrl: string,
   headers: HeadersInit,
+  assertLease?: () => Promise<void>,
 ): Promise<WebDavRemoteStateDocument> {
-  const recoveredState = await recoverPendingWebDavWrite(baseUrl, headers);
+  if (!assertLease) {
+    const current = await readCurrentRemoteStateDocuments(baseUrl, headers);
+    const pending = await readWebDavPendingWrite(baseUrl, headers);
+    if (!pending && toCursorNumber(current.batchIndex.latest_cursor) <= toCursorNumber(current.manifest.latest_cursor)) return current;
+    return withWebDavLease(baseUrl, headers, check => readResolvedRemoteStateDocuments(baseUrl, headers, check));
+  }
+  await assertLease();
+  const recoveredState = await recoverPendingWebDavWrite(baseUrl, headers, assertLease);
   if (recoveredState) {
     return readCurrentRemoteStateDocuments(baseUrl, headers);
   }
 
   const currentState = await readCurrentRemoteStateDocuments(baseUrl, headers);
+  await assertLease();
   const repairedManifest = await repairManifestFromBatchIndex(
     baseUrl,
     headers,
@@ -455,8 +498,9 @@ export async function readResolvedRemoteStateDocuments(
 export async function readWebDavRemoteState(
   baseUrl: string,
   headers: HeadersInit,
+  assertLease?: () => Promise<void>,
 ): Promise<WebDavRemoteState> {
-  const { manifest, batchIndex } = await readResolvedRemoteStateDocuments(baseUrl, headers);
+  const { manifest, batchIndex } = await readResolvedRemoteStateDocuments(baseUrl, headers, assertLease);
   return {
     manifest,
     batchIndex,

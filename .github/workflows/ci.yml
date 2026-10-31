@@ -48,7 +48,7 @@ jobs:
         run: cargo check --locked
 
   backend-sync:
-    name: Backend Sync Server
+    name: Backend App and Sync
     runs-on: windows-latest
     defaults:
       run:
@@ -67,10 +67,7 @@ jobs:
       - name: Install sync-server dependencies
         run: pip install -r requirements.txt
 
-      - name: Run sync-server tests
+      - name: Run maintained app, hosted-sync, integrity and lifecycle suites
         env:
           BEMO_SYNC_TOKEN: ci-sync-token
         run: python run_tests.py
-
-      - name: Check Windows backend lifecycle
-        run: python run_tests.py --pattern test_desktop_lifecycle.py

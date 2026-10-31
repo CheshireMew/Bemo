@@ -10,6 +10,11 @@ from fastapi.testclient import TestClient
 class ApiTestCase(unittest.TestCase):
     app_mode = "server"
 
+    def note_version(self, note_id):
+        notes = self.client.get('/api/app/notes/').json() + self.client.get('/api/app/notes/trash').json()
+        note = next(note for note in notes if note['note_id'] == note_id)
+        return {'base_revision': note['revision'], 'base_edit_version': note['edit_version']}
+
     def setUp(self):
         self.test_root = os.path.join(os.path.dirname(__file__), ".tmp")
         os.makedirs(self.test_root, exist_ok=True)

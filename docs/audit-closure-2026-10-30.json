@@ -1,0 +1,1011 @@
+{
+  "schema": "project-steward-findings-closure/v2",
+  "claim": "all-findings-resolved",
+  "original_findings": [
+    {
+      "id": "BEMO-01",
+      "title": "BEMO-01 过期编辑覆盖",
+      "source": {
+        "reference": "docs/audit-remediation-2026-10-30.md original 9 findings table",
+        "content_identity": "sha256:5bcfbc1e7066d21523206613b11a324897d2cb1246ab12319fd3c5dc587a3612"
+      },
+      "conditions": [
+        {
+          "id": "01-C1",
+          "text": "固定并传递编辑基准版本",
+          "evidence_scope": "编辑会话 → notes adapter → app API / IndexedDB → 重读；过期与缺失版本、正常重试",
+          "required_evidence_kinds": [
+            "automated-test",
+            "user-chain"
+          ]
+        },
+        {
+          "id": "01-C2",
+          "text": "在写事务中拒绝过期保存，保留编辑内容",
+          "evidence_scope": "编辑会话 → notes adapter → app API / IndexedDB → 重读；过期与缺失版本、正常重试",
+          "required_evidence_kinds": [
+            "automated-test",
+            "user-chain"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-02",
+      "title": "BEMO-02 备份一致性",
+      "source": {
+        "reference": "docs/audit-remediation-2026-10-30.md original 9 findings table",
+        "content_identity": "sha256:5bcfbc1e7066d21523206613b11a324897d2cb1246ab12319fd3c5dc587a3612"
+      },
+      "conditions": [
+        {
+          "id": "02-C1",
+          "text": "正文、回收站和附件同一快照",
+          "evidence_scope": "后端读事务、本地 IndexedDB 读事务 → 正式备份/导入",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        },
+        {
+          "id": "02-C2",
+          "text": "并发恢复/删除时不漏记不重复、能重新导入",
+          "evidence_scope": "后端读事务、本地 IndexedDB 读事务 → 正式备份/导入",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-03",
+      "title": "BEMO-03 WebDAV 附件清理",
+      "source": {
+        "reference": "docs/audit-remediation-2026-10-30.md original 9 findings table",
+        "content_identity": "sha256:5bcfbc1e7066d21523206613b11a324897d2cb1246ab12319fd3c5dc587a3612"
+      },
+      "conditions": [
+        {
+          "id": "03-C1",
+          "text": "仍可重放的历史引用保持可读",
+          "evidence_scope": "WebDAV transport → 写租约、保留批次和快照 → 落后设备拉取",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        },
+        {
+          "id": "03-C2",
+          "text": "清理与上传、提交有并发保护",
+          "evidence_scope": "WebDAV transport → 写租约、保留批次和快照 → 落后设备拉取",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-04",
+      "title": "BEMO-04 CSV 多行正文",
+      "source": {
+        "reference": "docs/audit-remediation-2026-10-30.md original 9 findings table",
+        "content_identity": "sha256:5bcfbc1e7066d21523206613b11a324897d2cb1246ab12319fd3c5dc587a3612"
+      },
+      "conditions": [
+        {
+          "id": "04-C1",
+          "text": "完整记录解析换行/逗号/引号",
+          "evidence_scope": "导出 CSV → File → 正式导入 → 主存储",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        },
+        {
+          "id": "04-C2",
+          "text": "正式往返保持正文和数量",
+          "evidence_scope": "导出 CSV → File → 正式导入 → 主存储",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-05",
+      "title": "BEMO-05 关闭草稿",
+      "source": {
+        "reference": "docs/audit-remediation-2026-10-30.md original 9 findings table",
+        "content_identity": "sha256:5bcfbc1e7066d21523206613b11a324897d2cb1246ab12319fd3c5dc587a3612"
+      },
+      "conditions": [
+        {
+          "id": "05-C1",
+          "text": "正常关闭/刷新前保存待写草稿",
+          "evidence_scope": "编辑器 → localStorage → 页面/桌面关闭与重开",
+          "required_evidence_kinds": [
+            "automated-test",
+            "user-chain"
+          ]
+        },
+        {
+          "id": "05-C2",
+          "text": "重开恢复末次输入",
+          "evidence_scope": "编辑器 → localStorage → 页面/桌面关闭与重开",
+          "required_evidence_kinds": [
+            "automated-test",
+            "user-chain"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-06",
+      "title": "BEMO-06 本地回收站",
+      "source": {
+        "reference": "docs/audit-remediation-2026-10-30.md original 9 findings table",
+        "content_identity": "sha256:5bcfbc1e7066d21523206613b11a324897d2cb1246ab12319fd3c5dc587a3612"
+      },
+      "conditions": [
+        {
+          "id": "06-C1",
+          "text": "笔记移动和引用更新同一事务",
+          "evidence_scope": "localTrashMutations → IndexedDB → 查询/备份",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        },
+        {
+          "id": "06-C2",
+          "text": "中途失败和重开后唯一归属、备份有效",
+          "evidence_scope": "localTrashMutations → IndexedDB → 查询/备份",
+          "required_evidence_kinds": [
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-07",
+      "title": "BEMO-07 CI 漏收集",
+      "source": {
+        "reference": "docs/audit-remediation-2026-10-30.md original 9 findings table",
+        "content_identity": "sha256:5bcfbc1e7066d21523206613b11a324897d2cb1246ab12319fd3c5dc587a3612"
+      },
+      "conditions": [
+        {
+          "id": "07-C1",
+          "text": "默认收集 hosted/integrity 套件",
+          "evidence_scope": "run_tests.py → unittest 真实收集/执行 → CI",
+          "required_evidence_kinds": [
+            "static-check",
+            "automated-test"
+          ]
+        },
+        {
+          "id": "07-C2",
+          "text": "正式 runner 执行并传播失败",
+          "evidence_scope": "run_tests.py → unittest 真实收集/执行 → CI",
+          "required_evidence_kinds": [
+            "static-check",
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-08",
+      "title": "BEMO-08 桌面日志",
+      "source": {
+        "reference": "docs/audit-remediation-2026-10-30.md original 9 findings table",
+        "content_identity": "sha256:5bcfbc1e7066d21523206613b11a324897d2cb1246ab12319fd3c5dc587a3612"
+      },
+      "conditions": [
+        {
+          "id": "08-C1",
+          "text": "正式入口保留可定位的后端诊断",
+          "evidence_scope": "Rust 启动器 → Python stdout/stderr → 持久日志/错误表面",
+          "required_evidence_kinds": [
+            "static-check",
+            "runtime",
+            "automated-test"
+          ]
+        },
+        {
+          "id": "08-C2",
+          "text": "启动失败提供准确原因",
+          "evidence_scope": "Rust 启动器 → Python stdout/stderr → 持久日志/错误表面",
+          "required_evidence_kinds": [
+            "static-check",
+            "runtime",
+            "automated-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BEMO-09",
+      "title": "BEMO-09 文档漂移",
+      "source": {
+        "reference": "docs/audit-remediation-2026-10-30.md original 9 findings table",
+        "content_identity": "sha256:5bcfbc1e7066d21523206613b11a324897d2cb1246ab12319fd3c5dc587a3612"
+      },
+      "conditions": [
+        {
+          "id": "09-C1",
+          "text": "能力清单与架构/入口一致",
+          "evidence_scope": "既有项目文档与 Git 清单人工核对",
+          "required_evidence_kinds": [
+            "manual-review"
+          ]
+        },
+        {
+          "id": "09-C2",
+          "text": "第三方说明与跟踪内容一致",
+          "evidence_scope": "既有项目文档与 Git 清单人工核对",
+          "required_evidence_kinds": [
+            "manual-review"
+          ]
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "BEMO-01",
+      "conditions": [
+        {
+          "id": "01-C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-01-proof-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "编辑会话 → notes adapter → app API / IndexedDB → 重读；过期与缺失版本、正常重试",
+              "expected_test_identity": "auditRemediation.spec.js",
+              "collected_test_identity": "auditRemediation.spec.js"
+            },
+            {
+              "id": "BEMO-01-proof-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "编辑会话 → notes adapter → app API / IndexedDB → 重读；过期与缺失版本、正常重试",
+              "expected_test_identity": "test_api_data_integrity.DataIntegrityTests.test_stale_editor_cannot_overwrite_a_newer_saved_note",
+              "collected_test_identity": "test_api_data_integrity.DataIntegrityTests.test_stale_editor_cannot_overwrite_a_newer_saved_note"
+            },
+            {
+              "id": "BEMO-01-proof-3",
+              "kind": "user-chain",
+              "status": "pass",
+              "scope": "编辑会话 → notes adapter → app API / IndexedDB → 重读；过期与缺失版本、正常重试"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        },
+        {
+          "id": "01-C2",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-01-proof-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "编辑会话 → notes adapter → app API / IndexedDB → 重读；过期与缺失版本、正常重试",
+              "expected_test_identity": "auditRemediation.spec.js",
+              "collected_test_identity": "auditRemediation.spec.js"
+            },
+            {
+              "id": "BEMO-01-proof-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "编辑会话 → notes adapter → app API / IndexedDB → 重读；过期与缺失版本、正常重试",
+              "expected_test_identity": "test_api_data_integrity.DataIntegrityTests.test_stale_editor_cannot_overwrite_a_newer_saved_note",
+              "collected_test_identity": "test_api_data_integrity.DataIntegrityTests.test_stale_editor_cannot_overwrite_a_newer_saved_note"
+            },
+            {
+              "id": "BEMO-01-proof-3",
+              "kind": "user-chain",
+              "status": "pass",
+              "scope": "编辑会话 → notes adapter → app API / IndexedDB → 重读；过期与缺失版本、正常重试"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-02",
+      "conditions": [
+        {
+          "id": "02-C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-02-proof-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "后端读事务、本地 IndexedDB 读事务 → 正式备份/导入",
+              "expected_test_identity": "auditRemediation.spec.js",
+              "collected_test_identity": "auditRemediation.spec.js"
+            },
+            {
+              "id": "BEMO-02-proof-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "后端读事务、本地 IndexedDB 读事务 → 正式备份/导入",
+              "expected_test_identity": "test_api_data_integrity.DataIntegrityTests.test_backup_keeps_one_snapshot_during_concurrent_restore",
+              "collected_test_identity": "test_api_data_integrity.DataIntegrityTests.test_backup_keeps_one_snapshot_during_concurrent_restore"
+            },
+            {
+              "id": "BEMO-02-proof-3",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "后端读事务、本地 IndexedDB 读事务 → 正式备份/导入",
+              "expected_test_identity": "test_api_data_integrity.DataIntegrityTests.test_backup_keeps_active_note_during_concurrent_trash_and_purge",
+              "collected_test_identity": "test_api_data_integrity.DataIntegrityTests.test_backup_keeps_active_note_during_concurrent_trash_and_purge"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        },
+        {
+          "id": "02-C2",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-02-proof-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "后端读事务、本地 IndexedDB 读事务 → 正式备份/导入",
+              "expected_test_identity": "auditRemediation.spec.js",
+              "collected_test_identity": "auditRemediation.spec.js"
+            },
+            {
+              "id": "BEMO-02-proof-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "后端读事务、本地 IndexedDB 读事务 → 正式备份/导入",
+              "expected_test_identity": "test_api_data_integrity.DataIntegrityTests.test_backup_keeps_one_snapshot_during_concurrent_restore",
+              "collected_test_identity": "test_api_data_integrity.DataIntegrityTests.test_backup_keeps_one_snapshot_during_concurrent_restore"
+            },
+            {
+              "id": "BEMO-02-proof-3",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "后端读事务、本地 IndexedDB 读事务 → 正式备份/导入",
+              "expected_test_identity": "test_api_data_integrity.DataIntegrityTests.test_backup_keeps_active_note_during_concurrent_trash_and_purge",
+              "collected_test_identity": "test_api_data_integrity.DataIntegrityTests.test_backup_keeps_active_note_during_concurrent_trash_and_purge"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-03",
+      "conditions": [
+        {
+          "id": "03-C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-03-proof-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "WebDAV transport → 写租约、保留批次和快照 → 落后设备拉取",
+              "expected_test_identity": "webdavLocalServer.spec.js",
+              "collected_test_identity": "webdavLocalServer.spec.js"
+            },
+            {
+              "id": "BEMO-03-proof-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "WebDAV transport → 写租约、保留批次和快照 → 落后设备拉取",
+              "expected_test_identity": "webdavProtocol.spec.js",
+              "collected_test_identity": "webdavProtocol.spec.js"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        },
+        {
+          "id": "03-C2",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-03-proof-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "WebDAV transport → 写租约、保留批次和快照 → 落后设备拉取",
+              "expected_test_identity": "webdavLocalServer.spec.js",
+              "collected_test_identity": "webdavLocalServer.spec.js"
+            },
+            {
+              "id": "BEMO-03-proof-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "WebDAV transport → 写租约、保留批次和快照 → 落后设备拉取",
+              "expected_test_identity": "webdavProtocol.spec.js",
+              "collected_test_identity": "webdavProtocol.spec.js"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-04",
+      "conditions": [
+        {
+          "id": "04-C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-04-proof-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "导出 CSV → File → 正式导入 → 主存储",
+              "expected_test_identity": "auditRemediation.spec.js",
+              "collected_test_identity": "auditRemediation.spec.js"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        },
+        {
+          "id": "04-C2",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-04-proof-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "导出 CSV → File → 正式导入 → 主存储",
+              "expected_test_identity": "auditRemediation.spec.js",
+              "collected_test_identity": "auditRemediation.spec.js"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-05",
+      "conditions": [
+        {
+          "id": "05-C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-05-proof-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "编辑器 → localStorage → 页面/桌面关闭与重开",
+              "expected_test_identity": "auditRemediation.spec.js",
+              "collected_test_identity": "auditRemediation.spec.js"
+            },
+            {
+              "id": "BEMO-05-proof-2",
+              "kind": "user-chain",
+              "status": "pass",
+              "scope": "编辑器 → localStorage → 页面/桌面关闭与重开"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        },
+        {
+          "id": "05-C2",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-05-proof-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "编辑器 → localStorage → 页面/桌面关闭与重开",
+              "expected_test_identity": "auditRemediation.spec.js",
+              "collected_test_identity": "auditRemediation.spec.js"
+            },
+            {
+              "id": "BEMO-05-proof-2",
+              "kind": "user-chain",
+              "status": "pass",
+              "scope": "编辑器 → localStorage → 页面/桌面关闭与重开"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-06",
+      "conditions": [
+        {
+          "id": "06-C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-06-proof-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "localTrashMutations → IndexedDB → 查询/备份",
+              "expected_test_identity": "auditRemediation.spec.js",
+              "collected_test_identity": "auditRemediation.spec.js"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        },
+        {
+          "id": "06-C2",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-06-proof-1",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "localTrashMutations → IndexedDB → 查询/备份",
+              "expected_test_identity": "auditRemediation.spec.js",
+              "collected_test_identity": "auditRemediation.spec.js"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-07",
+      "conditions": [
+        {
+          "id": "07-C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-07-proof-1",
+              "kind": "static-check",
+              "status": "pass",
+              "scope": "run_tests.py → unittest 真实收集/执行 → CI"
+            },
+            {
+              "id": "BEMO-07-proof-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "run_tests.py → unittest 真实收集/执行 → CI",
+              "expected_test_identity": "test_hosted_sync.HostedSyncTests.test_default_web_writes_are_immediately_available_to_devices",
+              "collected_test_identity": "test_hosted_sync.HostedSyncTests.test_default_web_writes_are_immediately_available_to_devices"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        },
+        {
+          "id": "07-C2",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-07-proof-1",
+              "kind": "static-check",
+              "status": "pass",
+              "scope": "run_tests.py → unittest 真实收集/执行 → CI"
+            },
+            {
+              "id": "BEMO-07-proof-2",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "run_tests.py → unittest 真实收集/执行 → CI",
+              "expected_test_identity": "test_hosted_sync.HostedSyncTests.test_default_web_writes_are_immediately_available_to_devices",
+              "collected_test_identity": "test_hosted_sync.HostedSyncTests.test_default_web_writes_are_immediately_available_to_devices"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-08",
+      "conditions": [
+        {
+          "id": "08-C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-08-proof-1",
+              "kind": "static-check",
+              "status": "pass",
+              "scope": "Rust 启动器 → Python stdout/stderr → 持久日志/错误表面"
+            },
+            {
+              "id": "BEMO-08-proof-2",
+              "kind": "runtime",
+              "status": "pass",
+              "scope": "Rust 启动器 → Python stdout/stderr → 持久日志/错误表面"
+            },
+            {
+              "id": "BEMO-08-proof-3",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "Rust 启动器 → Python stdout/stderr → 持久日志/错误表面",
+              "expected_test_identity": "backend::tests::startup_failure_retains_stderr_and_log_path",
+              "collected_test_identity": "backend::tests::startup_failure_retains_stderr_and_log_path"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        },
+        {
+          "id": "08-C2",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-08-proof-1",
+              "kind": "static-check",
+              "status": "pass",
+              "scope": "Rust 启动器 → Python stdout/stderr → 持久日志/错误表面"
+            },
+            {
+              "id": "BEMO-08-proof-2",
+              "kind": "runtime",
+              "status": "pass",
+              "scope": "Rust 启动器 → Python stdout/stderr → 持久日志/错误表面"
+            },
+            {
+              "id": "BEMO-08-proof-3",
+              "kind": "automated-test",
+              "status": "pass",
+              "scope": "Rust 启动器 → Python stdout/stderr → 持久日志/错误表面",
+              "expected_test_identity": "backend::tests::startup_failure_retains_stderr_and_log_path",
+              "collected_test_identity": "backend::tests::startup_failure_retains_stderr_and_log_path"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": true
+        }
+      ]
+    },
+    {
+      "id": "BEMO-09",
+      "conditions": [
+        {
+          "id": "09-C1",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-09-proof-1",
+              "kind": "manual-review",
+              "status": "pass",
+              "scope": "既有项目文档与 Git 清单人工核对"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": false
+        },
+        {
+          "id": "09-C2",
+          "state": "resolved",
+          "last_evidence": [
+            {
+              "id": "BEMO-09-proof-1",
+              "kind": "manual-review",
+              "status": "pass",
+              "scope": "既有项目文档与 Git 清单人工核对"
+            }
+          ],
+          "unverified_boundaries": [],
+          "claims_automated_regression": false
+        }
+      ]
+    }
+  ],
+  "validation_events": [
+    {
+      "id": "red-original",
+      "status": "fail",
+      "classification": "product",
+      "scope": "formal backend data-integrity runner, stale save and concurrent restore",
+      "blocking": false,
+      "relevance": "Expected pre-fix failures. Same regressions pass after repair."
+    },
+    {
+      "id": "edit-baseline-red",
+      "status": "fail",
+      "classification": "product",
+      "scope": "auditRemediation.spec baseline changed to revision 8",
+      "blocking": false,
+      "relevance": "Fixed watcher source identity; final spec and Windows editor conflict pass."
+    },
+    {
+      "id": "guard-ts-error",
+      "status": "fail",
+      "classification": "product",
+      "scope": "TypeScript misplaced assertLease parameter",
+      "blocking": false,
+      "relevance": "Moved to pushWebDavBatch; final formal compilation and nine specs pass."
+    },
+    {
+      "id": "module-path-ts-error",
+      "status": "fail",
+      "classification": "verifier",
+      "scope": "NodeNext draft test import boundary",
+      "blocking": false,
+      "relevance": "Changed existing settings import to explicit .js, consistent with project module resolution. Final compilation passes."
+    },
+    {
+      "id": "fixture-missing-idb",
+      "status": "fail",
+      "classification": "verifier",
+      "scope": "old WebDAV cleanup mock missing IndexedDB, lease and strong ETag",
+      "blocking": false,
+      "relevance": "Completed the required fixture boundaries; final protocol and HTTP service specs pass."
+    },
+    {
+      "id": "npm-offline-probe",
+      "status": "fail",
+      "classification": "environment",
+      "scope": "npm exec --offline -- node ENOTCACHED",
+      "blocking": false,
+      "relevance": "No installation occurred. Used D:/Tools/NodeJS/node.exe."
+    },
+    {
+      "id": "rust-toolchain-env",
+      "status": "fail",
+      "classification": "environment",
+      "scope": "first Cargo call without configured D drive homes",
+      "blocking": false,
+      "relevance": "Used existing CARGO_HOME and RUSTUP_HOME on D drive. Windows Rust test and real desktop startup pass."
+    },
+    {
+      "id": "esm-url-probe",
+      "status": "fail",
+      "classification": "verifier",
+      "scope": "diagnostic Node import using raw D drive ESM specifier",
+      "blocking": false,
+      "relevance": "Changed to file URL; real runtime checks passed."
+    },
+    {
+      "id": "native-not-ready-probe",
+      "status": "fail",
+      "classification": "verifier",
+      "scope": "CDP connection before observed running application was ready",
+      "blocking": false,
+      "relevance": "Waited on existing cargo process; did not restart it. Actual native checks passed."
+    },
+    {
+      "id": "native-api-probe",
+      "status": "fail",
+      "classification": "verifier",
+      "scope": "handwritten API_BASE diagnostic request returned empty body",
+      "blocking": false,
+      "relevance": "Switched to formal backendNotesApi module; actual native conflict chain passed."
+    },
+    {
+      "id": "guessed-source-paths",
+      "status": "fail",
+      "classification": "verifier",
+      "scope": "several guessed source paths and PowerShell rg wildcard paths",
+      "blocking": false,
+      "relevance": "Resolved actual paths with rg --files; no product conclusion relied on failed reads."
+    },
+    {
+      "id": "diff-blank-line",
+      "status": "fail",
+      "classification": "verifier",
+      "scope": "git diff --check CI trailing blank line",
+      "blocking": false,
+      "relevance": "Corrected whitespace. Final diff check passes."
+    },
+    {
+      "id": "native-old-pid-teardown",
+      "status": "not-run",
+      "classification": "scope",
+      "scope": "closing the final native test PID after it had already exited",
+      "blocking": false,
+      "relevance": "Authoritative app session returned exit 0 and no matching native process remains."
+    },
+    {
+      "id": "vite-controlled-stop",
+      "status": "fail",
+      "classification": "scope",
+      "scope": "stopped the task-owned Vite process after runtime verification; npm wrapper exited 1",
+      "blocking": false,
+      "relevance": "Controlled teardown, not a product or validation failure. Verified exact process command before stopping."
+    },
+    {
+      "id": "backend-final",
+      "status": "pass",
+      "classification": "product",
+      "scope": "formal default run_tests.py, 46 unique tests",
+      "blocking": false,
+      "relevance": "Includes hosted 15, integrity 8, lifecycle 1 and data-integrity regressions; exit 0."
+    },
+    {
+      "id": "frontend-final",
+      "status": "pass",
+      "classification": "product",
+      "scope": "formal frontend runner, 9 selected unique specs",
+      "blocking": false,
+      "relevance": "auditRemediation, indexedDbTransactions, localImportExport, backendAppStore, serverDeploymentSync, syncRemediation, uxState, webdavLocalServer, webdavProtocol; exit 0."
+    },
+    {
+      "id": "rust-final",
+      "status": "pass",
+      "classification": "product",
+      "scope": "Windows Rust startup stderr and log-path test",
+      "blocking": false,
+      "relevance": "Exact collected identity backend::tests::startup_failure_retains_stderr_and_log_path; exit 0."
+    },
+    {
+      "id": "native-final",
+      "status": "pass",
+      "classification": "product",
+      "scope": "actual Windows source desktop, isolated data and WebView profile",
+      "blocking": false,
+      "relevance": "Normal close/reopen, refresh, stale editor preservation, ready log and controlled startup failure all pass."
+    },
+    {
+      "id": "type-diff-review-final",
+      "status": "pass",
+      "classification": "product",
+      "scope": "Vue app typecheck, final diff whitespace check, source and documentation review",
+      "blocking": false,
+      "relevance": "Current source and documentation agree with the nine frozen findings. No package, deletion, commit, push or deployment."
+    },
+    {
+      "id": "closure-first-contract-check",
+      "status": "fail",
+      "classification": "verifier",
+      "scope": "initial v2 closure ledger evidence-to-event mapping",
+      "blocking": false,
+      "relevance": "Added missing references from each final evidence record to its actual recorded validation event; no product or original condition was changed."
+    },
+    {
+      "id": "BEMO-01-proof-1",
+      "status": "pass",
+      "classification": "product",
+      "scope": "编辑会话 → notes adapter → app API / IndexedDB → 重读；过期与缺失版本、正常重试",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: auditRemediation.spec.js. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-01-proof-2",
+      "status": "pass",
+      "classification": "product",
+      "scope": "编辑会话 → notes adapter → app API / IndexedDB → 重读；过期与缺失版本、正常重试",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: test_api_data_integrity.DataIntegrityTests.test_stale_editor_cannot_overwrite_a_newer_saved_note. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-01-proof-3",
+      "status": "pass",
+      "classification": "product",
+      "scope": "编辑会话 → notes adapter → app API / IndexedDB → 重读；过期与缺失版本、正常重试",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: user-chain. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-02-proof-1",
+      "status": "pass",
+      "classification": "product",
+      "scope": "后端读事务、本地 IndexedDB 读事务 → 正式备份/导入",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: auditRemediation.spec.js. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-02-proof-2",
+      "status": "pass",
+      "classification": "product",
+      "scope": "后端读事务、本地 IndexedDB 读事务 → 正式备份/导入",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: test_api_data_integrity.DataIntegrityTests.test_backup_keeps_one_snapshot_during_concurrent_restore. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-02-proof-3",
+      "status": "pass",
+      "classification": "product",
+      "scope": "后端读事务、本地 IndexedDB 读事务 → 正式备份/导入",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: test_api_data_integrity.DataIntegrityTests.test_backup_keeps_active_note_during_concurrent_trash_and_purge. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-03-proof-1",
+      "status": "pass",
+      "classification": "product",
+      "scope": "WebDAV transport → 写租约、保留批次和快照 → 落后设备拉取",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: webdavLocalServer.spec.js. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-03-proof-2",
+      "status": "pass",
+      "classification": "product",
+      "scope": "WebDAV transport → 写租约、保留批次和快照 → 落后设备拉取",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: webdavProtocol.spec.js. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-04-proof-1",
+      "status": "pass",
+      "classification": "product",
+      "scope": "导出 CSV → File → 正式导入 → 主存储",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: auditRemediation.spec.js. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-05-proof-1",
+      "status": "pass",
+      "classification": "product",
+      "scope": "编辑器 → localStorage → 页面/桌面关闭与重开",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: auditRemediation.spec.js. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-05-proof-2",
+      "status": "pass",
+      "classification": "product",
+      "scope": "编辑器 → localStorage → 页面/桌面关闭与重开",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: user-chain. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-06-proof-1",
+      "status": "pass",
+      "classification": "product",
+      "scope": "localTrashMutations → IndexedDB → 查询/备份",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: auditRemediation.spec.js. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-07-proof-1",
+      "status": "pass",
+      "classification": "product",
+      "scope": "run_tests.py → unittest 真实收集/执行 → CI",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: static-check. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-07-proof-2",
+      "status": "pass",
+      "classification": "product",
+      "scope": "run_tests.py → unittest 真实收集/执行 → CI",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: test_hosted_sync.HostedSyncTests.test_default_web_writes_are_immediately_available_to_devices. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-08-proof-1",
+      "status": "pass",
+      "classification": "product",
+      "scope": "Rust 启动器 → Python stdout/stderr → 持久日志/错误表面",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: static-check. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-08-proof-2",
+      "status": "pass",
+      "classification": "product",
+      "scope": "Rust 启动器 → Python stdout/stderr → 持久日志/错误表面",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: runtime. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-08-proof-3",
+      "status": "pass",
+      "classification": "product",
+      "scope": "Rust 启动器 → Python stdout/stderr → 持久日志/错误表面",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: backend::tests::startup_failure_retains_stderr_and_log_path. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    },
+    {
+      "id": "BEMO-09-proof-1",
+      "status": "pass",
+      "classification": "product",
+      "scope": "既有项目文档与 Git 清单人工核对",
+      "blocking": false,
+      "relevance": "Final evidence reference, reused across conditions rather than counted as another test run: manual-review. Details and exact observed results are in docs/audit-remediation-2026-10-30.md."
+    }
+  ]
+}

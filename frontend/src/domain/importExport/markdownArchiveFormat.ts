@@ -136,7 +136,12 @@ export function sortArchiveNotes(notes: NoteMeta[]) {
 }
 
 export function buildArchiveNotePath(scope: 'notes' | 'trash', note: NoteMeta) {
-  return `${scope}/${normalizeArchivePath(note.filename)}`;
+  const name = normalizeArchivePath(note.filename).split('/').pop() || 'note.md';
+  const stem = name.replace(/\.md$/i, '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') || 'note';
+  // Lowercase UTF-8 hex also distinguishes IDs differing only in letter case
+  // when the ZIP is extracted on Windows. The frontmatter retains the ID.
+  const identity = Array.from(new TextEncoder().encode(note.note_id), byte => byte.toString(16).padStart(2, '0')).join('');
+  return `${scope}/note-${identity}/${stem}.md`;
 }
 
 export function buildMarkdownArchiveDocument(note: NoteMeta, archivePath: string) {

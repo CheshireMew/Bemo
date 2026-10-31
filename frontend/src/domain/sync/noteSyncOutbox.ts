@@ -21,6 +21,18 @@ export async function prepareFirstTargetChanges(queue: ChangeRecord[], remoteNot
   return queue.map(change => {
     const first = !seen.has(change.entity_id);
     seen.add(change.entity_id);
+    if (change.payload.workspace_replacement) {
+      const remote = remoteNotes.get(change.entity_id);
+      const baseline = baselines.get(change.entity_id);
+      const desired = change.payload.desired_scope;
+      const type: ChangeRecord['type'] = desired === 'purged' ? 'note.purge' : desired === 'trash' ? 'note.trash'
+        : !remote ? 'note.create' : remote.scope !== 'active' ? 'note.restore' : 'note.update';
+      const base = baseline?.revision ?? remote?.revision ?? 0;
+      return { ...change, type, base_revision: base, payload: { ...change.payload,
+        ...(type === 'note.restore' && remote?.scope === 'purged' ? { restore_purged: true } : {}),
+        revision: base + 1,
+      } };
+    }
     if (!first || remoteNotes.has(change.entity_id) || baselines.has(change.entity_id)
       || !['note.update', 'note.patch', 'note.restore'].includes(change.type)) return change;
     const note = local.get(change.entity_id);

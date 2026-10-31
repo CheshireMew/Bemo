@@ -37,7 +37,7 @@ export function planBatchWrite(startingCursor: number, changes: SyncChange[]): P
   const nextChanges = enrichChangesWithCursor(startingCursor, changes);
   const startCursor = startingCursor + 1;
   const endCursor = startingCursor + nextChanges.length;
-  const batchId = buildBatchId(startCursor, endCursor);
+  const batchId = `${buildBatchId(startCursor, endCursor)}_${crypto.randomUUID()}`;
   const file = `${batchId}.json`;
   const operationIds = uniqueOperationIds(nextChanges);
   const payload = {
@@ -68,7 +68,7 @@ export function planBatchWrite(startingCursor: number, changes: SyncChange[]): P
 }
 
 export async function writeBatch(baseUrl: string, headers: HeadersInit, plannedBatch: PlannedWebDavBatchWrite) {
-  await writeJson(batchUrl(baseUrl, plannedBatch.file), headers, plannedBatch.payload);
+  await writeJson(batchUrl(baseUrl, plannedBatch.file), headers, plannedBatch.payload, { ifNoneMatch: '*' });
 }
 
 export async function readWebDavSnapshot(
@@ -144,7 +144,7 @@ export function planWebDavSnapshotWrite(
   latestCursor: string,
   notes: Record<string, WebDavSnapshotNote>,
 ): PlannedWebDavSnapshotWrite {
-  const snapshotName = `snapshot_${latestCursor.padStart(8, '0')}.json`;
+  const snapshotName = `snapshot_${latestCursor.padStart(8, '0')}_${crypto.randomUUID()}.json`;
   const generatedAt = new Date().toISOString();
   const entries = Object.entries(notes);
   let currentNotes: Record<string, WebDavSnapshotNote> = {};
@@ -237,7 +237,7 @@ export async function writePlannedWebDavSnapshot(
   plannedSnapshot: PlannedWebDavSnapshotWrite,
 ) {
   for (const write of plannedSnapshot.writes) {
-    await writeJson(write.url, headers, write.payload);
+    await writeJson(write.url, headers, write.payload, { ifNoneMatch: '*' });
   }
 }
 

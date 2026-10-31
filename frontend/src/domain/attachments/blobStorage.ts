@@ -13,6 +13,8 @@ export interface AttachmentBlobRecord {
   blob: Blob;
   mime_type: string;
   updatedAt: number;
+  version?: string;
+  blob_hash?: string;
 }
 
 export interface DraftAttachmentBlobRecord extends AttachmentBlobRecord {
@@ -42,7 +44,7 @@ export function deleteBlobIndexRecord(blobHash: string): Promise<void> {
   return writeStore('blobIndex', store => { store.delete(blobHash); });
 }
 export function putAttachmentBlob(input: { filename: string; blob: Blob; mimeType?: string }): Promise<void> {
-  return writeStore('attachmentBlobs', store => { store.put({ filename: input.filename, blob: input.blob, mime_type: input.mimeType || input.blob.type || 'application/octet-stream', updatedAt: Date.now() }); });
+  return writeStore('attachmentBlobs', store => { store.put({ filename: input.filename, blob: input.blob, mime_type: input.mimeType || input.blob.type || 'application/octet-stream', updatedAt: Date.now(), version: crypto.randomUUID() }); });
 }
 export async function getAttachmentBlobRecord(filename: string): Promise<AttachmentBlobRecord | null> {
   return (await readStore<AttachmentBlobRecord | undefined>('attachmentBlobs', store => store.get(filename))) ?? null;

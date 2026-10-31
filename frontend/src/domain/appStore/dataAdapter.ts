@@ -1,19 +1,20 @@
 import { clearBackendAppStorage } from '../attachments/backendAttachmentsApi.js';
-import {
-  getAllAttachmentBlobRecords,
-} from '../attachments/blobStorage.js';
-import { getReferencedAttachmentFilenames } from '../attachments/attachmentRefStorage.js';
+import type { AttachmentRefRecord } from '../attachments/attachmentRefStorage.js';
 import { extractAttachmentFilename, extractAttachmentUrlsFromContent } from '../attachments/attachmentLinks.js';
 import { clearAttachmentUrlCache } from '../attachments/attachmentUrlResolver.js';
 import { withIndexedDb } from '../storage/transactions.js';
 import { extractAttachmentFilenames } from '../attachments/attachmentRefParser.js';
 import { validateBackupPayload } from '../importExport/backupValidation.js';
 import { shouldUseBackendAppStore } from '../runtime/appStoreRuntime.js';
-import { getCachedNotes } from '../notes/notesStorage.js';
-import { getTrashNotes } from '../notes/trashStorage.js';
 import type { NoteMeta } from '../notes/notesTypes.js';
 import { applyBackendBackupPayload, buildBackendBackupPayload } from '../importExport/backendImportExport.js';
 import type { BackupAttachment, BackupPayload } from '../importExport/backupPayload.js';
+import { scheduleWorkspaceReplacement } from '../sync/workspaceReplacement.js';
+import { getOrCreateDeviceId } from '../storage/deviceIdentity.js';
+import { readSyncConfigSnapshot } from '../sync/syncConfig.js';
+import { getSyncTargetId } from '../sync/syncTargetIdentity.js';
+import type { ChangeRecord } from '../sync/mutationLogStorage.js';
+import type { SyncStateRecord } from '../sync/syncStateStorage.js';
 
 export function usesRemoteAppData() {
   return shouldUseBackendAppStore();
@@ -21,14 +22,14 @@ export function usesRemoteAppData() {
 
 export function getClearCurrentDataPrompt() {
   return shouldUseBackendAppStore()
-    ? '这会永久删除后端主存储中的所有笔记、回收站、附件和同步残留，并清理本机缓存，仅保留设置。使用同一后端的其他设备也会受到影响。建议先导出完整备份。'
-    : '这会清空本地所有笔记、回收站、附件和同步队列，仅保留设置。确定继续吗？';
+    ? '这会永久删除后端主存储中的所有笔记、回收站和附件，并清理本机缓存。删除结果也会同步到已连接的目标，使用同一后端的其他设备也会受到影响。建议先导出完整备份。'
+    : '这会清空本地笔记、回收站和附件，删除结果也会同步到已连接的目标。建议先导出完整备份。';
 }
 
 export function getClearCurrentDataSuccessMessage() {
   return shouldUseBackendAppStore()
-    ? '已清空当前主存储和本机缓存中的笔记、附件与同步残留。'
-    : '已清空本地笔记、附件和同步残留。';
+    ? '已清空当前主存储和本机缓存，删除结果将在同步时发送。'
+    : '已清空本地笔记和附件，删除结果将在同步时发送。';
 }
 
 function collectReferencedAttachmentFilenamesFromNotes(notes: NoteMeta[]): Set<string> {
@@ -44,11 +45,10 @@ function collectReferencedAttachmentFilenamesFromNotes(notes: NoteMeta[]): Set<s
   return filenames;
 }
 
-async function serializeLocalAttachmentBlobs(notes: NoteMeta[], trash: NoteMeta[]): Promise<BackupAttachment[]> {
-  const referenced = await getReferencedAttachmentFilenames(['active', 'trash']);
+async function serializeLocalAttachmentBlobs(notes: NoteMeta[], trash: NoteMeta[], refs: AttachmentRefRecord[], attachments: Array<{filename: string; mime_type: string; blob: Blob}>): Promise<BackupAttachment[]> {
+  const referenced = refs.filter(ref => ref.scope === 'active' || ref.scope === 'trash').map(ref => ref.filename);
   const fallback = collectReferencedAttachmentFilenamesFromNotes([...notes, ...trash]);
   const allowed = new Set<string>([...referenced, ...fallback]);
-  const attachments = await getAllAttachmentBlobRecords();
   return Promise.all(attachments
     .filter((attachment) => allowed.has(attachment.filename))
     .map(async (attachment): Promise<BackupAttachment> => ({
@@ -59,40 +59,48 @@ async function serializeLocalAttachmentBlobs(notes: NoteMeta[], trash: NoteMeta[
 }
 
 async function buildLocalBackupPayload(): Promise<BackupPayload> {
-  const [notes, trash] = await Promise.all([
-    getCachedNotes(),
-    getTrashNotes(),
-  ]);
+  const { notes, trash, refs, attachments } = await withIndexedDb(['cachedNotes', 'trashNotes', 'attachmentRefs', 'attachmentBlobs'], 'readonly', tx => {
+    const notes = tx.objectStore('cachedNotes').getAll();
+    const trash = tx.objectStore('trashNotes').getAll();
+    const refs = tx.objectStore('attachmentRefs').getAll();
+    const attachments = tx.objectStore('attachmentBlobs').getAll();
+    return () => ({ notes: notes.result as NoteMeta[], trash: trash.result as NoteMeta[], refs: refs.result as AttachmentRefRecord[], attachments: attachments.result as Array<{filename: string; mime_type: string; blob: Blob}> });
+  });
   return {
     format: 'bemo-backup',
     version: 2,
     exported_at: new Date().toISOString(),
     notes,
     trash,
-    attachments: await serializeLocalAttachmentBlobs(notes, trash),
+    attachments: await serializeLocalAttachmentBlobs(notes, trash, refs, attachments),
   };
 }
 
 async function applyLocalBackupPayload(payload: Partial<BackupPayload>) {
   const { notes, trash, attachments } = validateBackupPayload(payload);
+  // An imported protocol revision is never an editor's concurrency credential.
+  for (const note of [...notes, ...trash]) note.edit_version = crypto.randomUUID();
   const blobs = attachments.map(item => ({ filename: item.filename, mime_type: item.mime_type,
-    blob: new Blob([Uint8Array.from(item.data)], { type: item.mime_type }), updatedAt: Date.now() }));
+    blob: new Blob([Uint8Array.from(item.data)], { type: item.mime_type }), updatedAt: Date.now(), version: crypto.randomUUID() }));
   const stores = ['cachedNotes', 'trashNotes', 'attachmentBlobs', 'attachmentContentBlobs', 'draftAttachmentBlobs', 'attachmentRefs', 'blobIndex', 'mutationLog', 'conflicts', 'syncState'];
+  const deviceId = await getOrCreateDeviceId();
+  const config = readSyncConfigSnapshot(), targetId = getSyncTargetId(config);
   await withIndexedDb(stores, 'readwrite', tx => {
-    for (const name of stores) if (name !== 'syncState') tx.objectStore(name).clear();
-    notes.forEach(note => tx.objectStore('cachedNotes').put(note));
-    trash.forEach(note => tx.objectStore('trashNotes').put(note));
-    blobs.forEach(blob => tx.objectStore('attachmentBlobs').put(blob));
-    for (const [scope, items] of [['active', notes], ['trash', trash]] as const) {
-      for (const note of items) for (const filename of extractAttachmentFilenames(note.content)) {
-        tx.objectStore('attachmentRefs').put({ id: `note:${note.note_id}:${filename}`, owner_type: 'note', owner_id: note.note_id, note_id: note.note_id, filename, scope, updatedAt: Date.now() });
+    const active = tx.objectStore('cachedNotes').getAll(), deleted = tx.objectStore('trashNotes').getAll();
+    const pending = tx.objectStore('mutationLog').getAll(), state = tx.objectStore('syncState').getAll();
+    state.onsuccess = () => {
+      scheduleWorkspaceReplacement(tx, [...active.result, ...deleted.result] as NoteMeta[], notes, trash,
+        pending.result as ChangeRecord[], state.result as SyncStateRecord[], deviceId,
+        targetId && config.mode !== 'local' ? { target: config.mode, targetId } : undefined);
+      for (const name of stores) if (!['syncState', 'mutationLog'].includes(name)) tx.objectStore(name).clear();
+      notes.forEach(note => tx.objectStore('cachedNotes').put(note));
+      trash.forEach(note => tx.objectStore('trashNotes').put(note));
+      blobs.forEach(blob => tx.objectStore('attachmentBlobs').put(blob));
+      for (const [scope, items] of [['active', notes], ['trash', trash]] as const) {
+        for (const note of items) for (const filename of extractAttachmentFilenames(note.content)) {
+          tx.objectStore('attachmentRefs').put({ id: `note:${note.note_id}:${filename}`, owner_type: 'note', owner_id: note.note_id, note_id: note.note_id, filename, scope, updatedAt: Date.now() });
+        }
       }
-    }
-    for (const target of ['server', 'webdav']) for (const suffix of ['cursor', 'last_sync_at']) tx.objectStore('syncState').delete(`${target}_${suffix}`);
-    const state = tx.objectStore('syncState');
-    const request = state.getAll();
-    request.onsuccess = () => {
-      for (const row of request.result as Array<{ key: string }>) if (row.key.startsWith('sync:')) state.delete(row.key);
     };
   });
   clearAttachmentUrlCache();
@@ -158,8 +166,10 @@ export async function clearLocalReplicaState() {
 export async function clearCurrentAppData() {
   if (shouldUseBackendAppStore()) {
     await clearBackendAppStorage();
+    await clearLocalReplicaState();
+  } else {
+    await applyLocalBackupPayload({ format: 'bemo-backup', version: 3, notes: [], trash: [], attachments: [] });
   }
-  await clearLocalReplicaState();
 
   if (typeof localStorage !== 'undefined') {
     const draftKeys: string[] = [];

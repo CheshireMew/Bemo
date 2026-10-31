@@ -40,6 +40,12 @@ export async function buildMarkdownArchiveBlob() {
     zip.file(archivePath, buildMarkdownArchiveDocument(note, archivePath));
   });
 
+  const archivedNotes = Object.values(zip.files).filter(entry => !entry.dir && entry.name.startsWith('notes/') && entry.name.endsWith('.md'));
+  const archivedTrash = Object.values(zip.files).filter(entry => !entry.dir && entry.name.startsWith('trash/') && entry.name.endsWith('.md'));
+  if (archivedNotes.length !== notes.length || archivedTrash.length !== trash.length) {
+    throw new Error('归档笔记路径重复，已停止导出。');
+  }
+
   let archivedAttachmentCount = 0;
   for (const attachment of attachments) {
     if (!referencedFilenames.has(attachment.filename)) continue;

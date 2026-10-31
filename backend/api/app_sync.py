@@ -8,6 +8,7 @@ router = APIRouter()
 
 class ReplicaRead(BaseModel):
     operation_ids: list[str] = []
+    target_id: str | None = None
 
 
 @router.get('/change-token')
@@ -18,7 +19,7 @@ def app_change_token():
 
 @router.post("/replica/read")
 def read_replica(payload: ReplicaRead):
-    return app_sync_service.read_replica(payload.operation_ids)
+    return app_sync_service.read_replica(payload.operation_ids, payload.target_id)
 
 
 @router.post("/replica/commit")

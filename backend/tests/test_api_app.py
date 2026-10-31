@@ -110,6 +110,10 @@ class AppApiTests(ApiTestCase):
         self.assertEqual(summary_before.status_code, 200)
         self.assertEqual(summary_before.json()["storedAttachments"], 2)
 
+        from services import app_store_repository
+        with app_store_repository.connect() as conn:
+            conn.execute("UPDATE attachment_upload_holds SET expires_at = 0 WHERE filename = 'drop.png'")
+
         cleanup_response = self.client.post("/api/app/storage/cleanup-orphans")
         self.assertEqual(cleanup_response.status_code, 200)
         self.assertEqual(cleanup_response.json()["deleted_count"], 1)

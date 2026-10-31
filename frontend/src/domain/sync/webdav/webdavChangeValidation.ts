@@ -17,7 +17,7 @@ export function validateWebDavChanges(notes: Record<string, WebDavSnapshotNote>,
     else if (blocked.has(id)) reason = 'dependency_conflict';
     else if (kind === 'note.create') { if (note) reason = 'note_exists'; }
     else if (!['note.update', 'note.patch', 'note.trash', 'note.delete', 'note.restore', 'note.purge'].includes(kind)) reason = 'unsupported_change_type';
-    else if (note?.scope === 'purged' && kind !== 'note.purge') reason = 'note_not_found';
+    else if (note?.scope === 'purged' && kind !== 'note.purge' && !(kind === 'note.restore' && change.payload?.restore_purged === true)) reason = 'note_not_found';
     else if ((!note || note.scope !== 'active') && ['note.update', 'note.patch'].includes(kind)) reason = 'note_not_found';
     else if (note && change.base_revision != null && change.base_revision !== note.revision) reason = 'revision_conflict';
     if (reason) {

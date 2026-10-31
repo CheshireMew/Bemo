@@ -5,8 +5,8 @@
     title="编辑笔记"
     :subtitle="note.title || '调整内容、标签和附件'"
     :draft-key="`note-mobile:${note.note_id}`"
-    :initial-content="note.content"
-    :initial-tags="note.tags"
+    :initial-content="editBase?.content ?? note.content"
+    :initial-tags="editBase?.tags ?? note.tags"
     :show-cancel="true"
     :autosave-draft="false"
     :reset-on-success="false"
@@ -23,6 +23,7 @@ import MobileEditorSheet from './MobileEditorSheet.vue';
 import type { EditorSubmitPayload } from '../../Editor.vue';
 import type { NoteMeta } from '../../../store/notes';
 import { updateNoteContent } from '../../../store/notes';
+import { useNoteEditSession } from '../../../composables/useNoteEditSession';
 
 const props = defineProps<{
   open: boolean;
@@ -34,9 +35,10 @@ const emit = defineEmits<{
   saved: [];
 }>();
 
+const editBase = useNoteEditSession(() => props.open, () => props.note);
 const saveEdit = async (payload: EditorSubmitPayload) => {
-  if (!props.note) return;
-  await updateNoteContent(props.note, payload);
+  if (!editBase.value) throw new Error('编辑会话已关闭，请重新打开笔记。');
+  await updateNoteContent(editBase.value, payload);
 };
 
 const handleSaved = () => {

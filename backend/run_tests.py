@@ -9,7 +9,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Run all legacy backend tests, not just sync-server coverage.",
+        help="Compatibility alias: all maintained backend suites run by default.",
     )
     parser.add_argument("--pattern", help="Discover only the selected test file pattern.")
     parser.add_argument("--list", action="store_true", help="List unique test IDs without running them.")
@@ -22,7 +22,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.all:
         suite = unittest.defaultTestLoader.discover(str(tests_dir))
     else:
-        suite = unittest.defaultTestLoader.discover(str(tests_dir), pattern="test_api_*.py")
+        suite = unittest.defaultTestLoader.discover(str(tests_dir), pattern="test_*.py")
     if args.list:
         def collect(node):
             if isinstance(node, unittest.TestSuite):

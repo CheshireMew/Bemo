@@ -38,7 +38,7 @@ await withBackendServer('app', hosted => withBackendServer('app', async desktop 
   settings.sync.mode = 'local';
   assert.equal((await listBackendNotes())[0]?.content, content);
   assert.deepEqual([...new Uint8Array(await (await fetch(`${hosted.baseUrl}/images/desktop.png`)).arrayBuffer())], [4, 5, 6]);
-  await updateBackendNote(created.note_id, { content: 'web edit', tags: ['web'] });
+  await updateBackendNote(created.note_id, { base_revision: (await listBackendNotes()).find(n => n.note_id === created.note_id)!.revision, base_edit_version: (await listBackendNotes()).find(n => n.note_id === created.note_id)!.edit_version!, content: 'web edit', tags: ['web'] });
   useDesktop();
   await sync();
   assert.equal((await listBackendNotes()).find(n => n.note_id === created.note_id)?.content, 'web edit');
@@ -48,8 +48,8 @@ await withBackendServer('app', hosted => withBackendServer('app', async desktop 
   // An existing installation may have configured its own hosted URL as target.
   setRuntimeConfigOverride({ appStorageMode: 'backend', apiBase: hosted.baseUrl });
   Object.assign(settings.sync, { mode: 'server', serverUrl: hosted.baseUrl, accessToken: hosted.syncToken });
-  await patchBackendNote(created.note_id, { pinned: true });
-  await updateBackendNote(created.note_id, { content: 'own hosted endpoint', tags: ['self'] });
+  await patchBackendNote(created.note_id, { base_revision: (await listBackendNotes()).find(n => n.note_id === created.note_id)!.revision, base_edit_version: (await listBackendNotes()).find(n => n.note_id === created.note_id)!.edit_version!, pinned: true });
+  await updateBackendNote(created.note_id, { base_revision: (await listBackendNotes()).find(n => n.note_id === created.note_id)!.revision, base_edit_version: (await listBackendNotes()).find(n => n.note_id === created.note_id)!.edit_version!, content: 'own hosted endpoint', tags: ['self'] });
   await sync(); await sync();
   settings.sync.mode = 'local';
   await trashBackendNote(created.note_id);

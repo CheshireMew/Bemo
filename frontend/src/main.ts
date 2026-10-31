@@ -4,9 +4,17 @@ import './assets/settings.css'
 import { Capacitor } from '@capacitor/core';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { setRuntimeConfigOverride } from './config';
+import { flushEditorDrafts } from './domain/runtime/draftLifecycle';
 
 async function bootstrap() {
   if (isTauri() && !Capacitor.isNativePlatform()) {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
+    await getCurrentWindow().onCloseRequested(event => {
+      try { flushEditorDrafts(); } catch (error) {
+        event.preventDefault();
+        window.alert(`草稿未能保存，窗口已保留：${String(error)}`);
+      }
+    });
     const connection = await invoke<{ api_origin: string; data_dir: string }>('backend_connection');
     setRuntimeConfigOverride({ apiBase: connection.api_origin, appStorageMode: 'backend' });
   }

@@ -291,11 +291,13 @@ export function retainRecentIndexedBatches(batches: WebDavIndexedBatchRecord[]) 
 }
 
 export function areSameManifest(left: ManifestRecord, right: ManifestRecord) {
-  return JSON.stringify(normalizeWebDavManifest(left)) === JSON.stringify(normalizeWebDavManifest(right));
+  return JSON.stringify({ ...normalizeWebDavManifest(left), updated_at: '' })
+    === JSON.stringify({ ...normalizeWebDavManifest(right), updated_at: '' });
 }
 
 export function areSameBatchIndex(left: BatchIndexRecord, right: BatchIndexRecord) {
-  return JSON.stringify(normalizeWebDavBatchIndex(left)) === JSON.stringify(normalizeWebDavBatchIndex(right));
+  return JSON.stringify({ ...normalizeWebDavBatchIndex(left), updated_at: '' })
+    === JSON.stringify({ ...normalizeWebDavBatchIndex(right), updated_at: '' });
 }
 
 export function collectManifestIndexedBatches(manifest: { batches?: unknown[] } | null | undefined) {

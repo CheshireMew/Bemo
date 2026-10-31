@@ -110,6 +110,8 @@ export async function updateNote(note: NoteMeta, input: { content: string; tags:
   if (shouldUseBackendAppStore()) {
     await updateBackendNote(note.note_id, {
       ...input,
+      base_revision: note.revision,
+      base_edit_version: note.edit_version || '',
       attachments: await prepareBackendAttachments(input.content, note.note_id),
     });
     return finishNoteMutation({
@@ -124,7 +126,7 @@ export async function updateNote(note: NoteMeta, input: { content: string; tags:
     });
   }
 
-  await updateLocalNote(note.note_id, input);
+  await updateLocalNote(note.note_id, input, note.revision, note.edit_version);
   return finishNoteMutation({
     entityId: note.note_id,
     type: 'note.update',
@@ -139,7 +141,7 @@ export async function updateNote(note: NoteMeta, input: { content: string; tags:
 
 export async function togglePinned(note: NoteMeta) {
   if (shouldUseBackendAppStore()) {
-    await patchBackendNote(note.note_id, { pinned: !note.pinned });
+    await patchBackendNote(note.note_id, { pinned: !note.pinned, base_revision: note.revision, base_edit_version: note.edit_version || '' });
     const nextPinned = !note.pinned;
     return finishNoteMutation({
       entityId: note.note_id,
@@ -153,7 +155,7 @@ export async function togglePinned(note: NoteMeta) {
   }
 
   const nextPinned = !note.pinned;
-  await patchLocalNote(note.note_id, { pinned: nextPinned });
+  await patchLocalNote(note.note_id, { pinned: nextPinned }, note.revision, note.edit_version);
   return finishNoteMutation({
     entityId: note.note_id,
     type: 'note.patch',
@@ -239,9 +241,10 @@ export async function restoreTrashNote(noteId: string) {
   });
 }
 
-export async function purgeTrashNote(noteId: string) {
+export async function purgeTrashNote(noteId: string, expected?: NoteMeta) {
   if (shouldUseBackendAppStore()) {
-    await purgeBackendTrashNote(noteId);
+    if (!expected) throw new Error('请刷新回收站后重试。');
+    await purgeBackendTrashNote(noteId, expected);
     return finishNoteMutation({
       entityId: noteId,
       type: 'note.purge',
@@ -252,7 +255,7 @@ export async function purgeTrashNote(noteId: string) {
     });
   }
 
-  const deleted = await permanentlyDeleteLocalTrashNote(noteId);
+  const deleted = await permanentlyDeleteLocalTrashNote(noteId, expected);
   if (!deleted) return false;
   return finishNoteMutation({
     entityId: deleted.note_id,

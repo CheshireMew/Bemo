@@ -56,6 +56,7 @@ async function buildIncomingNote(input: {
 
   return {
     note_id: input.note_id,
+    edit_version: crypto.randomUUID(),
     revision: normalizeNoteRevision(input.revision, 1),
     filename,
     title,
@@ -103,6 +104,7 @@ export async function createLocalConflictCopy(note: NoteMeta): Promise<NoteMeta>
   const copy: NoteMeta = {
     ...note,
     note_id: createOfflineNoteId(),
+    edit_version: crypto.randomUUID(),
     filename,
     title: deriveConflictTitle(note),
     revision: 1,
@@ -121,6 +123,7 @@ export async function createLocalNote(payload: { content: string; tags: string[]
   const filename = await ensureUniqueNoteFilename(`${now}-${slugifyTitle(title)}`);
   const note: NoteMeta = {
     note_id: createOfflineNoteId(),
+    edit_version: crypto.randomUUID(),
     revision: 1,
     filename,
     title,

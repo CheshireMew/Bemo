@@ -7,8 +7,8 @@
     <div v-if="isEditing" class="edit-area">
       <Editor
         :draft-key="`note:${note.note_id}`"
-        :initial-content="note.content"
-        :initial-tags="note.tags"
+        :initial-content="editBase?.content ?? note.content"
+        :initial-tags="editBase?.tags ?? note.tags"
         :show-cancel="true"
         :autosave-draft="false"
         :reset-on-success="false"
@@ -73,6 +73,7 @@
 import Editor, { type EditorSubmitPayload } from '../../Editor.vue';
 import type { NoteMeta } from '../../../store/notes';
 import { toggleTag, updateNoteContent } from '../../../store/notes';
+import { useNoteEditSession } from '../../../composables/useNoteEditSession';
 
 const props = defineProps<{
   note: NoteMeta;
@@ -91,8 +92,10 @@ const props = defineProps<{
   openFileAttachment: (url: string, label: string) => void;
 }>();
 
+const editBase = useNoteEditSession(() => props.isEditing, () => props.note);
 const saveEdit = async (payload: EditorSubmitPayload) => {
-  await updateNoteContent(props.note, payload);
+  if (!editBase.value) throw new Error('编辑会话已关闭，请重新打开笔记。');
+  await updateNoteContent(editBase.value, payload);
 };
 </script>
 

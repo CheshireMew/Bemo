@@ -1,5 +1,6 @@
 import { resolveBackendUrl } from '../../config.js';
 import type { BackupPayload } from './backupPayload.js';
+import { getSyncContextHeaders } from '../sync/syncContext.js';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = resolveBackendUrl(path);
@@ -8,11 +9,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   const response = await fetch(url, {
+    ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(init?.method ? await getSyncContextHeaders() : {}),
       ...(init?.headers || {}),
     },
-    ...init,
   });
 
   if (!response.ok) {

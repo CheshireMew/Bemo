@@ -57,6 +57,7 @@ def _publish(row: dict, previous: dict | None, *, purged: bool = False):
         snapshot = {**row, 'revision': revision, 'attachments_json': json.dumps(attachments, ensure_ascii=False)}
         payload = {**app_note_from_row(snapshot), 'created_at': row['created_at'],
                    'updated_at': row['updated_at'], 'attachments': attachments}
+        payload.pop('edit_version', None)
         kind = ('note.trash' if row.get('deleted_at') else 'note.create' if previous is None
                 else 'note.restore' if previous.get('deleted_at') else 'note.update')
     with app_store.connect() as conn:
@@ -102,15 +103,35 @@ def project_accepted_change(change: dict):
         if row['purged']:
             app_store.delete_note(row['note_id'])
             return
-        for attachment in json.loads(row['attachments_json'] or '[]'):
+        from services.app_attachment_service import register_attachment
+        from services.note_contract import derive_note_title
+        from services.note_contract import ATTACHMENT_URL_PATTERN
+        from urllib.parse import quote, unquote
+        import re
+        names = {}
+        attachments = json.loads(row['attachments_json'] or '[]')
+        for attachment in attachments:
             blob_hash = attachment['blob_hash']
             if not app_store.has_blob_record(blob_hash):
                 raise ValidationError(f"同步附件尚未上传：{attachment['filename']}")
             data = app_store.get_blob_record(blob_hash)
             if blob_hash != f'sha256:{hashlib.sha256(data).hexdigest()}':
                 raise ValidationError(f"同步附件校验失败：{attachment['filename']}")
-            app_store.upsert_attachment_record(attachment['filename'], blob_hash,
-                attachment.get('mime_type') or 'application/octet-stream', len(data), now_iso())
+            old_name = attachment['filename']
+            extension = re.search(r'\.[a-zA-Z0-9]{1,12}$', old_name)
+            existing = app_store.get_attachment_record(old_name)
+            name = (f"sha256-{blob_hash.removeprefix('sha256:')}{extension[0].lower() if extension else ''}"
+                    if existing and existing['blob_hash'] != blob_hash else old_name)
+            names[old_name] = name
+            register_attachment(name, data, attachment.get('mime_type'))
+            attachment['filename'] = name
+        row['content'] = ATTACHMENT_URL_PATTERN.sub(lambda match:
+            f"/images/{quote(names[unquote(match[1])], safe='')}" if unquote(match[1]) in names else match[0], row['content'])
+        row['title'] = derive_note_title(row['content'])
+        row['attachments_json'] = json.dumps(attachments, ensure_ascii=False)
+        change['payload'] = {**change['payload'], 'content': row['content'], 'attachments': attachments}
+        conn.execute('UPDATE hosted_sync_notes_current SET content = ?, title = ?, attachments_json = ? WHERE note_id = ?',
+                     (row['content'], row['title'], row['attachments_json'], row['note_id']))
         app_store.upsert_note(row)
         conn.execute('UPDATE hosted_sync_notes_current SET app_revision = revision WHERE note_id = ?', (row['note_id'],))
 

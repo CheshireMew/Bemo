@@ -26,6 +26,8 @@ import { getOrCreateDeviceId } from '../domain/storage/deviceIdentity.js';
 import type { ChangeRecord } from '../domain/sync/mutationLogStorage.js';
 import { getSyncTargetId } from '../domain/sync/syncTargetIdentity.js';
 import { recordSyncBaseline } from '../domain/sync/syncBaseline.js';
+import { acknowledgeChange } from '../domain/sync/syncQueue.js';
+import type { PendingChange } from '../domain/sync/syncQueue.js';
 
 export interface ConflictItem {
   id: number;
@@ -59,6 +61,9 @@ export async function fetchConflicts() {
 }
 
 export async function dismissConflict(id: number) {
+  const conflict = await getConflict(id);
+  const rejected = conflict?.detail.local_change as PendingChange | undefined;
+  if (rejected?.operation_id) await acknowledgeChange(rejected);
   await clearConflict(id);
   conflicts.value = conflicts.value.filter((item) => item.id !== id);
 }
@@ -73,6 +78,7 @@ export async function keepLocalAndResync(id: number) {
   requireActiveConflictTarget(conflict);
 
   const conflictCopyFilename = getConflictCopyFilename(conflict);
+  const conflictCopyId = typeof conflict.detail.conflict_copy_note_id === 'string' ? conflict.detail.conflict_copy_note_id : '';
   const noteId = conflict.note_id;
   const remoteBaseRevision = getRemoteRevision(conflict.detail);
   const localSnapshot = conflict.detail.local_snapshot as Record<string, unknown> | undefined;
@@ -86,7 +92,8 @@ export async function keepLocalAndResync(id: number) {
       await editBackendReplica(async (store, active) => {
         outbox.length = 0;
         const canonical = active.get(noteId);
-        const conflictCopy = [...active.values()].find(note => note.filename === conflictCopyFilename);
+        const matching = [...active.values()].filter(note => note.filename === conflictCopyFilename);
+        const conflictCopy = conflictCopyId ? active.get(conflictCopyId) : matching.length === 1 ? matching[0] : undefined;
         if (!canonical || !conflictCopy) throw new Error('未找到冲突副本或原始笔记');
         const resolution = buildKeepLocalResyncPayload({ noteId, canonical, conflictCopy, remoteRevision: remoteBaseRevision, localPinned });
         const updated = await store.updateLocalNoteById(noteId, current => ({ ...current,
@@ -101,7 +108,7 @@ export async function keepLocalAndResync(id: number) {
       return;
     }
     const [conflictCopy, canonical] = await Promise.all([
-      findLocalNoteByFilename(conflictCopyFilename),
+      conflictCopyId ? findLocalNoteById(conflictCopyId) : findLocalNoteByFilename(conflictCopyFilename),
       findLocalNoteById(noteId),
     ]);
     if (!conflictCopy || !canonical) {

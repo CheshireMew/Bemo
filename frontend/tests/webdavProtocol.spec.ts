@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { installMemoryIndexedDb } from './memoryIndexedDb.js';
+installMemoryIndexedDb();
 
 import { acquireWebDavLease } from '../src/domain/sync/webdav/webdavLease.js';
 import {
@@ -41,6 +43,7 @@ function createJsonResponse(payload: unknown, status = 200) {
     status,
     headers: {
       'Content-Type': 'application/json',
+      ETag: '"fixture"',
     },
   });
 }
@@ -48,10 +51,13 @@ function createJsonResponse(payload: unknown, status = 200) {
 async function withMockedWebDav<T>(
   handler: (input: string, init?: RequestInit) => Promise<Response> | Response,
   run: (calls: FetchCall[]) => Promise<T>,
+  modelLease = true,
 ) {
   const originalFetch = globalThis.fetch;
   const originalDomParser = (globalThis as typeof globalThis & { DOMParser?: unknown }).DOMParser;
   const calls: FetchCall[] = [];
+  let leaseBody: string | null = null, leaseVersion = 0;
+  let pendingBody: string | null = null;
 
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string'
@@ -65,8 +71,26 @@ async function withMockedWebDav<T>(
       method,
       body: typeof init?.body === 'string' ? init.body : undefined,
     });
+    if (modelLease && url.endsWith('/lease.json')) {
+      if (method === 'GET') return leaseBody
+        ? new Response(leaseBody, { status: 200, headers: { ETag: `"lease-${leaseVersion}"` } })
+        : new Response('', { status: 404 });
+      if (method === 'PUT') {
+        const headers = new Headers(init?.headers);
+        if ((headers.get('If-Match') && headers.get('If-Match') !== `"lease-${leaseVersion}"`)
+          || (headers.get('If-None-Match') === '*' && leaseBody)) return new Response('', { status: 412 });
+        leaseBody = String(init?.body); leaseVersion++;
+        return new Response('', { status: 200 });
+      }
+    }
+    if (method === 'GET' && url.endsWith('/pending-write.json') && pendingBody) return new Response(pendingBody, { status: 200, headers: { ETag: '"pending"' } });
     try {
-      return await handler(url, init);
+      const response = await handler(url, init);
+      if (response.ok && url.endsWith('/pending-write.json')) {
+        if (method === 'PUT') pendingBody = String(init?.body);
+        if (method === 'DELETE') pendingBody = null;
+      }
+      return response;
     } catch (error) {
       if (method === 'GET' && url.endsWith('/pending-write.json')) {
         return new Response('', { status: 404 });
@@ -131,6 +155,7 @@ async function testAcquireWebDavLeaseFailsWhenConfirmationChanges() {
       const lease = await acquireWebDavLease('https://dav.example.com/base/bemo-sync', {}, 'device-a');
       assert.equal(lease, null);
     },
+    false,
   );
 }
 
@@ -141,7 +166,7 @@ async function testAcquireWebDavLeaseUsesConditionalCreateWhenLeaseIsMissing() {
     (url, init) => {
       if (init?.method === 'GET' && url.endsWith('/lease.json')) {
         return leasePutHeaders
-          ? createJsonResponse(leaseRecord)
+          ? new Response(JSON.stringify(leaseRecord), { status: 200, headers: { ETag: '"lease"', 'Content-Type': 'application/json' } })
           : new Response('', { status: 404 });
       }
       if (init?.method === 'PUT' && url.endsWith('/lease.json')) {
@@ -156,6 +181,7 @@ async function testAcquireWebDavLeaseUsesConditionalCreateWhenLeaseIsMissing() {
       assert.ok(lease);
       assert.equal(leasePutHeaders?.get('If-None-Match'), '*');
     },
+    false,
   );
 }
 
@@ -266,9 +292,9 @@ async function testPushWebDavBatchSkipsDuplicateOperationFromManifest() {
         ],
       );
       assert.equal(result.latestCursor, '9');
-      assert.equal('deduplicated' in result.accepted[0] && result.accepted[0].deduplicated, true);
-      assert.equal(result.accepted[0]?.change.payload?.content, 'stored canonical');
-      assert.equal(result.accepted[0]?.change.payload?.revision, 3);
+      assert.equal(result.accepted[0]?.deduplicated, true);
+      assert.equal(result.accepted[0]?.change?.payload?.content, 'stored canonical');
+      assert.equal(result.accepted[0]?.change?.payload?.revision, 3);
     },
   );
 }
@@ -934,8 +960,13 @@ async function testReadWebDavRemoteStateCleansIncompletePendingArtifacts() {
 }
 
 async function testCleanupUnusedBlobsDeletesOnlyUnreferencedRemoteBlobs() {
+  let lease: unknown = null;
   await withMockedWebDav(
     (url, init) => {
+      if (url.endsWith('/lease.json')) {
+        if (init?.method === 'PUT') { lease = JSON.parse(String(init.body)); return new Response('', {status: 200}); }
+        return lease ? new Response(JSON.stringify(lease), {status: 200, headers: {ETag: '"lease"', 'Content-Type': 'application/json'}}) : new Response('', {status: 404});
+      }
       if (init?.method === 'MKCOL') return new Response('', { status: 405 });
       if (init?.method === 'GET' && url.endsWith('/pending-write.json')) {
         return new Response('', { status: 404 });
@@ -1012,6 +1043,9 @@ async function testCleanupUnusedBlobsDeletesOnlyUnreferencedRemoteBlobs() {
 await testEnsureWebDavLayoutRecursivelyCreatesParents();
 await testAcquireWebDavLeaseFailsWhenConfirmationChanges();
 await testAcquireWebDavLeaseUsesConditionalCreateWhenLeaseIsMissing();
+await withMockedWebDav((_url, init) => init?.method === 'PUT' ? new Response('', { status: 200 })
+  : new Response(JSON.stringify({ device_id: '', token: '', expires_at: new Date(0).toISOString() }), { status: 200 }),
+  async () => { await assert.rejects(acquireWebDavLease('https://dav.example.com/base/bemo-sync', {}, 'device-a'), /强 ETag/); }, false);
 await testPullWebDavChangesReadsBatchTailWithoutDirectoryScan();
 await testPushWebDavBatchSkipsDuplicateOperationFromManifest();
 await testTransportPullUsesSnapshotBootstrapWhenCursorMissing();

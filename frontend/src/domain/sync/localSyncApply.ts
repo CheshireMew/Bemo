@@ -358,6 +358,19 @@ export async function applyChangesLocally(changes: SyncChange[], store: SyncNote
         continue;
       }
 
+      const existing = local || localTrash;
+      if (existing && (change.preserve_local || hasConcurrentUpdateConflict(existing, baseRevision, payload))) {
+        const copy = await createLocalConflictCopy(existing);
+        conflicts.push({ status: 'conflict', note_id: noteId, operation_id: operationId, reason: 'revision_conflict',
+          local_snapshot: { ...existing }, remote_snapshot: { ...payload },
+          conflict_copy_note_id: copy.note_id, conflict_copy_filename: copy.filename,
+          local_filename: existing.filename, applied_filename: existing.filename });
+        if (localTrash) await restoreLocalTrashNote(noteId);
+        const updated = await applyRemoteActiveState(noteId, payload, existing);
+        applied.push({ status: 'applied', note_id: noteId, filename: updated.filename });
+        continue;
+      }
+
       if (localTrash) {
         if (shouldKeepLocalTrashState(localTrash.revision, getRemoteRevision(payload, localTrash.revision))) {
           applied.push({

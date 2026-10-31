@@ -28,7 +28,7 @@ def _apply_remote_change(conn: sqlite3.Connection, change: dict[str, Any]) -> di
     if change_type == "note.create":
         return _apply_create(conn, note_id, device_id, operation_id, payload, change, current)
 
-    if current and current["purged"] and change_type != "note.purge":
+    if current and current["purged"] and change_type != "note.purge" and not (change_type == 'note.restore' and payload.get('restore_purged') is True):
         return {"status": "conflict", "operation_id": operation_id, "note_id": note_id,
                 "reason": "note_not_found", "remote_snapshot": {"purged": True, "revision": current["revision"]}}
     if change_type not in {"note.trash", "note.delete", "note.restore", "note.purge"} and (not current or current["deleted_at"]):

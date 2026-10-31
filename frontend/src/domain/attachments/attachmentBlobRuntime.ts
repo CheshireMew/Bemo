@@ -6,11 +6,15 @@ import {
   putBlobIndexRecord,
   getAttachmentContentBlob,
   putAttachmentContentBlob,
+  getAttachmentBlobRecord,
 } from './blobStorage.js';
 import { resolveBackendAttachmentAssetUrl } from './backendAttachmentsApi.js';
 import { getAttachmentRefFilenamesForNote } from './attachmentRefStorage.js';
 import { buildAttachmentUrlFromFilename, extractAttachmentFilename, extractAttachmentUrlsFromContent } from './attachmentLinks.js';
 import { shouldUseBackendAppStore } from '../runtime/appStoreRuntime.js';
+import { withIndexedDb } from '../storage/transactions.js';
+import { contentAttachmentFilename } from './attachmentLinks.js';
+import type { AttachmentBlobRecord } from './blobStorage.js';
 
 export type SyncAttachment = {
   url: string;
@@ -123,4 +127,36 @@ export async function ensureLocalAttachment(
     mimeType,
     size: data.byteLength,
   });
+}
+
+/** Keep existing aliases immutable; publish incoming bytes and a safe alias together. */
+export async function materializeIncomingAttachment(filename: string, data: Uint8Array, hash: string, mimeType: string): Promise<string> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const previous = await getAttachmentBlobRecord(filename);
+    const previousHash = previous ? `sha256:${await sha256Hex(new Uint8Array(await previous.blob.arrayBuffer()))}` : '';
+    const destination = previous && previousHash !== hash ? contentAttachmentFilename(hash, filename) : filename;
+    const aliasPrevious = destination === filename ? previous : await getAttachmentBlobRecord(destination);
+    if (destination !== filename && aliasPrevious
+      && `sha256:${await sha256Hex(new Uint8Array(await aliasPrevious.blob.arrayBuffer()))}` !== hash) {
+      throw new Error(`同名附件内容不同，原附件已保留：${destination}`);
+    }
+    const blob = new Blob([Uint8Array.from(data)], { type: mimeType });
+    const stored = await withIndexedDb(['attachmentBlobs', 'attachmentContentBlobs', 'blobIndex'], 'readwrite', tx => {
+      const files = tx.objectStore('attachmentBlobs'), current = files.get(filename), alias = files.get(destination);
+      let committed = false;
+      alias.onsuccess = () => {
+        const actual = current.result as AttachmentBlobRecord | undefined;
+        if (Boolean(actual) !== Boolean(previous) || actual?.version !== previous?.version) return;
+        const occupied = alias.result as AttachmentBlobRecord | undefined;
+        if (Boolean(occupied) !== Boolean(aliasPrevious) || occupied?.version !== aliasPrevious?.version) return;
+        files.put({ filename: destination, blob, mime_type: mimeType, updatedAt: Date.now(), version: crypto.randomUUID(), blob_hash: hash });
+        tx.objectStore('attachmentContentBlobs').put({ blob_hash: hash, blob });
+        tx.objectStore('blobIndex').put({ blob_hash: hash, filename: destination, mime_type: mimeType, size: data.byteLength, updatedAt: Date.now() });
+        committed = true;
+      };
+      return () => committed;
+    });
+    if (stored) return destination;
+  }
+  throw new Error(`附件正在变化，原附件已保留：${filename}`);
 }

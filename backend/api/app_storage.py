@@ -1,4 +1,5 @@
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Header, UploadFile
+from services.app_sync_service import parse_sync_context
 
 from services.app_attachment_service import register_attachment
 from services.app_storage_service import (
@@ -24,8 +25,8 @@ def storage_backup_export():
 
 
 @router.post("/storage/backup")
-def storage_backup_import(payload: dict):
-    return apply_backup_payload(payload)
+def storage_backup_import(payload: dict, x_bemo_sync_context: str | None = Header(default=None)):
+    return apply_backup_payload(payload, parse_sync_context(x_bemo_sync_context))
 
 
 @router.get("/storage/attachment-summary")
@@ -39,6 +40,6 @@ def storage_cleanup_orphans():
 
 
 @router.delete("/storage")
-def storage_clear():
-    wipe_app_storage()
+def storage_clear(x_bemo_sync_context: str | None = Header(default=None)):
+    wipe_app_storage(parse_sync_context(x_bemo_sync_context))
     return {"ok": True}

@@ -258,7 +258,7 @@ async function testImportBackupArchiveRestoresAttachmentsFromZip() {
   assert.equal(blob.size, 4);
 }
 
-async function testApplyBackupPayloadResetsSyncRuntimeState() {
+async function testApplyBackupPayloadPreservesSyncProgress() {
   await resetDb();
   await setSyncStateValue('server_cursor', '123');
   await setSyncStateValue('webdav_cursor', '456');
@@ -303,10 +303,10 @@ async function testApplyBackupPayloadResetsSyncRuntimeState() {
   assert.deepEqual(importResult.imported_note_records, []);
   assert.equal((await getMutationLog()).length, 0);
   assert.equal((await getConflicts()).length, 0);
-  assert.equal(await getSyncStateValue('server_cursor'), null);
-  assert.equal(await getSyncStateValue('webdav_cursor'), null);
-  assert.equal(await getSyncStateValue('server_last_sync_at'), null);
-  assert.equal(await getSyncStateValue('webdav_last_sync_at'), null);
+  assert.equal(await getSyncStateValue('server_cursor'), '123');
+  assert.equal(await getSyncStateValue('webdav_cursor'), '456');
+  assert.equal(await getSyncStateValue('server_last_sync_at'), '2026-03-18T00:00:00.000Z');
+  assert.equal(await getSyncStateValue('webdav_last_sync_at'), '2026-03-18T00:00:00.000Z');
   assert.deepEqual(
     (await getAllAttachmentRefs())
       .filter((item: AttachmentRefRecord) => item.scope === 'active')
@@ -597,7 +597,7 @@ async function testImportedFlomoNoteCanBeEditedWithoutLosingAttachmentRefs() {
   await updateLocalNote(imported.note_id, {
     content: `${imported.content}\n\n补充一段编辑后的内容`,
     tags: [],
-  });
+  }, imported.revision);
 
   const notes = await getCachedNotes();
   assert.equal(notes.length, 1);
@@ -653,7 +653,7 @@ async function testTrashRestoreAndPermanentDeleteHandleAttachmentRefsAndBlobs() 
   assert.equal(await getBlobIndexRecord('sha256:cover'), null);
 }
 
-async function testClearAllLocalExperimentDataRemovesNotesAttachmentsAndSyncState() {
+async function testClearLocalWorkspaceReplacesPendingEditsWithDeletions() {
   await resetDb();
   localStorage.setItem('bemo.editor.draft:compose', JSON.stringify({ content: 'draft' }));
 
@@ -715,9 +715,11 @@ async function testClearAllLocalExperimentDataRemovesNotesAttachmentsAndSyncStat
   assert.equal((await getCachedNotes()).length, 0);
   assert.equal((await getAttachmentBlob('cover.png')), null);
   assert.equal((await getDraftAttachmentBlob('draft.png')), null);
-  assert.equal((await getMutationLog()).length, 0);
+  const pending = await getMutationLog();
+  assert.equal(pending.length, 2);
+  assert.ok(pending.every(change => change.type === 'note.purge' && change.payload.workspace_replacement));
   assert.equal((await getConflicts()).length, 0);
-  assert.equal(await getSyncStateValue('server_cursor'), null);
+  assert.equal(await getSyncStateValue('server_cursor'), 'cursor-1');
   assert.equal((await getAllAttachmentRefs()).length, 0);
   assert.equal(await getBlobIndexRecord('sha256:cover'), null);
   assert.equal(localStorage.getItem('bemo.editor.draft:compose'), null);
@@ -743,7 +745,7 @@ await testBuildBackupArchiveStoresAttachmentsOutsideJsonManifest();
 await testApplyBackupPayloadRestoresAttachmentsFromVersion2Backup();
 await testApplyBackupPayloadKeepsVersion1Compatibility();
 await testImportBackupArchiveRestoresAttachmentsFromZip();
-await testApplyBackupPayloadResetsSyncRuntimeState();
+await testApplyBackupPayloadPreservesSyncProgress();
 await testCleanupOrphanImagesOnlyDeletesUnreferencedLocalAttachments();
 await testCleanupOrphanImagesKeepsDraftAndPendingMutationAttachments();
 await testApplyBackupPayloadRebuildsAttachmentRefs();
@@ -751,7 +753,7 @@ await testImportFlomoZipRestoresNotesAndAttachments();
 await testImportFlomoZipRestoresAudioAndTranscript();
 await testImportedFlomoNoteCanBeEditedWithoutLosingAttachmentRefs();
 await testTrashRestoreAndPermanentDeleteHandleAttachmentRefsAndBlobs();
-await testClearAllLocalExperimentDataRemovesNotesAttachmentsAndSyncState();
+await testClearLocalWorkspaceReplacesPendingEditsWithDeletions();
 await testResetAppToFirstInstallStateRemovesBemoLocalState();
 
 clearRuntimeConfigOverride();

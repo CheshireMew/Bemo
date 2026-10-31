@@ -49,6 +49,7 @@ export interface SyncBootstrapState {
 }
 
 export interface SyncTransport {
+  runExclusive?<T>(run: (transport: SyncTransport) => Promise<T>): Promise<T>;
   pull(cursor: string | null): Promise<SyncPullResult>;
   push(changes: SyncChange[]): Promise<SyncPushResult>;
   hasBlob(blobHash: string): Promise<boolean>;

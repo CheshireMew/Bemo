@@ -1,5 +1,5 @@
 const DB_NAME = 'bemo-offline';
-const DB_VERSION = 11;
+const DB_VERSION = 12;
 
 const STORE_DEFINITIONS = [
   ['cachedNotes', { keyPath: 'note_id' }],
@@ -27,7 +27,7 @@ function rebuildNoteStore(
 ) {
   if (!db.objectStoreNames.contains(storeName)) {
     const store = db.createObjectStore(storeName, { keyPath: 'note_id' });
-    store.createIndex('filename', 'filename', { unique: true });
+    store.createIndex('filename', 'filename', { unique: false });
     return;
   }
 
@@ -35,6 +35,10 @@ function rebuildNoteStore(
   const keyPath = Array.isArray(store.keyPath) ? store.keyPath.join('.') : store.keyPath;
   const hasFilenameIndex = store.indexNames.contains('filename');
   if (keyPath === 'note_id' && hasFilenameIndex) {
+    if (store.index('filename').unique) {
+      store.deleteIndex('filename');
+      store.createIndex('filename', 'filename', { unique: false });
+    }
     return;
   }
 
@@ -47,7 +51,7 @@ function rebuildNoteStore(
 
     db.deleteObjectStore(storeName);
     const nextStore = db.createObjectStore(storeName, { keyPath: 'note_id' });
-    nextStore.createIndex('filename', 'filename', { unique: true });
+    nextStore.createIndex('filename', 'filename', { unique: false });
     records.forEach((record) => nextStore.put(record));
   };
 }

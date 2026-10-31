@@ -21,7 +21,9 @@ export async function getCachedNote(noteId: string): Promise<NoteMeta | null> {
 }
 
 export async function getCachedNoteByFilename(filename: string): Promise<NoteMeta | null> {
-  return (await readStore<NoteMeta | undefined>('cachedNotes', store => store.index('filename').get(filename))) ?? null;
+  const matches = await readStore<NoteMeta[]>('cachedNotes', store => store.index('filename').getAll(filename));
+  if (matches.length > 1) throw new Error('存在同名笔记，请按笔记 ID 处理冲突。');
+  return matches[0] ?? null;
 }
 
 export function deleteCachedNote(noteId: string): Promise<void> {

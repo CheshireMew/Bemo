@@ -1,5 +1,6 @@
 import { resolveBackendUrl } from '../../config.js';
 import { extractAttachmentFilename } from './attachmentLinks.js';
+import { getSyncContextHeaders } from '../sync/syncContext.js';
 
 export type BackendAttachment = {
   filename: string;
@@ -8,6 +9,11 @@ export type BackendAttachment = {
   size?: number;
   url?: string;
 };
+
+export class BackendAttachmentError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) { super(message); this.status = status; }
+}
 
 export type BackendAttachmentSummary = {
   activeAttachments: number;
@@ -23,7 +29,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error('当前没有可用的附件服务地址。');
   }
 
-  const response = await fetch(url, init);
+  const response = await fetch(url, { ...init, headers: { ...init?.headers,
+    ...(init?.method ? await getSyncContextHeaders() : {}),
+  } });
   if (!response.ok) {
     let message = `附件服务请求失败 (${response.status})`;
     try {
@@ -32,7 +40,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // Ignore non-JSON failures.
     }
-    throw new Error(message);
+    throw new BackendAttachmentError(message, response.status);
   }
 
   if (response.status === 204) {
@@ -83,7 +91,7 @@ export async function uploadBackendAttachment(input: {
     } catch {
       // Ignore non-JSON failures.
     }
-    throw new Error(message);
+    throw new BackendAttachmentError(message, response.status);
   }
 
   return response.json() as Promise<BackendAttachment>;

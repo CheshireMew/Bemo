@@ -1,8 +1,9 @@
 import { onBeforeUnmount, watch, type Ref } from 'vue';
-import { settings } from '../store/settings';
+import { settings } from '../store/settings.js';
 import { deleteAttachmentRefsForOwner, replaceAttachmentRefsForOwner } from '../domain/attachments/attachmentRefStorage.js';
 import { extractAttachmentFilenames } from '../domain/attachments/attachmentRefParser.js';
 import { clearDraftAttachmentSession, pruneDraftAttachmentsForContent } from '../domain/attachments/localAttachmentDrafts.js';
+import { registerDraftWriter } from '../domain/runtime/draftLifecycle.js';
 
 type UseEditorDraftOptions = {
   attachmentSessionKey: Ref<string>;
@@ -89,6 +90,25 @@ export function useEditorDraft(options: UseEditorDraftOptions) {
     }
   };
 
+  const flushDraft = () => {
+    if (autoSaveTimer !== null) window.clearTimeout(autoSaveTimer);
+    autoSaveTimer = null;
+    if (options.autosaveDraft && settings.editor.autoSaveEnabled) saveDraft();
+  };
+  const beforeUnload = (event: BeforeUnloadEvent) => {
+    try { flushDraft(); } catch (error) {
+      console.error('草稿未能保存。', error);
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  };
+  const onPageHide = () => flushDraft();
+  const onVisibilityChange = () => { if (document.visibilityState === 'hidden') flushDraft(); };
+  const unregister = registerDraftWriter(flushDraft);
+  window.addEventListener('beforeunload', beforeUnload);
+  window.addEventListener('pagehide', onPageHide);
+  document.addEventListener('visibilitychange', onVisibilityChange);
+
   watch(options.content, () => {
     queueAutoSave();
   });
@@ -115,10 +135,11 @@ export function useEditorDraft(options: UseEditorDraftOptions) {
   });
 
   onBeforeUnmount(() => {
-    if (autoSaveTimer) {
-      window.clearTimeout(autoSaveTimer);
-      saveDraft();
-    }
+    flushDraft();
+    unregister();
+    window.removeEventListener('beforeunload', beforeUnload);
+    window.removeEventListener('pagehide', onPageHide);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
   });
 
   return {

@@ -1,5 +1,8 @@
 import type { SyncChange, SyncPushAcceptedChange } from '../syncTransport.js';
+import { withWebDavLease } from './webdavLease.js';
 import { validateWebDavChanges } from './webdavChangeValidation.js';
+import type { BatchIndexRecord, ManifestRecord } from './webdavTypes.js';
+import type { SyncPushConflict } from '../syncTransport.js';
 import { applyChangesToRemoteNoteStates, applyChangesToSnapshotState } from './webdavSnapshotState.js';
 import {
   buildPendingWriteRecord,
@@ -62,8 +65,10 @@ export async function pushWebDavBatch(
   baseUrl: string,
   headers: HeadersInit,
   changes: SyncChange[],
-) {
-  const currentState = await readResolvedRemoteStateDocuments(baseUrl, headers);
+  assertLease?: () => Promise<void>,
+): Promise<{ accepted: SyncPushAcceptedChange[]; latestCursor: string; manifest: ManifestRecord; batchIndex: BatchIndexRecord; conflicts: SyncPushConflict[] }> {
+  if (!assertLease) return withWebDavLease(baseUrl, headers, check => pushWebDavBatch(baseUrl, headers, changes, check));
+  const currentState = await readResolvedRemoteStateDocuments(baseUrl, headers, assertLease);
   const manifest = currentState.manifest;
   const batchIndex = currentState.batchIndex;
   const { accepted: deduplicatedAccepted, pending } = splitAcceptedChanges(batchIndex, changes);
@@ -149,22 +154,27 @@ export async function pushWebDavBatch(
       snapshotFiles: plannedSnapshot?.files || [],
     },
   });
+  await assertLease();
   await writeWebDavPendingWrite(baseUrl, headers, pendingWrite);
   await writeBatch(baseUrl, headers, plannedBatch);
   if (plannedSnapshot) {
     await writePlannedWebDavSnapshot(headers, plannedSnapshot);
   }
+  await assertLease();
   await commitPendingWebDavWrite(baseUrl, headers, pendingWrite, {
     manifestEtag: currentState.manifestEtag,
     batchIndexEtag: currentState.batchIndexEtag,
-  });
+  }, assertLease);
+  await assertLease();
   try {
     await writeWebDavRemoteNoteIndex(baseUrl, headers, nextRemoteNotes, latestCursor);
   } catch {
     // notes-index is a cache and can be rebuilt from snapshot/batches later
   }
-  await cleanupPrunedWebDavFiles(baseUrl, headers, manifest, batchIndex, nextManifest, nextBatchIndex);
-  await deleteWebDavPendingWrite(baseUrl, headers);
+  await assertLease();
+  await cleanupPrunedWebDavFiles(baseUrl, headers, manifest, batchIndex, nextManifest, nextBatchIndex, assertLease);
+  await assertLease();
+  await deleteWebDavPendingWrite(baseUrl, headers, pendingWrite.transaction_id);
 
   return {
     accepted: [

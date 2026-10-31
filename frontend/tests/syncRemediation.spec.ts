@@ -94,7 +94,7 @@ console.log('PASS remote restore is applied without a compensating trash upload'
 await withStores(async (_primary, remote) => {
   const note = await createBackendNote({ content: 'original', tags: [] }); await sync();
   settings.sync.mode = 'local';
-  await updateBackendNote(note.note_id, { content: 'local offline edit', tags: [] });
+  await updateBackendNote(note.note_id, { base_revision: (await listBackendNotes()).find(n => n.note_id === note.note_id)!.revision, base_edit_version: (await listBackendNotes()).find(n => n.note_id === note.note_id)!.edit_version!, content: 'local offline edit', tags: [] });
   await push(remote, [{ operation_id: 'B-edit', device_id: 'B', entity_id: note.note_id,
     type: 'note.update', base_revision: 1, payload: { content: 'remote edit', tags: [], revision: 2 } }]);
   settings.sync.mode = 'server'; await sync();
@@ -132,12 +132,12 @@ await withStores(async (_primary, remote) => {
   const note = await createBackendNote({ content: 'original', tags: [] });
   await sync();
   settings.sync.mode = 'local';
-  await updateBackendNote(note.note_id, { content: 'offline one', tags: [] });
-  await updateBackendNote(note.note_id, { content: 'offline two', tags: [] });
+  await updateBackendNote(note.note_id, { base_revision: (await listBackendNotes()).find(n => n.note_id === note.note_id)!.revision, base_edit_version: (await listBackendNotes()).find(n => n.note_id === note.note_id)!.edit_version!, content: 'offline one', tags: [] });
+  await updateBackendNote(note.note_id, { base_revision: (await listBackendNotes()).find(n => n.note_id === note.note_id)!.revision, base_edit_version: (await listBackendNotes()).find(n => n.note_id === note.note_id)!.edit_version!, content: 'offline two', tags: [] });
   settings.sync.mode = 'server';
   await sync();
   assert.equal((await listBackendNotes())[0]?.revision, 2);
-  await updateBackendNote(note.note_id, { content: 'online edit', tags: [] });
+  await updateBackendNote(note.note_id, { base_revision: (await listBackendNotes()).find(n => n.note_id === note.note_id)!.revision, base_edit_version: (await listBackendNotes()).find(n => n.note_id === note.note_id)!.edit_version!, content: 'online edit', tags: [] });
   const result = await sync();
   assert.equal(result.status === 'completed' && result.conflicts, 0);
   assert.equal((await remoteState(remote))[0]?.revision, 3);
@@ -148,7 +148,7 @@ await withStores(async (_primary, first) => withBackendServer('server', async se
   const note = await createBackendNote({ content: 'original', tags: [] });
   await sync();
   settings.sync.serverUrl = second.baseUrl;
-  await updateBackendNote(note.note_id, { content: 'edited for new endpoint', tags: [] });
+  await updateBackendNote(note.note_id, { base_revision: (await listBackendNotes()).find(n => n.note_id === note.note_id)!.revision, base_edit_version: (await listBackendNotes()).find(n => n.note_id === note.note_id)!.edit_version!, content: 'edited for new endpoint', tags: [] });
   const result = await sync();
   assert.equal(result.status === 'completed' && result.conflicts, 0);
   assert.equal((await remoteState(second))[0]?.note_id, note.note_id);
@@ -161,7 +161,7 @@ for (const kind of ['note.trash', 'note.purge']) {
   await withStores(async (_primary, remote) => {
     const note = await createBackendNote({ content: 'original', tags: [] }); await sync();
     settings.sync.mode = 'local';
-    await updateBackendNote(note.note_id, { content: 'unsent edit', tags: [] });
+    await updateBackendNote(note.note_id, { base_revision: (await listBackendNotes()).find(n => n.note_id === note.note_id)!.revision, base_edit_version: (await listBackendNotes()).find(n => n.note_id === note.note_id)!.edit_version!, content: 'unsent edit', tags: [] });
     await push(remote, [{ operation_id: `delete-${kind}`, device_id: 'B', entity_id: note.note_id,
       type: kind, base_revision: 1, payload: { content: 'original', tags: [], revision: 2 } }]);
     settings.sync.mode = 'server'; await sync();

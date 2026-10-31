@@ -20,7 +20,8 @@ function stripBom(value: string) {
   return value.replace(/^\uFEFF/, '');
 }
 
-export function parseFlomoCsvLine(line: string) {
+export function parseFlomoCsvRecords(line: string) {
+  const records: string[][] = [];
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -41,10 +42,24 @@ export function parseFlomoCsvLine(line: string) {
       current = '';
       continue;
     }
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && line[i + 1] === '\n') i += 1;
+      result.push(current);
+      if (result.some(field => field.length > 0)) records.push([...result]);
+      result.length = 0;
+      current = '';
+      continue;
+    }
     current += char;
   }
+  if (inQuotes) throw new Error('CSV 中存在未结束的引号，请检查导出文件。');
   result.push(current);
-  return result;
+  if (result.some(field => field.length > 0)) records.push(result);
+  return records;
+}
+
+export function parseFlomoCsvLine(line: string) {
+  return parseFlomoCsvRecords(line)[0] ?? [];
 }
 
 function extractBalancedDivBlock(source: string, className: string) {
@@ -304,16 +319,16 @@ export async function parseFlomoZip(file: File) {
 
 export async function parseFlomoCsv(file: File) {
   const text = stripBom(await file.text());
-  const lines = text.split(/\r?\n/).filter(Boolean);
-  if (lines.length <= 1) {
+  const records = parseFlomoCsvRecords(text);
+  if (records.length <= 1) {
     return [];
   }
 
-  const rows = lines.slice(1).map(parseFlomoCsvLine);
+  const rows = records.slice(1);
   const notes: NoteMeta[] = [];
   rows.forEach((row, index) => {
-    const content = (row[0] || '').trim();
-    if (!content) return;
+    const content = row[0] || '';
+    if (!content.trim()) return;
     const createdAt = row[1] ? Date.parse(row[1]) : Date.now();
     const tags = (row[2] || '')
       .split(',')

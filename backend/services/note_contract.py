@@ -1,8 +1,24 @@
 import json
+import re
 from datetime import datetime
 from typing import Any
+from urllib.parse import unquote
 
 from core.paths import TZ
+
+ATTACHMENT_URL_PATTERN = re.compile(r"/images/([^)\s\"'`>]+)")
+
+
+def collect_attachment_filenames(content: Any, attachments_source: Any) -> set[str]:
+    filenames = {unquote(str(match)) for match in ATTACHMENT_URL_PATTERN.findall(str(content or ''))}
+    if isinstance(attachments_source, str):
+        try:
+            attachments_source = json.loads(attachments_source)
+        except json.JSONDecodeError:
+            attachments_source = []
+    if isinstance(attachments_source, list):
+        filenames.update(str(item.get('filename') or '').strip() for item in attachments_source if isinstance(item, dict) and str(item.get('filename') or '').strip())
+    return filenames
 
 
 def derive_note_title(content: str) -> str:
@@ -75,6 +91,7 @@ def app_note_from_row(row: Any) -> dict[str, Any]:
     tags = normalize_note_tags(json.loads(row["tags_json"] or "[]"))
     return {
         "note_id": str(row["note_id"]),
+        "edit_version": str(row['edit_version']) if 'edit_version' in row.keys() else '',
         "revision": int(row["revision"] or 1),
         "filename": str(row["filename"] or ""),
         "title": str(row["title"] or derive_note_title(str(row["content"] or ""))),

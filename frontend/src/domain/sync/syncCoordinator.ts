@@ -1,4 +1,4 @@
-import { addConflict } from './conflictStorage.js';
+import { addConflict, getConflicts } from './conflictStorage.js';
 import {
   claimLegacyMutationTargets,
   type SyncTarget,
@@ -9,6 +9,7 @@ import {
   getSyncStateValue,
   setSyncStateValue,
   migrateLegacySyncProgress,
+  removeSyncStateValue,
 } from './syncStateStorage.js';
 import { applyChangesToCurrentStore, markSyncOperationsApplied, reconcileAcceptedSyncRevision } from '../appStore/syncReplicaAdapter.js';
 import { getPendingChanges as getMutationLog, acknowledgeChange, bindLegacySyncTarget } from './syncQueue.js';
@@ -26,11 +27,11 @@ import { handleSyncFailure, handleSyncSuccess, clearScheduledSync } from './sync
 import { buildSyncTransport } from './syncTransportBuilder.js';
 import { getSyncTargetLabel, readSyncConfigSnapshot } from './syncConfig.js';
 import type { SyncListener, SyncRunResult } from './syncTypes.js';
-import { getSyncTargetId } from './syncTargetIdentity.js';
+import { getSyncTargetId, scopedSyncKey } from './syncTargetIdentity.js';
 import { noteStateFingerprint, readSyncBaselines, recordSyncBaseline } from './syncBaseline.js';
 import { listCurrentNotes, listCurrentTrash } from '../appStore/noteQueries.js';
 import { registerSyncWindowEvents as registerSyncBrowserEvents } from './syncWindowEvents.js';
-import { consumeRemoteChanges, inspectRemoteSyncState } from './syncBootstrap.js';
+import { consumeRemoteChanges, inspectRemoteSyncState, readWorkspaceDeletedIds } from './syncBootstrap.js';
 import { prepareFirstTargetChanges } from './noteSyncOutbox.js';
 
 let flushInFlight: Promise<SyncRunResult> | null = null;
@@ -91,6 +92,14 @@ export async function flushPendingQueue(): Promise<SyncRunResult> {
         await migrateLegacySyncProgress(queueTarget, targetId);
       }
       let queue = await getMutationLog(queueTarget, targetId || undefined);
+      // Persisted rejections survive an interrupted acknowledgement sequence.
+      // Never send the tail of a rejected offline chain on its own after restart.
+      if (queueTarget && targetId) {
+        const rejected = new Set((await getConflicts()).filter(conflict => conflict.source === queueTarget
+          && (!conflict.target_id || conflict.target_id === targetId)).map(conflict => conflict.operation_id));
+        for (const change of queue) if (rejected.has(change.operation_id)) await acknowledgeChange(change);
+        queue = queue.filter(change => !rejected.has(change.operation_id));
+      }
       setSyncState({ target: getSyncTargetLabel(syncConfig) });
 
       if (syncMode === 'local') {
@@ -162,8 +171,8 @@ export async function flushPendingQueue(): Promise<SyncRunResult> {
 
         const localOperationIds = new Set(queue.map((item) => item.operation_id));
         const preparedQueue = await prepareFirstTargetChanges(queue, remoteSyncState.remoteNotes, targetId);
-        const outboundChanges = await prepareOutboundChanges(preparedQueue, transport);
-        const pushResult = await transport.push(outboundChanges);
+        const uploadAndPush = async (writer: typeof transport) => writer.push(await prepareOutboundChanges(preparedQueue, writer));
+        const pushResult = transport.runExclusive ? await transport.runExclusive(uploadAndPush) : await uploadAndPush(transport);
 
         const acknowledgedIds = new Set<string>();
         for (const accepted of (pushResult.accepted || [])) {
@@ -173,12 +182,14 @@ export async function flushPendingQueue(): Promise<SyncRunResult> {
             const canonical = { ...accepted.change, cursor: accepted.cursor || accepted.change.cursor };
             await reconcileAcceptedSyncRevision(canonical, match);
             await recordSyncBaseline(targetId, canonical);
+            if (canonical.type === 'note.purge') await removeSyncStateValue(scopedSyncKey(targetId, `deleted:${encodeURIComponent(match.entity_id)}`));
             await markSyncOperationsApplied(targetId, [canonical]);
             await acknowledgeChange(match);
             acknowledgedIds.add(match.operation_id); pushed++;
           }
         }
 
+        const rejectedChanges: typeof queue = [];
         for (const conflict of ((pushResult.conflicts || []) as Array<Record<string, unknown> & {
           operation_id?: string;
           note_id?: string;
@@ -194,9 +205,11 @@ export async function flushPendingQueue(): Promise<SyncRunResult> {
             local_change: match,
             ...conflict,
           });
-          if (match) { await acknowledgeChange(match); acknowledgedIds.add(match.operation_id); }
+          if (match) { rejectedChanges.push(match); acknowledgedIds.add(match.operation_id); }
           conflictCount++;
         }
+        // Record every dependency rejection before removing any source operation.
+        for (const change of rejectedChanges) await acknowledgeChange(change);
         if (queue.some(item => !acknowledgedIds.has(item.operation_id))) throw new Error('同步目标未确认全部待发送操作，已保留队列等待重试');
 
         const shouldBootstrapPull = remoteSyncState.missingLocalNoteIds.length > 0;
@@ -212,9 +225,11 @@ export async function flushPendingQueue(): Promise<SyncRunResult> {
             ]);
             const locals = new Map([...active, ...trash].map(note => [note.note_id, note]));
             const pendingIds = new Set(pending.map(change => change.entity_id));
+            const deletedIds = await readWorkspaceDeletedIds(targetId);
             const inboundChanges = (changes || []).filter(change => {
               const baseline = baselines.get(change.entity_id || '');
               return !localOperationIds.has(change.operation_id || '')
+                && !deletedIds.has(change.entity_id || '')
                 && !(baseline?.cursor && change.cursor && Number(change.cursor) <= Number(baseline.cursor));
             }).map(change => {
               const local = locals.get(change.entity_id || '');
@@ -224,8 +239,8 @@ export async function flushPendingQueue(): Promise<SyncRunResult> {
             });
             if (!inboundChanges.length) return;
 
-            await hydrateInboundAttachments(inboundChanges, transport);
-            const localApplyResult = await applyChangesToCurrentStore(inboundChanges, targetId);
+            const hydratedChanges = await hydrateInboundAttachments(inboundChanges, transport);
+            const localApplyResult = await applyChangesToCurrentStore(hydratedChanges, targetId);
             pulled += localApplyResult.applied.length;
 
             for (const conflict of (localApplyResult.conflicts || [])) {
@@ -238,7 +253,7 @@ export async function flushPendingQueue(): Promise<SyncRunResult> {
               });
               conflictCount++;
             }
-            for (const change of inboundChanges) await recordSyncBaseline(targetId, change);
+            for (const change of hydratedChanges) await recordSyncBaseline(targetId, change);
           },
         });
 

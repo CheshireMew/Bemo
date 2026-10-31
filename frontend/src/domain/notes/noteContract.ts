@@ -90,6 +90,7 @@ export function normalizeAppNoteRecord(input: unknown): NoteMeta | null {
   return {
     note_id: noteId,
     revision: normalizeNoteRevision(note.revision, 1),
+    ...(typeof note.edit_version === 'string' && note.edit_version ? { edit_version: note.edit_version } : {}),
     filename,
     title: typeof note.title === 'string' && note.title
       ? note.title

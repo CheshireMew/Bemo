@@ -10,12 +10,16 @@ import { scopedSyncKey } from '../sync/syncTargetIdentity.js';
 import { updateLocalNoteById, updateLocalTrashNoteById } from '../notes/localNoteMutations.js';
 
 type ApplyResult = Awaited<ReturnType<typeof applyChangesLocally>>;
-type Replica = { token: string; notes: NoteMeta[]; trash: NoteMeta[]; receipts: Record<string, ApplyResult> };
+type Replica = { token: string; notes: NoteMeta[]; trash: NoteMeta[]; receipts: Record<string, ApplyResult>;
+  workspace_epoch: string; deleted_ids: string[]; applied_cursors: Record<string, string> };
 
 export async function editBackendReplica<T>(edit: (store: SyncNoteStore, active: Map<string, NoteMeta>, trash: Map<string, NoteMeta>) => Promise<T>, options: { changes?: SyncChange[]; outbox?: ChangeRecord[]; targetId?: string } = {}) {
   const receiptKey = (id: string) => options.targetId ? scopedSyncKey(options.targetId, `receipt:${id}`) : id;
+  let epoch: string | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const snapshot = await appRequest<Replica>('/api/app/replica/read', { method: 'POST', body: JSON.stringify({ operation_ids: options.changes?.map(c => c.operation_id ? receiptKey(c.operation_id) : '').filter(Boolean) || [] }) });
+    const snapshot = await appRequest<Replica>('/api/app/replica/read', { method: 'POST', body: JSON.stringify({ target_id: options.targetId, operation_ids: options.changes?.map(c => c.operation_id ? receiptKey(c.operation_id) : '').filter(Boolean) || [] }) });
+    if (epoch !== undefined && epoch !== snapshot.workspace_epoch) throw new Error('工作区已被替换，原同步操作已停止，请重新同步。');
+    epoch = snapshot.workspace_epoch;
     const normalize = (notes: NoteMeta[]) => new Map(notes.map(note => {
       const normalized = normalizeAppNoteRecord(note);
       if (!normalized) throw new Error('主存储返回了无效的同步笔记。');
@@ -71,14 +75,17 @@ export async function editBackendReplica<T>(edit: (store: SyncNoteStore, active:
       const combined: ApplyResult = { applied: [], conflicts: [] };
       for (const change of options.changes) {
         const id = change.operation_id;
-        const item = (id && snapshot.receipts[receiptKey(id)]) || await applyChangesLocally([change], store);
+        const suppressed = snapshot.deleted_ids.includes(change.entity_id || '')
+          || (change.cursor && snapshot.applied_cursors[change.entity_id || '']
+            && Number(change.cursor) <= Number(snapshot.applied_cursors[change.entity_id || '']));
+        const item = (id && snapshot.receipts[receiptKey(id)]) || (suppressed ? { applied: [], conflicts: [] } : await applyChangesLocally([change], store));
         combined.applied.push(...item.applied); combined.conflicts.push(...item.conflicts);
         if (id) receipts[receiptKey(id)] = item;
       }
       result = combined as T;
     } else result = await edit(store, active, trash);
     try {
-      await appRequest('/api/app/replica/commit', { method: 'POST', body: JSON.stringify({ token: snapshot.token, notes: [...active.values()], trash: [...trash.values()], receipts, outbox: options.outbox ?? [] }) });
+      await appRequest('/api/app/replica/commit', { method: 'POST', body: JSON.stringify({ workspace_epoch: snapshot.workspace_epoch, token: snapshot.token, notes: [...active.values()], trash: [...trash.values()], receipts, outbox: options.outbox ?? [] }) });
       return result;
     } catch (error) {
       if (!(error instanceof AppApiError) || error.status !== 409 || attempt === 2) throw error;
@@ -118,9 +125,11 @@ export async function reconcileAcceptedSyncRevision(change: SyncChange, sent: Ch
   if (!change.entity_id || change.type === 'note.purge' || !Number.isFinite(revision)) return;
   const remote = normalizeNoteContentPayload(change.payload || {}, revision);
   const update = (current: NoteMeta) => current.revision <= sentRevision
-    && current.content === remote.content && JSON.stringify(current.tags) === JSON.stringify(remote.tags)
-    && current.pinned === Boolean(remote.pinned ?? current.pinned)
-    ? { ...current, revision } : current;
+    && current.content === String(sent.payload.content ?? current.content)
+    && JSON.stringify(current.tags) === JSON.stringify(sent.payload.tags ?? current.tags)
+    && current.pinned === Boolean(sent.payload.pinned ?? current.pinned)
+    ? { ...current, content: remote.content, title: deriveNoteTitle(remote.content), tags: remote.tags,
+      pinned: remote.pinned ?? current.pinned, revision } : current;
   const trashed = change.type === 'note.trash' || change.type === 'note.delete';
   if (shouldUseBackendAppStore()) {
     await editBackendReplica(async (_store, active, trash) => {

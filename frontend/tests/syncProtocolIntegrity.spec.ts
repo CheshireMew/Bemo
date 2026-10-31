@@ -39,9 +39,11 @@ assert.equal(downloads, 2, 'the old content must survive an alias overwrite');
 installMemoryIndexedDb(); downloads = 0;
 await putAttachmentBlob({ filename: 'legacy.png', blob: new Blob([bytesB]) });
 await putBlobIndexRecord({ blobHash: hashA, filename: 'legacy.png', size: 3 });
-await hydrateInboundAttachments([attachmentChange('legacy.png', hashA)], blobs);
+const legacyHydrated = await hydrateInboundAttachments([attachmentChange('legacy.png', hashA)], blobs);
 assert.equal(downloads, 1, 'an old index must not validate a different file merely because it exists');
-assert.equal(hash(new Uint8Array(await (await getAttachmentBlob('legacy.png'))!.arrayBuffer())), hashA);
+assert.equal(hash(new Uint8Array(await (await getAttachmentBlob('legacy.png'))!.arrayBuffer())), hashB);
+const legacyAlias = (legacyHydrated[0]!.payload!.attachments as Array<{ filename: string }>)[0]!.filename;
+assert.equal(hash(new Uint8Array(await (await getAttachmentBlob(legacyAlias))!.arrayBuffer())), hashA);
 console.log('PASS content reuse materializes every alias and validates old indexes');
 
 type File = { body: string; etag: string };

@@ -11,7 +11,7 @@ from services.note_contract import (
     normalize_note_timestamp_iso,
     now_iso,
 )
-from services.service_errors import NotFoundError, ValidationError
+from services.service_errors import ConflictError, NotFoundError, ValidationError
 
 
 def list_active_notes() -> list[dict[str, Any]]:
@@ -58,10 +58,13 @@ def update_note(
     note_id: str,
     *,
     content: str,
+    base_revision: int,
+    base_edit_version: str,
     tags: list[str] | None = None,
     attachments: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     current = _require_note(note_id)
+    _require_revision(current, base_revision, base_edit_version)
     note = _row_payload_from_note(current)
     note.update(
         {
@@ -78,8 +81,9 @@ def update_note(
     return _require_note(note_id)
 
 
-def patch_note(note_id: str, *, pinned: bool | None = None, tags: list[str] | None = None) -> dict[str, Any]:
+def patch_note(note_id: str, *, base_revision: int, base_edit_version: str, pinned: bool | None = None, tags: list[str] | None = None) -> dict[str, Any]:
     current = _require_note(note_id)
+    _require_revision(current, base_revision, base_edit_version)
     note = _row_payload_from_note(current)
     note.update(
         {
@@ -125,9 +129,13 @@ def restore_note(note_id: str) -> dict[str, Any]:
     return _require_note(note_id)
 
 
-def purge_note(note_id: str) -> None:
-    _require_note_any(note_id)
-    app_store_repository.delete_note(note_id)
+def purge_note(note_id: str, *, base_revision: int, base_edit_version: str) -> None:
+    with app_store_repository.transaction():
+        current = _require_note_any(note_id)
+        if not current['deleted_at']:
+            raise ConflictError('这条笔记已恢复，未执行永久删除。请刷新回收站。')
+        _require_revision(current, base_revision, base_edit_version)
+        app_store_repository.delete_note(note_id)
 
 
 def empty_trash() -> list[dict[str, Any]]:
@@ -136,6 +144,11 @@ def empty_trash() -> list[dict[str, Any]]:
         for note in trash:
             app_store_repository.delete_note(str(note["note_id"]))
     return trash
+
+
+def _require_revision(current: dict[str, Any], expected: int, edit_version: str) -> None:
+    if current['revision'] != expected or not edit_version or current['edit_version'] != edit_version:
+        raise ConflictError('这条笔记已在其他窗口或设备更新。本次内容仍保留，请对照最新笔记后重新编辑。')
 
 
 def _require_note(note_id: str, *, expect_deleted: bool = False) -> dict[str, Any]:

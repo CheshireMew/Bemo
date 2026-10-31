@@ -1,17 +1,18 @@
 import json
-import re
 from typing import Any
-from urllib.parse import unquote
 
 from services import app_store_repository
-from services.note_contract import derive_note_title, normalize_note_tags, normalize_note_timestamp_iso, now_iso
+from services.note_contract import derive_note_title, normalize_note_tags, normalize_note_timestamp_iso, now_iso, collect_attachment_filenames
 from services.note_store_service import list_active_notes, list_trash_notes
 from services.service_errors import ValidationError
 
-ATTACHMENT_URL_PATTERN = re.compile(r"/images/([^)\s\"'`>]+)")
-
 
 def build_backup_payload() -> dict[str, Any]:
+    with app_store_repository.read_snapshot():
+        return _build_backup_snapshot()
+
+
+def _build_backup_snapshot() -> dict[str, Any]:
     notes = list_active_notes()
     trash = list_trash_notes()
     referenced = _collect_referenced_filenames(notes + trash)
@@ -47,7 +48,7 @@ def build_backup_payload() -> dict[str, Any]:
     }
 
 
-def apply_backup_payload(payload: dict[str, Any]) -> dict[str, int]:
+def apply_backup_payload(payload: dict[str, Any], context: dict | None = None) -> dict[str, int]:
     if payload.get("format") != "bemo-backup" or payload.get("version") not in {1, 2, 3}:
         raise ValidationError("Unsupported backup payload")
 
@@ -79,10 +80,11 @@ def apply_backup_payload(payload: dict[str, Any]) -> dict[str, int]:
     # Blobs are content-addressed. Prepare them before replacing metadata; old
     # blobs remain readable on failure and are reclaimed only by explicit cleanup.
     with app_store_repository.transaction():
+        before = list_active_notes() + list_trash_notes()
         with app_store_repository.connect() as conn:
             conn.execute("DELETE FROM notes_current")
             conn.execute("DELETE FROM attachment_files")
-            app_store_repository.clear_replication_state(conn)
+            conn.execute('DELETE FROM attachment_upload_holds')
         for item in attachments:
             app_store_repository.upsert_attachment_record(
                 item["filename"], attachment_index[item["filename"]]["blob_hash"],
@@ -92,6 +94,8 @@ def apply_backup_payload(payload: dict[str, Any]) -> dict[str, int]:
             _upsert_note_snapshot(note, attachment_index, deleted=False)
         for note in trash:
             _upsert_note_snapshot(note, attachment_index, deleted=True)
+        from services.workspace_replacement import queue_workspace_replacement
+        queue_workspace_replacement(before, context)
         from services.hosted_sync_service import publish_app_changes
         publish_app_changes()
 
@@ -127,6 +131,11 @@ def get_attachment_summary() -> dict[str, int]:
 
 
 def cleanup_orphan_attachments() -> dict[str, Any]:
+    with app_store_repository.transaction():
+        return _cleanup_orphan_attachments()
+
+
+def _cleanup_orphan_attachments() -> dict[str, Any]:
     referenced = _collect_backend_referenced_filenames()
     records = app_store_repository.list_attachment_records()
     deleted_files: list[str] = []
@@ -156,8 +165,8 @@ def cleanup_orphan_attachments() -> dict[str, Any]:
     }
 
 
-def wipe_app_storage() -> None:
-    app_store_repository.clear_all_data()
+def wipe_app_storage(context: dict | None = None) -> None:
+    app_store_repository.clear_all_data(context)
 
 
 def _normalize_notes(value: Any) -> list[dict[str, Any]]:
@@ -237,6 +246,9 @@ def _upsert_note_snapshot(
 def _collect_backend_referenced_filenames() -> set[str]:
     from services.app_sync_service import list_outbox
     referenced: set[str] = set()
+    import time
+    with app_store_repository.connect() as conn:
+        referenced.update(row[0] for row in conn.execute('SELECT filename FROM attachment_upload_holds WHERE expires_at > ?', (time.time(),)))
     for row in app_store_repository.list_notes():
         referenced.update(_collect_referenced_filenames_from_row(row["content"], row["attachments_json"]))
     for target in ('server', 'webdav'):
@@ -254,25 +266,7 @@ def _collect_referenced_filenames(notes: list[dict[str, Any]]) -> set[str]:
 
 
 def _collect_referenced_filenames_from_row(content: Any, attachments_source: Any) -> set[str]:
-    filenames: set[str] = set()
-    for match in ATTACHMENT_URL_PATTERN.findall(str(content or "")):
-        filenames.add(unquote(str(match)))
-
-    if isinstance(attachments_source, str):
-        try:
-            attachments_source = json.loads(attachments_source)
-        except json.JSONDecodeError:
-            attachments_source = []
-
-    if isinstance(attachments_source, list):
-        for item in attachments_source:
-            if not isinstance(item, dict):
-                continue
-            filename = str(item.get("filename") or "").strip()
-            if filename:
-                filenames.add(filename)
-
-    return filenames
+    return collect_attachment_filenames(content, attachments_source)
 
 
 def _blob_hash(data: bytes) -> str:

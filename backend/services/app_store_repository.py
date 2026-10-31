@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import APP_BLOBS_DIR, APP_DB_PATH, SYNC_BLOBS_DIR, SYNC_DB_PATH
-from services.note_contract import now_iso
+from services.note_contract import now_iso, collect_attachment_filenames
 
 APP_STORE_BOOTSTRAP_VERSION = 1
 _transaction_connection: ContextVar[sqlite3.Connection | None] = ContextVar("app_transaction", default=None)
@@ -45,9 +45,18 @@ def ensure_app_store() -> None:
                 size INTEGER NOT NULL,
                 updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS attachment_upload_holds (
+                filename TEXT PRIMARY KEY,
+                expires_at REAL NOT NULL
+            );
             """
         )
         _bootstrap_legacy_sync_store(conn)
+        columns = {row['name'] for row in conn.execute('PRAGMA table_info(notes_current)')}
+        if 'edit_version' not in columns:
+            conn.execute("ALTER TABLE notes_current ADD COLUMN edit_version TEXT NOT NULL DEFAULT ''")
+        for row in conn.execute("SELECT note_id FROM notes_current WHERE edit_version = ''").fetchall():
+            conn.execute('UPDATE notes_current SET edit_version = ? WHERE note_id = ?', (uuid.uuid4().hex, row['note_id']))
 
 
 @contextmanager
@@ -63,6 +72,22 @@ def connect():
             yield conn
     finally:
         conn.close()
+
+
+@contextmanager
+def read_snapshot():
+    """Keep all metadata reads on one SQLite snapshot, without blocking WAL writers."""
+    if _transaction_connection.get() is not None:
+        yield
+        return
+    ensure_app_store()
+    with connect() as conn:
+        conn.execute("BEGIN")
+        token = _transaction_connection.set(conn)
+        try:
+            yield
+        finally:
+            _transaction_connection.reset(token)
 
 
 @contextmanager
@@ -290,8 +315,8 @@ def upsert_note(note: dict[str, Any]) -> None:
             """
             INSERT INTO notes_current (
                 note_id, filename, title, content, tags_json, attachments_json, pinned, revision,
-                created_at, updated_at, deleted_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                created_at, updated_at, deleted_at, edit_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(note_id) DO UPDATE SET
                 filename = excluded.filename,
                 title = excluded.title,
@@ -302,7 +327,8 @@ def upsert_note(note: dict[str, Any]) -> None:
                 revision = excluded.revision,
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at,
-                deleted_at = excluded.deleted_at
+                deleted_at = excluded.deleted_at,
+                edit_version = excluded.edit_version
             """,
             (
                 str(note.get("note_id") or ""),
@@ -316,8 +342,11 @@ def upsert_note(note: dict[str, Any]) -> None:
                 str(note.get("created_at") or ""),
                 str(note.get("updated_at") or ""),
                 str(note.get("deleted_at") or "") or None,
+                uuid.uuid4().hex,
             ),
         )
+        for filename in collect_attachment_filenames(note.get('content'), note.get('attachments_json')):
+            conn.execute('DELETE FROM attachment_upload_holds WHERE filename = ?', (filename,))
 
 
 def delete_note(note_id: str) -> None:
@@ -403,15 +432,20 @@ def delete_attachment_record(filename: str) -> None:
     ensure_app_store()
     with connect() as conn:
         conn.execute("DELETE FROM attachment_files WHERE filename = ?", (str(filename or ""),))
+        conn.execute('DELETE FROM attachment_upload_holds WHERE filename = ?', (str(filename or ''),))
 
 
-def clear_all_data() -> None:
+def clear_all_data(context: dict | None = None) -> None:
     ensure_app_store()
     with transaction():
+        from services.note_contract import app_note_from_row
+        before = [app_note_from_row(row) for row in list_notes()]
         with connect() as conn:
             conn.execute("DELETE FROM notes_current")
             conn.execute("DELETE FROM attachment_files")
-            clear_replication_state(conn)
+            conn.execute('DELETE FROM attachment_upload_holds')
+        from services.workspace_replacement import queue_workspace_replacement
+        queue_workspace_replacement(before, context)
         from services.hosted_sync_service import publish_app_changes
         publish_app_changes()
     # Protocol history can still reference these content-addressed blobs. Keep

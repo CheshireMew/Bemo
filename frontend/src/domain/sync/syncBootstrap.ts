@@ -1,7 +1,8 @@
 import { listCurrentNotes as listLocalNotes, listCurrentTrash as listLocalTrashNotes } from '../appStore/noteQueries.js';
 import { enqueueExistingLocalNotesForSync } from './noteSyncOutbox.js';
 import type { SyncTarget } from './mutationLogStorage.js';
-import { getSyncCursorStateKey, getSyncStateValue, setSyncStateValue } from './syncStateStorage.js';
+import { getSyncCursorStateKey, getSyncStateValue, setSyncStateValue, getSyncStateRecords } from './syncStateStorage.js';
+import { scopedSyncKey } from './syncTargetIdentity.js';
 import type { SyncChange, SyncRemoteNoteState, SyncTransport } from './syncTransport.js';
 import { shouldUseBackendAppStore } from '../runtime/appStoreRuntime.js';
 import { readAppChangeToken } from '../appStore/backendAppEvents.js';
@@ -43,6 +44,7 @@ export async function inspectRemoteSyncState(
   targetId?: string,
 ) {
   const localNoteIds = await collectLocalNoteIds();
+  const deletedIds = targetId ? await readWorkspaceDeletedIds(targetId) : new Set<string>();
   if (transport.inspectBootstrap) {
     const bootstrap = await transport.inspectBootstrap();
     const remoteNotes = new Map(bootstrap.remoteNotes.map((note) => [note.note_id, note] as const));
@@ -55,7 +57,7 @@ export async function inspectRemoteSyncState(
       seededCount: isCurrentStore ? 0 : await enqueueExistingLocalNotesForSync(target, remoteNotes, queuedNoteIds, targetId),
       missingLocalNoteIds: bootstrap.remoteNotes
         .filter(note => note.scope !== 'purged').map((note) => note.note_id)
-        .filter((noteId) => noteId && !localNoteIds.has(noteId)),
+        .filter((noteId) => noteId && !localNoteIds.has(noteId) && !deletedIds.has(noteId)),
     };
   }
 
@@ -68,6 +70,11 @@ export async function inspectRemoteSyncState(
     seededCount: await enqueueExistingLocalNotesForSync(target, remoteNotes, queuedNoteIds, targetId),
     missingLocalNoteIds: Array.from(remoteNotes.values()).filter(note => note.scope !== 'purged').map(note => note.note_id).filter((noteId) => !localNoteIds.has(noteId)),
   };
+}
+
+export async function readWorkspaceDeletedIds(targetId: string) {
+  const prefix = scopedSyncKey(targetId, 'deleted:');
+  return new Set((await getSyncStateRecords(prefix)).map(row => decodeURIComponent(row.key.slice(prefix.length))));
 }
 
 export async function pullAllRemoteChanges(

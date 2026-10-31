@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Header
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from services.app_sync_service import mutate, parse_sync_context
 
 from services.note_store_service import (
@@ -33,7 +33,17 @@ class NoteContent(BaseModel):
     revision: int | None = None
 
 
-class NotePatch(BaseModel):
+class NoteUpdate(NoteContent):
+    base_revision: int = Field(ge=1)
+    base_edit_version: str = Field(min_length=1)
+
+
+class NoteVersion(BaseModel):
+    base_revision: int = Field(ge=1)
+    base_edit_version: str = Field(min_length=1)
+
+
+class NotePatch(NoteVersion):
     pinned: bool | None = None
     tags: list[str] | None = None
 
@@ -62,14 +72,14 @@ def notes_create(payload: NoteContent, x_bemo_sync_context: str | None = Header(
 
 
 @router.put("/{note_id}")
-def notes_update(note_id: str, payload: NoteContent, x_bemo_sync_context: str | None = Header(default=None)):
+def notes_update(note_id: str, payload: NoteUpdate, x_bemo_sync_context: str | None = Header(default=None)):
     attachments = [item.model_dump() for item in (payload.attachments or [])]
-    return mutate(lambda: update_note(note_id, content=payload.content, tags=payload.tags, attachments=attachments), "note.update", parse_sync_context(x_bemo_sync_context), note_id)
+    return mutate(lambda: update_note(note_id, content=payload.content, tags=payload.tags, attachments=attachments, base_revision=payload.base_revision, base_edit_version=payload.base_edit_version), "note.update", parse_sync_context(x_bemo_sync_context), note_id)
 
 
 @router.patch("/{note_id}")
 def notes_patch(note_id: str, payload: NotePatch, x_bemo_sync_context: str | None = Header(default=None)):
-    return mutate(lambda: patch_note(note_id, pinned=payload.pinned, tags=payload.tags), "note.patch", parse_sync_context(x_bemo_sync_context), note_id)
+    return mutate(lambda: patch_note(note_id, pinned=payload.pinned, tags=payload.tags, base_revision=payload.base_revision, base_edit_version=payload.base_edit_version), "note.patch", parse_sync_context(x_bemo_sync_context), note_id)
 
 
 @router.get("/trash")
@@ -83,8 +93,8 @@ def trash_restore(note_id: str, x_bemo_sync_context: str | None = Header(default
 
 
 @router.delete("/trash/{note_id}")
-def trash_purge(note_id: str, x_bemo_sync_context: str | None = Header(default=None)):
-    mutate(lambda: purge_note(note_id), "note.purge", parse_sync_context(x_bemo_sync_context), note_id)
+def trash_purge(note_id: str, payload: NoteVersion, x_bemo_sync_context: str | None = Header(default=None)):
+    mutate(lambda: purge_note(note_id, base_revision=payload.base_revision, base_edit_version=payload.base_edit_version), "note.purge", parse_sync_context(x_bemo_sync_context), note_id)
     return {"ok": True, "note_id": note_id}
 
 
