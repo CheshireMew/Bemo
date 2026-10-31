@@ -9,6 +9,7 @@
     "build:android": "vue-tsc -b && vite build --mode android",
     "test:unit": "tsc -p tsconfig.tests.json && node .test-dist/tests/runAll.js",
     "test:ux": "node scripts/ux-regression.mjs",
+    "test:ui-polish": "node scripts/ui-polish-regression.mjs",
     "test:mobile-ux": "node scripts/mobile-touch-regression.mjs",
     "test:mobile-note-gestures": "node scripts/mobile-note-gestures-regression.mjs",
     "test:note-image-sharing": "node scripts/note-image-sharing-regression.mjs",

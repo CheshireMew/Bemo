@@ -75,7 +75,7 @@
           <PenLine v-else :size="20" />
         </button>
         <div class="divider"></div>
-        <button class="icon-btn" type="button" :class="{ active: showTagInput }" :aria-expanded="showTagInput" :aria-controls="`${editorErrorId}-tags`" :title="actionTitle('添加标签')" @click="showTagInput = !showTagInput"><Hash :size="20" /></button>
+        <button class="icon-btn" type="button" :class="{ active: showTagInput }" :aria-expanded="showTagInput" :aria-controls="`${editorErrorId}-tags`" :title="actionTitle('添加标签')" @click="toggleTagInput"><Hash :size="20" /></button>
         <button class="icon-btn" :title="actionTitle('上传图片')" @click="triggerImageUpload"><ImageIcon :size="20" /></button>
         <div class="divider"></div>
         <button class="icon-btn" :title="actionTitle('加粗', 'Ctrl+B')" @click="insertBold"><Bold :size="20" /></button>
@@ -103,6 +103,7 @@
 
     <div v-if="showTagInput" :id="`${editorErrorId}-tags`" class="tag-input-area">
       <input
+        ref="tagInputRef"
         v-model="tagInput"
         :disabled="isSaving"
         aria-label="笔记标签"
@@ -185,6 +186,16 @@ const previewRef = ref<HTMLElement | null>(null);
 const editorCardRef = ref<HTMLElement | null>(null);
 const showTagInput = ref(false);
 const tagInput = ref('');
+const tagInputRef = ref<HTMLInputElement | null>(null);
+const toggleTagInput = async () => {
+  showTagInput.value = !showTagInput.value;
+  if (showTagInput.value) {
+    await nextTick();
+    tagInputRef.value?.focus();
+  } else {
+    await focusEditor();
+  }
+};
 const showPreview = ref(props.shell !== 'mobile');
 const isComposing = ref(false);
 const draftStorageKey = `bemo.editor.draft:${props.draftKey}`;
@@ -533,6 +544,20 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-height: 120px;
 }
+
+.editor-shell-web-desktop .editor-body {
+  max-height: max(120px, 50dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.editor-shell-web-desktop .editor-preview,
+.editor-shell-web-desktop .editor-input {
+  max-height: max(120px, 42dvh);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
 .editor-preview {
   width: 100%;
   min-height: 120px;
@@ -562,12 +587,6 @@ onBeforeUnmount(() => {
   outline: none;
   font-family: inherit;
   background-color: transparent;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.editor-input::-webkit-scrollbar {
-  display: none;
 }
 
 .editor-input::placeholder {
@@ -790,6 +809,8 @@ onBeforeUnmount(() => {
 
 .tag-input:focus {
   border-color: var(--accent-color, #10b981);
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }
 
 .editor-shell-mobile .editor-preview,

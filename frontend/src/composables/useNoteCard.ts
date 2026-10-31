@@ -1,4 +1,4 @@
-import { computed, ref, toValue, watch, type MaybeRefOrGetter } from 'vue';
+import { computed, onBeforeUnmount, ref, toValue, watch, type MaybeRefOrGetter } from 'vue';
 
 import type { NoteMeta } from '../store/notes';
 import { pushNotification } from '../store/notifications';
@@ -116,8 +116,15 @@ export function useNoteCard(noteSource: MaybeRefOrGetter<NoteMeta>) {
     }
   };
 
-  watch(() => note.value.content, async (content) => {
-    renderedHtml.value = String(await renderMarkdownToHtml(splitEditorMarkdownByKind(content || '').body));
+  watch([
+    () => splitContent.value.body,
+    () => settings.editor.markdownGfm,
+    () => settings.editor.markdownBreaks,
+  ], async ([body], _previous, onCleanup) => {
+    let current = true;
+    onCleanup(() => { current = false; });
+    const html = String(await renderMarkdownToHtml(body));
+    if (current) renderedHtml.value = html;
   }, { immediate: true });
 
   watch(() => note.value.note_id, () => {
@@ -125,19 +132,22 @@ export function useNoteCard(noteSource: MaybeRefOrGetter<NoteMeta>) {
     copyFeedback.value = false;
   });
 
-  watch(imageAttachments, async (nextImages) => {
-    const entries = await Promise.all(nextImages.map(async (image) => (
-      [image.url, await resolveAttachmentUrl(image.url)] as const
+  watch(() => splitContent.value.attachments, async (nextAttachments, _previous, onCleanup) => {
+    let current = true;
+    onCleanup(() => { current = false; });
+    const urls = [...new Set(nextAttachments.map(attachment => attachment.url))];
+    const entries = await Promise.all(urls.map(async url => (
+      [url, await resolveAttachmentUrl(url)] as const
     )));
-    resolvedImageUrls.value = Object.fromEntries(entries);
+    if (!current) return;
+    const resolved = Object.fromEntries(entries);
+    resolvedAttachmentUrls.value = resolved;
+    resolvedImageUrls.value = resolved;
   }, { immediate: true });
 
-  watch(() => splitContent.value.attachments, async (nextAttachments) => {
-    const entries = await Promise.all(nextAttachments.map(async (attachment) => (
-      [attachment.url, await resolveAttachmentUrl(attachment.url)] as const
-    )));
-    resolvedAttachmentUrls.value = Object.fromEntries(entries);
-  }, { immediate: true });
+  onBeforeUnmount(() => {
+    if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer);
+  });
 
   return {
     isEditing,

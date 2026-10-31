@@ -275,6 +275,11 @@ try {
   for (const width of [900, 800, 720, 360]) {
     await page.setViewportSize({ width, height: width === 360 ? 560 : width === 900 ? 700 : 600 });
     if (width >= 800) {
+      // Resize dispatch and Vue's shell switch finish asynchronously.
+      await page.waitForFunction(width => ['.sticky-stack', '.feed-container'].every(selector => {
+        const box = document.querySelector(selector)?.getBoundingClientRect();
+        return box && Math.abs(box.x + box.width / 2 - width / 2) <= 2;
+      }), width);
       for (const selector of ['.sticky-stack', '.feed-container']) {
         const box = await page.locator(selector).boundingBox();
         assert.ok(Math.abs(box.x + box.width / 2 - width / 2) <= 2, `${selector} must stay centered at ${width}px`);
